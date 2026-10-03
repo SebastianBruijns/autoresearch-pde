@@ -569,7 +569,8 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
         tools = [t for t in tools if t["name"] != "ask_human"]
     if sess.meta["kind"] != "ode":
         tools = [t for t in tools if t["name"] not in ("transform", "set_coordinates")]
-    meta_public = {k: v for k, v in sess.meta.items() if k not in ("system", "name")}   # names can reveal the system
+    # the dataset name can reveal the system (e.g. blind_strogatz_glider_...), which would defeat blinding
+    meta_public = {k: v for k, v in sess.meta.items() if k not in ("system", "name")}
     intro = f"Dataset metadata:\n{json.dumps(meta_public, indent=2)}\n"
     if data_card:
         intro += f"Data card from ingestion (inferred structure and assumptions):\n{json.dumps(data_card)[:4000]}\n"
