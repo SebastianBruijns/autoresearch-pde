@@ -47,11 +47,20 @@ def _thumb(video, dst, at=4.0):
 
 
 def _copy(src, dst):
+    """Copy a file; mp4s are re-encoded (H.264, CRF 26, faststart) to keep the repo small, falling back to a copy."""
     src = Path(src)
-    if src.exists():
-        shutil.copy(src, dst)
-        return True
-    return False
+    if not src.exists():
+        return False
+    if src.suffix == ".mp4":
+        try:
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-c:v", "libx264", "-crf", "26",
+                            "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(dst)],
+                           check=True, timeout=600)
+            return True
+        except Exception:  # noqa: BLE001
+            pass
+    shutil.copy(src, dst)
+    return True
 
 
 def _fresh(case):

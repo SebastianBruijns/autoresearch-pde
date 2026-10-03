@@ -355,6 +355,25 @@ def write_ode_dataset(d, meta, data):
     return d
 
 
+def _densify(P, dt, per):
+    """Fill each sampling interval of a (n, 6) nondimensional orbit (mu = 1) with `per` sub-steps by two-body
+    propagation from both ends, blended linearly so the curve hits every sample exactly. Returns positions (m, 3)."""
+    from scipy.integrate import solve_ivp
+
+    def kepler(t, y):
+        Y = y.reshape(-1, 6)
+        r3 = np.linalg.norm(Y[:, :3], axis=1, keepdims=True) ** 3
+        return np.hstack([Y[:, 3:], -Y[:, :3] / r3]).ravel()
+    s = np.linspace(0, dt, per + 1)
+    fw = solve_ivp(kepler, (0, dt), P[:-1].ravel(), t_eval=s, rtol=1e-10, atol=1e-12).y      # (6(n-1), per+1)
+    bw = solve_ivp(kepler, (0, -dt), P[1:].ravel(), t_eval=-s, rtol=1e-10, atol=1e-12).y[:, ::-1]
+    fw, bw = fw.reshape(len(P) - 1, 6, -1), bw.reshape(len(P) - 1, 6, -1)
+    w = s / dt
+    seg = (1 - w) * fw[:, :3] + w * bw[:, :3]                                                 # (n-1, 3, per+1)
+    out = np.concatenate([seg[:, :, :-1].transpose(0, 2, 1).reshape(-1, 3), P[-1:, :3]])
+    return out
+
+
 def lageos_figures(out, tt, truth, preds, days, node, res):
     import matplotlib
     matplotlib.use("Agg")
@@ -379,10 +398,14 @@ def lageos_figures(out, tt, truth, preds, days, node, res):
     fig.tight_layout()
     fig.savefig(out / "lageos_errors.png", dpi=120)
     plt.close(fig)
-    # 2) 3-D video: real track vs forecasts over the first 3 days, Earth drawn to scale
+    # 2) 3-D video: real track vs forecasts over the first 3 days, Earth drawn to scale. Hourly samples are only ~4
+    # per orbit, so each hourly gap is filled by two-body propagation (forward from sample i and backward from sample
+    # i+1, blended), which passes through every sample exactly; the interpolator's own bias over 1 h is a few km.
     n = min(len(tt), 24 * 3 + 1)
-    sub = np.linspace(0, n - 1, 6 * (n - 1) + 1)
-    fine_t = np.interp(sub, np.arange(n), hrs[:n])
+    per, sm = 8, 3                                   # frames per hour; line points per frame step
+    fine_t = np.linspace(hrs[0], hrs[n - 1], per * (n - 1) + 1)
+    tracks = {"measured": (_densify(truth[:n], tt[1] - tt[0], per * sm), "k")} | \
+             {k: (_densify(P[:n], tt[1] - tt[0], per * sm), colors[k]) for k, P in preds.items()}
     fig = plt.figure(figsize=(8, 7))
     ax = fig.add_subplot(111, projection="3d")
     u_, v_ = np.mgrid[0:2 * np.pi:40j, 0:np.pi:20j]
@@ -391,34 +414,27 @@ def lageos_figures(out, tt, truth, preds, days, node, res):
     lim = 1.5
     ax.set(xlim=(-lim, lim), ylim=(-lim, lim), zlim=(-lim, lim))
     ax.set_axis_off()
-    tracks = {"measured": (truth, "k")} | {k: (P, colors[k]) for k, P in preds.items()}
     lines, dots = {}, {}
     for k, (P, c) in tracks.items():
         lines[k], = ax.plot([], [], [], color=c, lw=2.5 if k == "measured" else 1.4, label=k)
         dots[k], = ax.plot([], [], [], "o", color=c, ms=6)
     ax.legend(loc="upper left", fontsize=8)
     title = ax.set_title("")
-
-    def interp(P, s):
-        i = int(np.floor(s))
-        j = min(i + 1, len(P) - 1)
-        w = s - i
-        return (1 - w) * P[i, :3] + w * P[j, :3]
+    truth_f = tracks["measured"][0]
 
     def upd(f):
-        s = sub[f]
         for k, (P, c) in tracks.items():
-            seg = np.array([interp(P, q) for q in sub[max(0, f - 60):f + 1]])
+            seg = P[max(0, sm * (f - 10 * per)):sm * f + 1]
             lines[k].set_data(seg[:, 0], seg[:, 1])
             lines[k].set_3d_properties(seg[:, 2])
             dots[k].set_data([seg[-1, 0]], [seg[-1, 1]])
             dots[k].set_3d_properties([seg[-1, 2]])
-        err = {k: np.linalg.norm(interp(P, s) - interp(truth, s)) * RE_E / 1e3 for k, (P, _) in tracks.items() if k != "measured"}
+        err = {k: np.linalg.norm(P[sm * f] - truth_f[sm * f]) * RE_E / 1e3 for k, (P, _) in tracks.items() if k != "measured"}
         title.set_text(f"LAGEOS-1, {fine_t[f]:.1f} h into the unseen future\n" +
                        "  ".join(f"{k}: {e:,.0f} km" for k, e in err.items()))
-        ax.view_init(elev=20, azim=30 + 0.25 * f)
+        ax.view_init(elev=20, azim=30 + 0.25 * f * 6 / per)
         return list(lines.values()) + list(dots.values())
-    a = anim.FuncAnimation(fig, upd, frames=len(sub), interval=40)
+    a = anim.FuncAnimation(fig, upd, frames=len(fine_t), interval=40)
     a.save(out / "lageos_forecast.mp4", writer=anim.FFMpegWriter(fps=25, bitrate=3000))
     plt.close(fig)
 
@@ -519,14 +535,14 @@ def gs_video(path, t, rows, title, field=1, fps=6):
         ims.append(ax.imshow(Y[0, ..., field].T, origin="lower", cmap="magma", vmin=vmin, vmax=vmax))
         ax.set_title(lab, fontsize=9)
         ax.set_axis_off()
-    sup = fig.suptitle(title, fontsize=11)
+    sup = fig.suptitle(f"{title}\nstep 0", fontsize=11)
 
     def upd(i):
         for im, (_, Y) in zip(ims, show):
             im.set_data(np.where(np.isfinite(Y[i, ..., field]), Y[i, ..., field], np.nan).T)
         sup.set_text(f"{title}\nstep {i} (Δt = 10 per step) after the noisy first frame")
         return ims
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 0.86))
     a = anim.FuncAnimation(fig, upd, frames=len(t), interval=1000 / fps)
     a.save(path, writer=anim.FFMpegWriter(fps=fps, bitrate=2400))
     plt.close(fig)
