@@ -215,7 +215,7 @@ def build_ks():
     _copy(src / "ks_spacetime.mp4", d / "video.mp4") or _copy(src / "ks_oos.mp4", d / "video.mp4")
     _copy(src / "ks_spacetime.png", d / "spacetime.png")
     _copy(src / "discover/report.html", d / "report.html")
-    _thumb(d / "video.mp4", d / "thumb.jpg", at=5.0)
+    _thumb(d / "video.mp4", d / "thumb.jpg", at=9.0)
     z = np.load(src / "rollouts.npz")
     labels = [str(s) for s in z["labels"]]
     lam = float(res["lyapunov_exponent"])

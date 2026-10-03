@@ -164,7 +164,7 @@ def page_lageos():
                 {"label": "Agent: 30-day error", "value": km(pe_ag["30d"]), "delta": f"1 day: {km(pe_ag['1d'])}",
                  "help": "Position error after 30 days of forecasting from the last training state."},
                 {"label": "Neural net (MLP)", "value": km(n["N"]), "delta": "same data"},
-                {"label": "Kepler only", "value": km(n["K"]), "delta": "two-body gravity"},
+                {"label": "Round-Earth gravity", "value": km(n["K"]), "delta": "textbook ellipse (Kepler)"},
                 {"label": "Agent cost", "value": f"${ag.get('cost_usd', 0):.2f}",
                  "delta": f"{ag.get('n_tool_calls', '?')} tool calls"},
             ])
@@ -484,9 +484,14 @@ def page_home():
     info, _ = load_case("orbit")
     if info and (info["results"]["position_error_km"].get("data-only agent")):
         pe = info["results"]["position_error_km"]
-        cards.append(("🌍 Orbit with a big bulge (synthetic)", f"{km(pe['data-only agent']['24h'])} vs "
-                      f"{km(pe['neural step model (MLP)']['24h'])}", "1-day forecast error: data-only agent vs neural net",
-                      "orbit", PAGES[6]))
+        ag_, nn_ = pe['data-only agent']['24h'], pe['neural step model (MLP)']['24h']
+        if ag_ < nn_:
+            cards.append(("🌍 Orbit with a big bulge (synthetic)", f"{km(ag_)} vs {km(nn_)}",
+                          "1-day forecast error: data-only agent vs neural net", "orbit", PAGES[6]))
+        else:
+            cards.append(("🌍 Orbit with a big bulge (synthetic)", "✗ not recovered",
+                          f"an honest failure: after 1 day the agent is {km(ag_)} off, the neural net {km(nn_)}",
+                          "orbit", PAGES[6]))
     info, _ = load_case("ks")
     if info:
         vt = info["results"]["valid_time_lyapunov"]
