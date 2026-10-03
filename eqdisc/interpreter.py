@@ -6,7 +6,8 @@ The agent's code runs in a fresh subprocess with a timeout. Pre-loaded names:
     tb, co            eqdisc.toolbox, eqdisc.coordinates
     WORK              pathlib.Path of the session workspace (save files / figures here)
 Figures saved as PNG in WORK during the call are returned to the agent as images.
-The hidden test set is not reachable: only public arrays are passed in.
+The code runs in a bubblewrap sandbox (eqdisc.sandbox): no network, and only the eqdisc package, the inputs and
+the workspace are visible, so the hidden test set is not reachable.
 """
 import json
 import pickle
@@ -15,6 +16,8 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+
+from . import sandbox
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -42,9 +45,13 @@ def run_code(code, meta, data, workdir, timeout=60, max_output=6000):
         (tmp / "in.pkl").write_bytes(pickle.dumps((meta, data)))
         (tmp / "script.py").write_text(PRELUDE % str(ROOT) + "\n" + code)
         t0 = time.time()
+        if sandbox.available():      # only the eqdisc package, the inputs and the workspace are visible
+            argv, env = sandbox.wrap([sys.executable, "/in/script.py", "/in/in.pkl", sandbox.WORK], workdir,
+                                     ro=[ROOT / "eqdisc"], binds={"/in": tmp})
+        else:
+            argv, env = sandbox.wrap([sys.executable, str(tmp / "script.py"), str(tmp / "in.pkl"), str(workdir)], workdir)
         try:
-            p = subprocess.run([sys.executable, str(tmp / "script.py"), str(tmp / "in.pkl"), str(workdir)],
-                               cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+            p = subprocess.run(argv, cwd=workdir, env=env, capture_output=True, text=True, timeout=timeout)
             out, err, rc = p.stdout, p.stderr, p.returncode
         except subprocess.TimeoutExpired as e:
             out, err, rc = (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or ""), \
