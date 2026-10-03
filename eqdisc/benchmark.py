@@ -38,7 +38,7 @@ def run(dev, held, discover_subset=(), out="runs/benchmark_v1", workers=4, max_t
 
     def agent_arm(d):
         try:
-            r = run_agent(d, client=client, verbose=False, max_tools=max_tools, use_skills=False, use_memory=False,
+            r = run_agent(d, client=client, verbose=False, max_tools=max_tools, use_memory=False,
                           out_dir=out / f"agent_{Path(d).name}", final_assessment=False, report=True)
             if not r.get("submitted"):
                 return d, {"score": -10, "equivalent": False, "cost": r["cost_usd"]}

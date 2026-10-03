@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore")
 
 def main():
     from eqdisc import coordinates as co, toolbox as tb
-    from eqdisc.agent import list_skills, run_agent
+    from eqdisc.agent import run_agent
     from eqdisc.assess import assess
     from eqdisc.datagen import generate
     from eqdisc.evaluate import evaluate, load
@@ -31,7 +31,6 @@ def main():
           "| skeleton", round(evaluate(d, sk)["score"], 2), sk["params"])
     a = assess(m, D, sk["rhs"])
     print("assessment:", a["confidence"]["level"], "| experiments:", len(a["experiments"]["ranked"]))
-    assert list_skills(), "package skills not found (package data missing?)"
 
     T = lambda i, n, x: NS(type="tool_use", id=i, name=n, input=x)
     script = [[T("a", "intuit", {})], [T("b", "fit_skeleton", {"rhs_with_params": {"theta": "omega", "omega": "-p0*sin(theta) - p1*omega"}})],

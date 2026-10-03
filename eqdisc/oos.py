@@ -49,6 +49,27 @@ def lyapunov_exponent(fields, rhs, meta, U0, t, eps=1e-7, seed=0):
     return float(np.polyfit(t[ok], np.log(sep[ok]), 1)[0])
 
 
+def lyapunov_benettin(fields, rhs, meta, U0, tau, n_renorm=80, n_skip=10, eps=1e-6, seed=0):
+    """Largest Lyapunov exponent of the TRUE system by Benettin's method: integrate a reference and a perturbed copy
+    for tau, renormalise the separation back to eps, repeat; average the log growth after n_skip transients."""
+    rng = np.random.default_rng(seed)
+    lay = solvers.pde_layout(meta)
+    tt = np.array([0.0, tau / 2, tau])
+    a = np.array(U0, float)
+    d0 = eps * np.std(a)
+    pert = rng.standard_normal(a.shape)
+    b = a + d0 * pert / np.sqrt(np.mean(pert ** 2))
+    logs = []
+    for i in range(n_renorm):
+        a = solvers.integrate_pde_general(fields, rhs, lay, a, tt)[-1]
+        b = solvers.integrate_pde_general(fields, rhs, lay, b, tt)[-1]
+        d = np.sqrt(np.mean((b - a) ** 2))
+        if i >= n_skip:
+            logs.append(np.log(d / d0))
+        b = a + (b - a) * (d0 / d)
+    return float(np.mean(logs) / tau), float(np.std(logs) / tau / np.sqrt(len(logs)))
+
+
 def refit_rhs(meta, data, rhs):
     """Refit the linear coefficients of a discovered structure on the (noisy) training data, weak form if
     possible. Returns (refit_rhs, table of submitted vs refit coefficients)."""
@@ -158,7 +179,7 @@ def ks_case(out="runs/oos_ks", noise=0.02, t_split=60.0, scale=(1.3, 0.7, 1.6), 
     rng = np.random.default_rng(seed)
     U = u[None, :, :, None]
     noisy = U + noise * U.std() * rng.standard_normal(U.shape)
-    meta = {"name": "ks_blinded_oos", "kind": "pde", "variables": ["u"], "dt": float(t[1] - t[0]), "n_traj": 1,
+    meta = {"name": "dataset", "kind": "pde", "variables": ["u"], "dt": float(t[1] - t[0]), "n_traj": 1,
             "shape": [1, k, nx, 1], "L": L, "nx": nx, "boundary": "periodic", "spatial_dims": ["x"],
             "allowed_symbols": ["u", "u_x", "u_xx", "u_xxx", "u_xxxx", "x"], "system": None, "noise": noise}
     d = write_dataset(out / "dataset", meta, t, noisy[:, :k], U[:, k - 1:], truth, x - x[0])
@@ -168,8 +189,9 @@ def ks_case(out="runs/oos_ks", noise=0.02, t_split=60.0, scale=(1.3, 0.7, 1.6), 
     Ut = U[0, k - 1:]
     lay = solvers.pde_layout(m_)
     res = {"truth": truth, "noise": noise, "train_window": [0, float(t[k - 1])], "test_window": [float(t[k - 1]), float(t[-1])]}
-    lam = lyapunov_exponent(["u"], truth, m_, Ut[0], tt)
-    res["lyapunov_exponent"] = lam
+    lam, lam_se = lyapunov_benettin(["u"], truth, m_, Ut[0], tau=5.0, n_renorm=100, n_skip=10)
+    res["lyapunov_exponent"], res["lyapunov_se"] = lam, lam_se
+    res["lyapunov_twin_crude"] = lyapunov_exponent(["u"], truth, m_, Ut[0], tt)
     print("truth:", truth, "| Lyapunov exponent", lam, flush=True)
     rows = [("truth (clean future)", Ut[..., 0], "k")]
     # reference: true PDE from the noisy state (chaos limit)
@@ -287,7 +309,7 @@ def lageos_case(path, out="runs/oos_lageos", train_days=365, test_days=30, long_
     t, X, dates = load_lageos(path)
     n_tr = 24 * train_days
     data = {"U": X[None, :n_tr], "t": t[:n_tr]}
-    meta = {"name": "lageos1_train", "kind": "ode", "variables": ["x", "y", "z", "vx", "vy", "vz"], "dt": float(t[1] - t[0]),
+    meta = {"name": "dataset", "kind": "ode", "variables": ["x", "y", "z", "vx", "vy", "vz"], "dt": float(t[1] - t[0]),
             "allowed_symbols": ["x", "y", "z", "vx", "vy", "vz", "t"], "n_traj": 1, "shape": [1, n_tr, 6], "system": None,
             "units": "lengths in Earth radii, time in sqrt(Re^3/mu) = 806.8 s", "sampling": "hourly"}
     R = "sqrt(x**2+y**2+z**2)"
@@ -308,8 +330,7 @@ def lageos_case(path, out="runs/oos_lageos", train_days=365, test_days=30, long_
         from .agent import run_agent
         d = write_ode_dataset(out / "dataset", meta, data)
         r = run_agent(d, max_tools=16, verbose=False, out_dir=out / "agent", final_assessment=False,
-                      context="Hourly position and velocity of a satellite in an inertial frame, nondimensionalised "
-                              "(lengths in Earth radii, time in sqrt(Re^3/mu)). Discover the equations of motion.")
+                      context=None)
         res["agent"] = {"submitted": (r.get("submitted") or {}).get("rhs"), "cost_usd": r["cost_usd"]}
     # out-of-sample forecasts from the first held-out observation
     i0 = n_tr
@@ -398,74 +419,170 @@ def lageos_figures(out, tt, truth, preds, days, node, res):
     fig.tight_layout()
     fig.savefig(out / "lageos_errors.png", dpi=120)
     plt.close(fig)
-    # 2) 3-D video: real track vs forecasts over the first 3 days, Earth drawn to scale. Hourly samples are only ~4
-    # per orbit, so each hourly gap is filled by two-body propagation (forward from sample i and backward from sample
-    # i+1, blended), which passes through every sample exactly; the interpolator's own bias over 1 h is a few km.
-    n = min(len(tt), 24 * 3 + 1)
+    lageos_video(out / "lageos_forecast.mp4", tt, truth, {k: P for k, P in preds.items() if k != "Kepler + J2"})
+
+
+LAGEOS_COLORS = {"data-only agent": "#16a34a", "Kepler + J2": "tab:red", "Kepler": "tab:orange",
+                 "neural step model (MLP)": "#7c3aed"}
+
+
+def lageos_video(path, tt, truth, preds, days=3, colors=None):
+    """Left: 3-D view, Earth to scale, real track vs forecasts. Right: the same forecasts seen from the real
+    satellite (offset in km, along-track vs out-of-plane; radial offsets are small for all models), so errors
+    invisible at orbit scale become visible.
+    Hourly samples are only ~4 per orbit, so each gap is filled by two-body propagation from both ends (exact at
+    every sample; the interpolator's own bias over 1 h is a few km)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.animation as anim
+    import matplotlib.pyplot as plt
+    colors = {**LAGEOS_COLORS, **(colors or {})}
+    hrs = tt * T_E / 3600
+    n = min(len(tt), 24 * days + 1)
     per, sm = 8, 3                                   # frames per hour; line points per frame step
     fine_t = np.linspace(hrs[0], hrs[n - 1], per * (n - 1) + 1)
-    tracks = {"measured": (_densify(truth[:n], tt[1] - tt[0], per * sm), "k")} | \
-             {k: (_densify(P[:n], tt[1] - tt[0], per * sm), colors[k]) for k, P in preds.items()}
-    fig = plt.figure(figsize=(8, 7))
-    ax = fig.add_subplot(111, projection="3d")
+    dense = lambda P: _densify(P[:n], tt[1] - tt[0], per * sm)
+    T = dense(truth)
+    # truth velocity direction for the local frame, from the dense track (central differences)
+    V = np.gradient(T, axis=0)
+    R_ = T / np.linalg.norm(T, axis=1, keepdims=True)
+    N_ = np.cross(T, V)
+    N_ /= np.linalg.norm(N_, axis=1, keepdims=True)
+    A_ = np.cross(N_, R_)
+    tracks = {k: dense(P) for k, P in preds.items()}
+    off = {k: np.stack([np.sum((P - T) * A_, 1), np.sum((P - T) * N_, 1)], 1) * RE_E / 1e3 for k, P in tracks.items()}
+    lim = 1.15 * max(np.abs(o).max() for o in off.values())
+    fig = plt.figure(figsize=(13, 6.2))
+    ax = fig.add_subplot(1, 2, 1, projection="3d")
+    bx = fig.add_subplot(1, 2, 2)
     u_, v_ = np.mgrid[0:2 * np.pi:40j, 0:np.pi:20j]
     ax.plot_surface(np.cos(u_) * np.sin(v_), np.sin(u_) * np.sin(v_), np.cos(v_), color="#3a6ea5", alpha=0.6, linewidth=0)
     ax.set_box_aspect((1, 1, 1))
-    lim = 1.5
-    ax.set(xlim=(-lim, lim), ylim=(-lim, lim), zlim=(-lim, lim))
+    ax.set(xlim=(-1.5, 1.5), ylim=(-1.5, 1.5), zlim=(-1.5, 1.5))
     ax.set_axis_off()
-    lines, dots = {}, {}
-    for k, (P, c) in tracks.items():
-        lines[k], = ax.plot([], [], [], color=c, lw=2.5 if k == "measured" else 1.4, label=k)
-        dots[k], = ax.plot([], [], [], "o", color=c, ms=6)
+    lines, dots, olines, odots = {}, {}, {}, {}
+    lines["measured"], = ax.plot([], [], [], color="k", lw=2.5, label="measured (real satellite)")
+    dots["measured"], = ax.plot([], [], [], "o", color="k", ms=6)
+    for k in tracks:
+        lines[k], = ax.plot([], [], [], color=colors.get(k), lw=1.4, label=k)
+        dots[k], = ax.plot([], [], [], "o", color=colors.get(k), ms=6)
+        olines[k], = bx.plot([], [], color=colors.get(k), lw=1.5, alpha=0.6)
+        odots[k], = bx.plot([], [], "o", color=colors.get(k), ms=9, label=k)
+    bx.plot([0], [0], "k+", ms=18, mew=2.5, label="real satellite")
+    bx.set(xlim=(-lim, lim), ylim=(-lim, lim), xlabel="along-track offset (km)", ylabel="out-of-plane offset (km)",
+           title="seen from the real satellite")
+    bx.set_aspect("equal")
+    bx.grid(alpha=0.3)
+    bx.legend(loc="upper left", fontsize=8)
     ax.legend(loc="upper left", fontsize=8)
-    title = ax.set_title("")
-    truth_f = tracks["measured"][0]
+    title = fig.suptitle("")
 
     def upd(f):
-        for k, (P, c) in tracks.items():
-            seg = P[max(0, sm * (f - 10 * per)):sm * f + 1]
+        g = sm * f
+        a0 = max(0, sm * (f - 10 * per))
+        for k, P in [("measured", T)] + list(tracks.items()):
+            seg = P[a0:g + 1]
             lines[k].set_data(seg[:, 0], seg[:, 1])
             lines[k].set_3d_properties(seg[:, 2])
             dots[k].set_data([seg[-1, 0]], [seg[-1, 1]])
             dots[k].set_3d_properties([seg[-1, 2]])
-        err = {k: np.linalg.norm(P[sm * f] - truth_f[sm * f]) * RE_E / 1e3 for k, (P, _) in tracks.items() if k != "measured"}
-        title.set_text(f"LAGEOS-1, {fine_t[f]:.1f} h into the unseen future\n" +
-                       "  ".join(f"{k}: {e:,.0f} km" for k, e in err.items()))
+        for k, o in off.items():
+            seg = o[max(0, g - 6 * per * sm):g + 1]
+            olines[k].set_data(seg[:, 0], seg[:, 1])
+            odots[k].set_data([o[g, 0]], [o[g, 1]])
+        err = {k: np.linalg.norm(tracks[k][g] - T[g]) * RE_E / 1e3 for k in tracks}
+        title.set_text(f"LAGEOS-1, {fine_t[f]:.1f} h into the unseen future     " +
+                       "   ".join(f"{k}: {e:,.0f} km" if e >= 10 else f"{k}: {e:.1f} km" for k, e in err.items()))
         ax.view_init(elev=20, azim=30 + 0.25 * f * 6 / per)
         return list(lines.values()) + list(dots.values())
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
     a = anim.FuncAnimation(fig, upd, frames=len(fine_t), interval=40)
-    a.save(out / "lageos_forecast.mp4", writer=anim.FFMpegWriter(fps=25, bitrate=3000))
+    a.save(path, writer=anim.FFMpegWriter(fps=25, bitrate=3000))
     plt.close(fig)
 
 
-def lageos_agent(path, out="runs/oos_lageos", train_days=365, test_days=30, max_tools=16):
+def parametrize_floats(rhs):
+    """Replace every decimal constant in a law (not exponents like **1.5, not integers) by p0, p1, ... (equal values
+    share one parameter). Returns (rhs_with_params, initial values)."""
+    import re
+    vals, out = [], {}
+    pat = re.compile(r"(?<![\w.*])(\d+\.\d*(?:[eE][-+]?\d+)?|\d+[eE][-+]?\d+)")
+
+    def sub_(m, s):
+        if re.search(r"\*\*\(?-?$", s[max(0, m.start() - 4):m.start()]):      # exponent: **1.5, **(-1.5)
+            return m.group(0)
+        v = float(m.group(0))
+        if v not in vals:
+            vals.append(v)
+        return f"p{vals.index(v)}"
+    for k, e in rhs.items():
+        out[k] = pat.sub(lambda m: sub_(m, e), e)
+    return out, vals
+
+
+def lageos_refit(path, sub, train_days=365, units=None, max_pairs=1500):
+    """Protocol refit of the agent's ODE law: keep its structure, re-estimate its constants by flow-map shooting on the
+    2017 training data (in the agent's own units), so typed/rounded numbers are never scored."""
+    from .flow import fit_flow
+    t, X, _ = load_lageos(path)
+    sc = np.array([units[0]] * 3 + [units[0] / units[1]] * 3) if units else np.ones(6)
+    ts = units[1] if units else 1.0
+    n_tr = 24 * train_days
+    names = [f"u{i}" for i in range(1, 7)]
+    meta = {"kind": "ode", "variables": names, "dt": float(t[1] - t[0]) * ts}
+    withp, init = parametrize_floats(sub)
+    f = fit_flow(meta, {"U": (X[:n_tr] * sc)[None], "t": t[:n_tr] * ts}, withp, max_pairs=max_pairs, init=init)
+    return f["rhs"], {"submitted_constants": init, "refit_constants": list(f["params"].values()),
+                      "sigma": list(f["param_sigma"].values()), "one_step_rel_err_heldout": f["one_step_rel_err_heldout"]}
+
+
+def lageos_agent_forecast(path, sub, train_days=365, test_days=30, units=None):
+    """Integrate the agent's submitted law (in its own, possibly blinded, units) from the last training state over the
+    unseen window. Returns (tt, states) in the standard nondimensional units of load_lageos."""
+    from scipy.integrate import solve_ivp
+    from .flow import make_flow_fn
+    t, X, _ = load_lageos(path)
+    sc = np.array([units[0]] * 3 + [units[0] / units[1]] * 3) if units else np.ones(6)
+    ts = units[1] if units else 1.0
+    n_tr, n_te = 24 * train_days, 24 * test_days
+    rhs = make_flow_fn([f"u{i}" for i in range(1, 7)], sub, [])
+    tt = t[n_tr:n_tr + n_te + 1] - t[n_tr]
+    sol = solve_ivp(lambda s_, y: rhs(y[None], [])[0], (0, tt[-1] * ts), X[n_tr] * sc, t_eval=tt * ts,
+                    rtol=1e-11, atol=1e-13, method="DOP853")
+    return tt, sol.y.T / sc
+
+
+def lageos_agent(path, out="runs/oos_lageos_dataonly", train_days=365, test_days=30, max_tools=16, units=None):
     """Agent arm for LAGEOS: the agent sees only the 2017 training year (nondimensional, inertial frame) and must find
     the law itself; its submitted model is then forecast out of sample exactly like the scripted fits."""
     from scipy.integrate import solve_ivp
     from .agent import run_agent
     from .flow import fit_flow, make_flow_fn
     out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
     t, X, dates = load_lageos(path)
+    if units:      # blind the units: lengths x Ls, time x Ts (so mu and the Earth radius are no longer 1)
+        Ls, Ts = units
+        X = X * np.array([Ls] * 3 + [Ls / Ts] * 3)
+        t = t * Ts
     n_tr = 24 * train_days
-    meta = {"name": "satellite_hourly", "kind": "ode", "variables": ["x", "y", "z", "vx", "vy", "vz"],
-            "dt": float(t[1] - t[0]), "allowed_symbols": ["x", "y", "z", "vx", "vy", "vz", "t"], "n_traj": 1,
-            "shape": [1, n_tr, 6], "system": None}
+    # data only: neutral variable names (no position/velocity labels), no context, no domain guidance
+    names = [f"u{i}" for i in range(1, 7)]
+    meta = {"name": "dataset", "kind": "ode", "variables": names, "dt": float(t[1] - t[0]),
+            "allowed_symbols": names + ["t"], "n_traj": 1, "shape": [1, n_tr, 6], "system": None}
     d = write_ode_dataset(out / "agent_dataset", meta, {"U": X[None, :n_tr], "t": t[:n_tr]})
     r = run_agent(d, max_tools=max_tools, verbose=True, out_dir=out / "agent", final_assessment=False,
-                  context="Hourly measured position (x,y,z) and velocity (vx,vy,vz) of an Earth satellite in an inertial "
-                          "frame, nondimensionalised: lengths in Earth radii, time in sqrt(Re^3/mu). Discover the "
-                          "equations of motion.")
+                  context=None)
     sub = (r.get("submitted") or {}).get("rhs")
-    res = {"submitted": sub, "cost_usd": r["cost_usd"], "n_tool_calls": r["n_tool_calls"],
+    res = {"submitted": sub, "cost_usd": r["cost_usd"], "n_tool_calls": r["n_tool_calls"], "units": units,
            "tools": [ev["name"] for ev in json.loads((out / "agent" / "transcript.json").read_text()) if ev["type"] == "tool"]}
     if sub:
-        rhs = make_flow_fn(meta["variables"], sub, [])
-        n_te = 24 * test_days
-        tt = t[n_tr:n_tr + n_te + 1] - t[n_tr]
-        sol = solve_ivp(lambda s_, y: rhs(y[None], [])[0], (0, tt[-1]), X[n_tr], t_eval=tt, rtol=1e-11, atol=1e-13, method="DOP853")
-        km = np.linalg.norm(sol.y.T[:, :3] - X[n_tr:n_tr + n_te + 1, :3], axis=1) * RE_E / 1e3
-        res["position_error_km"] = {f"{dd}d": float(km[min(24 * dd, n_te)]) for dd in (1, 7, 30)}
+        refit, res["refit"] = lageos_refit(path, sub, train_days, units)
+        res["refit_rhs"] = refit
+        tt, S = lageos_agent_forecast(path, refit, train_days, test_days, units)
+        km = np.linalg.norm(S[:, :3] - load_lageos(path)[1][n_tr:n_tr + len(tt), :3], axis=1) * RE_E / 1e3
+        res["position_error_km"] = {f"{dd}d": float(km[min(24 * dd, len(tt) - 1)]) for dd in (1, 7, 30)}
+        np.savez_compressed(out / "agent_forecast.npz", tt=tt, S=S)
     (out / "agent_results.json").write_text(json.dumps(res, indent=1, default=str))
     print(json.dumps(res, indent=1, default=str)[:2000])
     return res

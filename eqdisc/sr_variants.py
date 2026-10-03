@@ -4,8 +4,12 @@ Each variant is a driven, damped nonlinear oscillator x'' = f(t, x, v) built fro
 families (none of the exact equations appear in any paper), simulated and split as in LLM-SR:
 train and in-domain test sampled from one time window, out-of-domain test from another window with larger amplitude.
 
-    python -m eqdisc.sr_variants make --n 4 --seed 7      # -> datasets/osc_variants/<name>/{train,test_id,test_ood}.csv
-    python -m eqdisc.sr_variants run                       # agent vs PySR vs sparse baseline, NMSE ID/OOD
+Coefficients are full-precision random numbers (no short decimals an LLM could guess exactly), and the TRAINING
+columns x, v, a carry Gaussian noise (``noise`` x column std); test sets are clean, so NMSE measures the law, not the
+noise. Scoring: NMSE on ID/OOD tests plus a structure match (same terms, coefficients free).
+
+    python -m eqdisc.sr_variants make --n 6 --seed 11 --noise 0.02 --root datasets/osc_variants_c
+    python -m eqdisc.sr_variants run --root datasets/osc_variants_c --out runs/sr_variants_c
 """
 import argparse
 import json
@@ -30,13 +34,12 @@ def make_variant(rng, idx):
     forced = bool(rng.random() < 0.6)
     terms = []
     for t in restoring:
-        terms.append(f"-{rng.uniform(0.3, 2.0):.3g}*{t}")
+        terms.append(f"-{rng.uniform(0.3, 2.0):.10g}*{t}")
     for t in damping:
-        terms.append(f"-{rng.uniform(0.05, 0.6):.3g}*{t}")
+        terms.append(f"-{rng.uniform(0.05, 0.6):.10g}*{t}")
     if forced:
-        f = rng.choice(FORCING).replace("w", f"{rng.uniform(0.5, 2.0):.3g}")
-        terms.append(f"{rng.uniform(0.1, 0.5):.3g}*{f}")
-    expr = " ".join(terms).replace(" -", " - ").replace("- -", "+ ")
+        f = rng.choice(FORCING).replace("w", f"{rng.uniform(0.5, 2.0):.10g}")
+        terms.append(f"{rng.uniform(0.1, 0.5):.10g}*{f}")
     expr = " + ".join(terms).replace("+ -", "- ")
     return {"name": f"osc_v{idx}", "expr": expr, "forced": forced}
 
@@ -52,7 +55,7 @@ def simulate(expr, forced, rng):
     return tt, X, V, A
 
 
-def make(n=4, seed=7, out="datasets/osc_variants", max_tries=50):
+def make(n=4, seed=7, out="datasets/osc_variants", max_tries=50, noise=0.0):
     rng = np.random.default_rng(seed)
     out = Path(out)
     made = []
@@ -75,20 +78,40 @@ def make(n=4, seed=7, out="datasets/osc_variants", max_tries=50):
         r = np.random.default_rng(seed + idx)
         late_df, early_df = df[late], df[early]
         tr_idx = r.permutation(len(late_df))
-        late_df.iloc[tr_idx[:10000]][cols + ["a"]].to_csv(d / "train.csv", index=False)
+        train = late_df.iloc[tr_idx[:10000]][cols + ["a"]].copy()
+        for c in ("x", "v", "a"):                       # measurement noise on training data only
+            train[c] += noise * train[c].std() * r.standard_normal(len(train))
+        train.to_csv(d / "train.csv", index=False)
         late_df.iloc[tr_idx[10000:20000]][cols + ["a"]].to_csv(d / "test_id.csv", index=False)
         early_df.sample(10000, random_state=seed + idx)[cols + ["a"]].to_csv(d / "test_ood.csv", index=False)
         desc = DESC.format(forced=" with driving force" if var["forced"] else "",
                            inputs=("time, " if var["forced"] else "") + "position, and velocity")
         (d / "description.txt").write_text(desc)
-        (d / "truth.json").write_text(json.dumps(var, indent=1))
+        (d / "truth.json").write_text(json.dumps({**var, "train_noise": noise}, indent=1))
         made.append(var)
         print(var["name"], "|", var["expr"])
         idx += 1
     return made
 
 
-def run(root="datasets/osc_variants", out="runs/sr_variants", sessions=2, max_tools=20, pysr_timeout=300):
+def structure(expr):
+    """Set of terms of an expanded expression with every coefficient (and every number inside a function argument,
+    e.g. a forcing frequency) replaced by a free constant c: two laws match if they have the same terms."""
+    if not expr:
+        return None
+    C = sp.Symbol("c")
+    e = sp.expand(sp.sympify(str(expr).replace("abs(", "Abs("), locals={"Abs": sp.Abs}))
+    out = set()
+    for term in sp.Add.make_args(e):
+        term = term.as_coeff_Mul()[1]
+        term = term.replace(lambda q: q.is_Function, lambda q: q.func(*[a.xreplace({n: C for n in a.atoms(sp.Number)})
+                                                                          for a in q.args]))
+        out.add(sp.srepr(term))
+    return out
+
+
+def run(root="datasets/osc_variants", out="runs/sr_variants", sessions=2, max_tools=20, pysr_timeout=300,
+        problems=None):
     from .isolate import run_isolated
     from .sr import evaluate_expr, nmse, solve, sparse_fit
     from .sr_bench import llmsr_task
@@ -96,16 +119,26 @@ def run(root="datasets/osc_variants", out="runs/sr_variants", sessions=2, max_to
     out.mkdir(parents=True, exist_ok=True)
     rows = []
     for d in sorted(Path(root).iterdir()):
-        if not (d / "train.csv").exists():
+        if not (d / "train.csv").exists() or (problems and d.name not in problems):
             continue
         task, tests = llmsr_task(root, root, d.name)
-        task.description = (d / "description.txt").read_text()
         truth = json.loads((d / "truth.json").read_text())["expr"]
+        # data only: inputs renamed z1..zk, target y, no description (column names like x, v, a would reveal
+        # position / velocity / acceleration). Expressions are mapped back to the original names for scoring.
+        orig = list(task.names)
+        task.names, task.target, task.description = [f"z{i + 1}" for i in range(len(orig))], "y", ""
+        back = {sp.Symbol(z): sp.Symbol(o) for z, o in zip(task.names, orig)}
+        unblind = lambda e: str(sp.sympify(str(e).replace("abs(", "Abs("), locals={"Abs": sp.Abs}).xreplace(back)) if e else e
 
         def score(expr):
             if not expr:
-                return {"ID": None, "OOD": None}
-            return {k.replace("test_", "").upper(): nmse(yt, evaluate_expr(expr, task.names, Xt)) for k, (Xt, yt) in tests.items()}
+                return {"ID": None, "OOD": None, "structure_match": False}
+            try:
+                match = structure(expr) == structure(truth)
+            except Exception:  # noqa: BLE001
+                match = False
+            return {**{k.replace("test_", "").upper(): nmse(yt, evaluate_expr(expr, orig, Xt))
+                       for k, (Xt, yt) in tests.items()}, "structure_match": match}
         row = {"problem": d.name, "truth": truth}
         # 1) sparse baseline: generic polynomial (deg 3) + trig library, no LLM
         n = task.names
@@ -113,20 +146,23 @@ def run(root="datasets/osc_variants", out="runs/sr_variants", sessions=2, max_to
               [f"{a}*{b}*{c}" for i, a in enumerate(n) for j, b in enumerate(n[i:], i) for c in n[j:]] + \
               [f"sin({a})" for a in n] + [f"cos({a})" for a in n] + ["1"]
         sf = sparse_fit(task, lib)
-        row["sparse"] = {"expr": sf.get("expr"), **score(sf.get("expr"))}
+        se = unblind(sf.get("expr"))
+        row["sparse"] = {"expr": se, **score(se)}
         # 2) PySR (same operator set as LLM-SR's PySR baseline: + - * / sin cos exp)
         pr = run_isolated("eqdisc.sr", "sr_pysr", {"names": task.names}, {"X": task.X_train, "y": task.y_train},
                           {"timeout": pysr_timeout, "niterations": 200, "unary_operators": ["sin", "cos", "exp"]},
                           timeout=pysr_timeout + 240)
-        pe = pr.get("best") if isinstance(pr, dict) else None
+        pe = unblind(pr.get("best")) if isinstance(pr, dict) else None
         row["pysr"] = {"expr": pe, **score(pe)}
         # 3) our agent
         res = solve(task, n_sessions=sessions, max_tools=max_tools)
-        row["agent"] = {"expr": res["expr"], **score(res["expr"]), "cost_usd": res["cost_usd"]}
+        ae = unblind(res["expr"])
+        row["agent"] = {"expr": ae, "expr_blinded": res["expr"], **score(ae), "cost_usd": res["cost_usd"]}
         row["truth_score"] = score(truth)
         rows.append(row)
-        print(json.dumps({"problem": d.name, "sparse": row["sparse"], "pysr": row["pysr"],
-                          "agent": {k: row["agent"][k] for k in ("ID", "OOD", "cost_usd")}}, default=str), flush=True)
+        print(json.dumps({"problem": d.name, **{a: {k: row[a].get(k) for k in ("ID", "OOD", "structure_match",
+                                                                                 "cost_usd")}
+                                                 for a in ("sparse", "pysr", "agent")}}, default=str), flush=True)
         (out / f"{d.name}.json").write_text(json.dumps(row, indent=1, default=str))
     return rows
 
@@ -136,5 +172,12 @@ if __name__ == "__main__":
     p.add_argument("cmd", choices=["make", "run"])
     p.add_argument("--n", type=int, default=4)
     p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--noise", type=float, default=0.02)
+    p.add_argument("--root", default="datasets/osc_variants")
+    p.add_argument("--out", default="runs/sr_variants")
+    p.add_argument("--problems", nargs="*")
     a = p.parse_args()
-    make(a.n, a.seed) if a.cmd == "make" else run()
+    if a.cmd == "make":
+        make(a.n, a.seed, a.root, noise=a.noise)
+    else:
+        run(a.root, a.out, problems=a.problems)

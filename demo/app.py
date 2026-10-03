@@ -30,8 +30,27 @@ import viz  # noqa: E402
 SHOW = DEMO / "showcase"
 ui.inject_css()
 
-PROTOCOL = ("Honest protocol: noisy training data → forecast unseen future or held-out trajectories, autoregressively "
-            "from a noisy observed state; coefficients refitted, never rounded; a neural net trained on the same data.")
+PROTOCOL = ("Data only: the agent gets numbers with neutral names, no description of the system, no domain guidance, "
+            "and its code cannot read anything else. Honest test: noisy training data → forecast an unseen future or "
+            "held-out trajectory from a noisy observed state; coefficients refitted; a neural net trained on the same data.")
+TOOL_LABEL = {"diagnose": "diagnose", "intuit": "intuition", "run_sindy": "SINDy", "weak_sindy": "weak SINDy",
+              "run_pysr": "PySR", "fit_skeleton": "skeleton fit", "fit_flow": "flow-map fit",
+              "find_invariants": "invariants", "transform": "coordinates", "set_coordinates": "coordinates",
+              "detect_symmetries": "symmetries", "equivariant_sindy": "equivariant SINDy",
+              "ensemble_sindy": "ensemble SINDy", "compare_models": "model comparison",
+              "coefficient_uncertainty": "coefficient UQ", "assess_model": "assessment", "run_python": "own Python",
+              "plot_data": "plots", "plot_model": "plots", "repair": "repair", "validate": "validation"}
+
+
+def tool_chips(tools, title="what the agent did (from its log)"):
+    """Chips from the tool calls the agent actually made: first-use order, with counts."""
+    counts = {}
+    for t in tools or []:
+        lab = TOOL_LABEL.get(t)
+        if lab:
+            counts[lab] = counts.get(lab, 0) + 1
+    if counts:
+        ui.chips([f"{k} ×{n}" if n > 1 else k for k, n in counts.items()], title=f"{title} · {len(tools)} tool calls")
 J2_ACCEPTED = 1.08263e-3
 PAGES = ["Home", "🛰️ LAGEOS-1 satellite", "🔥 Chaos (KS)", "🌀 Gray–Scott patterns", "⚡ Run on your data",
          "⚙️ How it works"]
@@ -84,14 +103,28 @@ def lageos_numbers(info):
             "node": r["node_rate_deg_per_day"]}
 
 
-def agent_j2(ag):
-    """J2 from the agent's submitted law: the coefficient c in (1 + c/r^2 (...)) equals (3/2) J2 (Re = 1)."""
-    import re as _re
-    m = _re.search(r"\(1 \+ ([0-9.eE+-]+)/\(x\*\*2", str((ag.get("submitted") or {}).get("vx", "")).replace(" ", "").replace("(1+", "(1 + "))
-    try:
-        return float(m.group(1)) / 1.5 if m else None
-    except ValueError:
-        return None
+def lageos_agent_rhs(ag):
+    """The agent's law in blinded names u1..u6 (u1-u3 position, u4-u6 velocity; the agent was not told)."""
+    sub = ag.get("refit_rhs") or ag.get("submitted") or {}
+    return {k: v for k, v in sub.items() if str(v).strip() not in sub}      # drop trivial u1' = u4 style lines
+
+
+def lageos_latex(rhs):
+    """Agent's law with r = |(u1, u2, u3)| substituted, for display."""
+    import sympy as sp
+    u = sp.symbols("u1:7")
+    r = sp.Symbol("r", positive=True)
+    out = []
+    for k, e in rhs.items():
+        try:
+            ex = sp.sympify(e, locals={f"u{i + 1}": u[i] for i in range(6)})
+            ex = sp.expand(ex.subs(u[0] ** 2 + u[1] ** 2 + u[2] ** 2, r ** 2))
+            ex = ex.xreplace({a: sp.Float(float(a), 4) for a in ex.atoms(sp.Float) if abs(float(a)) < 0.9 or abs(float(a)) > 1.1})
+            ex = ex.xreplace({p_: sp.Pow(p_.base, sp.nsimplify(p_.exp)) for p_ in ex.atoms(sp.Pow) if p_.exp.is_Float})
+            out.append(rf"\dot{{{sp.latex(sp.Symbol(k))}}} = {sp.latex(ex)}")
+        except Exception:  # noqa: BLE001
+            out += ui.rhs_latex({k: e})
+    return out
 
 
 def page_lageos():
@@ -100,60 +133,86 @@ def page_lageos():
         return missing("lageos")
     n = lageos_numbers(info)
     ag = info.get("agent") or {}
-    ui.question("Can it learn a real satellite's law of motion from one year of data, and forecast the next month?")
+    pe_ag = ag.get("position_error_km") or {}
+    ui.question("Given only a year of a real satellite's numbers, can the agent find its law of motion and forecast "
+                "the next month?")
     left, right = st.columns([1.15, 1], gap="large")
     with left:
         hero_video("lageos")
-        st.caption("LAGEOS-1, real hourly positions. Measured track vs forecasts in the first 3 unseen days.")
+        st.caption("LAGEOS-1, real hourly positions: measured track vs forecasts over the first 3 unseen days.")
     with right:
-        ui.verdict_chip("VALIDATED", "30-day forecast of an unseen month")
-        ui.equations([r"\ddot{\mathbf r} = -\frac{\mu\,\mathbf r}{r^{3}}\left[1 + \tfrac{3}{2}J_2\left(\tfrac{R_e}{r}\right)^{2}"
-                      r"\left(1 - \tfrac{5z^{2}}{r^{2}}\right)\right]",
-                      rf"J_2 = ({n['J2'] * 1e3:.5f} \pm {n['J2s'] * 1e3:.5f})\times 10^{{-3}}"])
-        ui.tiles([
-            {"label": "30-day error", "value": km(n["J"]), "delta": f"Kepler {km(n['K'])}",
-             "help": "Position error after 30 days of autoregressive forecast; discovered law (Kepler + J₂) vs Kepler."},
-            {"label": "Neural net", "value": km(n["N"]), "delta": "same data",
-             "help": "MLP step model trained on the same 2017 data."},
-            {"label": "J₂ fitted (×10⁻³)", "value": f"{n['J2'] * 1e3:.5f}", "delta": f"accepted {J2_ACCEPTED * 1e3:.5f}",
-             "help": f"± {n['J2s'] * 1e3:.5f} (1σ). Earth's oblateness, fitted from the 2017 data only."},
-            {"label": "Node drift (°/day)", "value": f"{n['node']['Kepler + J2']:.4f}",
-             "delta": f"measured {n['node']['data']:.4f}", "help": "Orbit-plane precession; Kepler predicts 0."},
-        ])
-        aj = agent_j2(ag)
-        if aj:
-            st.caption(f"The eqdisc agent, on its own ({ag.get('n_tool_calls', '?')} tool calls, \\${ag.get('cost_usd', 0):.2f}): "
-                       f"J₂ = {aj * 1e3:.5f}×10⁻³, 30-day error {km(ag['position_error_km']['30d'])}.")
-        ui.chips([("sampling", "hourly → flow-map fit"), ("residuals", "Kepler error depends on z/r"),
-                  ("zonal J₂ term", f"{n['one_step_gain']:.0f}× better"), ("check", "node drift matches")])
+        if pe_ag:
+            ok = pe_ag["30d"] < min(n["N"], n["K"])
+            ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED", "data-only agent, unseen month")
+            ui.equations(lageos_latex(lageos_agent_rhs(ag)), small=True)
+            st.caption("Its law, constants refitted on 2017 (r² = u1² + u2² + u3²). The agent was not told that "
+                       "u1–u3 are position and u4–u6 velocity, and the units are random, so neither the gravity "
+                       "constant nor Earth's radius equals 1.")
+            ui.tiles([
+                {"label": "Agent: 30-day error", "value": km(pe_ag["30d"]), "delta": f"1 day: {km(pe_ag['1d'])}",
+                 "help": "Position error after 30 days of forecasting from the last training state."},
+                {"label": "Neural net (MLP)", "value": km(n["N"]), "delta": "same data"},
+                {"label": "Kepler only", "value": km(n["K"]), "delta": "two-body gravity"},
+                {"label": "Agent cost", "value": f"${ag.get('cost_usd', 0):.2f}",
+                 "delta": f"{ag.get('n_tool_calls', '?')} tool calls"},
+            ])
+            tool_chips(ag.get("tools"))
+        else:
+            ui.verdict_chip("PENDING", "data-only agent run in progress")
+            st.caption("Physics reference (hand-built Kepler + J₂, *not* discovered by the agent):")
+            ui.equations([r"\ddot{\mathbf r} = -\frac{\mathbf r}{r^{3}}\left[1 + \tfrac{3}{2}J_2\,r^{-2}"
+                          r"\left(1 - \tfrac{5z^{2}}{r^{2}}\right)\right]"], small=True)
+            ui.tiles([{"label": "Reference: 30-day error", "value": km(n["J"]), "delta": f"Kepler {km(n['K'])}"},
+                      {"label": "Neural net (MLP)", "value": km(n["N"]), "delta": "same data"}])
     errs = {m: a[f"err{i}"] for i, m in enumerate(info["models"])}
-    pts = None
-    if ag.get("position_error_km"):
-        pts = [(int(k[:-1]), v) for k, v in ag["position_error_km"].items()]
-    show(viz.lageos_errors(a["days"], errs, pts), "lageos_err")
+    if "err_agent" in a:
+        errs["agent"] = a["err_agent"]
+    c1, c2 = st.columns([1, 1.15], gap="large")
+    with c1:
+        st.markdown("**What the agent was given**: one year of hourly measurements (2017)")
+        if "train_orbits" in a:
+            show(viz.lageos_training(a["train_orbits"], info["train_dates"]), "lageos_train")
+            st.caption("Real LAGEOS-1 positions, one orbit every two weeks (hourly samples, drawn smooth). Press ▶: "
+                       "the orbit plane turns about Earth's axis over the year. The agent saw only six unnamed columns.")
+    with c2:
+        st.markdown("**Forecast error over the unseen month**")
+        show(viz.lageos_errors(a["days"], errs), "lageos_err")
     with st.expander("Details & caveats"):
         pe = info["results"]["position_error_km"]
+        rows = {("physics reference (Kepler + J2)" if k == "Kepler + J2" else k): v for k, v in pe.items()}
+        if pe_ag:
+            rows["data-only agent"] = pe_ag
         st.markdown("**Forecast position error (km), autoregressive from the last training state**")
-        st.dataframe(pd.DataFrame(pe).T.map(lambda v: f"{v:,.3g}"), width="content")
-        st.markdown("**Fitted parameters** (nondimensional, given μ and Rₑ)")
-        st.dataframe(pd.DataFrame([{"model": m, **{f"{k}": f"{v:.9g} ± {info['results'][m]['param_sigma'][k]:.2g}"
-                                                    for k, v in info["results"][m]["params"].items()},
-                                    "held-out one-step error": f"{info['results'][m]['one_step_rel_err_heldout']:.3g}"}
-                                   for m in ("Kepler", "Kepler + J2")]), hide_index=True)
-        if ag:
-            st.markdown(f"**eqdisc agent's own law** (cost ${ag.get('cost_usd', 0):.2f}, {ag.get('n_tool_calls', '?')} tool calls)")
-            if ag.get("submitted"):
-                ui.equations(ui.rhs_latex({k: v for k, v in ag["submitted"].items() if k.startswith("v")}))
-        else:
-            st.caption("The agent's own run on the 2017 data is pending; the law above is the Kepler + J₂ fit.")
+        st.dataframe(pd.DataFrame(rows).T.map(lambda v: f"{v:,.3g}"), width="content")
+        if ag.get("submitted"):
+            st.markdown("**The agent's submitted law** (blinded names and units) and the protocol refit of its constants")
+            st.code(json.dumps({"submitted": ag["submitted"], "refit": ag.get("refit")}, indent=1, default=str),
+                    language="json")
+        alt = info.get("agent_alt") or {}
+        if alt.get("position_error_km"):
+            st.markdown(
+                f"- **Second data-only run** (units where gravity constant = Earth radius = 1): the agent found the same "
+                f"Kepler + J₂ structure; 30-day error {km(alt['position_error_km']['30d'])} after refit "
+                f"(\\${alt.get('cost_usd', 0):.2f}, {alt.get('n_tool_calls', '?')} tool calls).")
+        st.markdown(
+            f"- **Protocol.** Train on 2017 only (hourly, real). Forecast January 2018 from the last observed state. "
+            "The neural step model is trained on the same year.\n"
+            "- **Data only.** The agent sees six unnamed columns (u1…u6) sampled hourly, in random units. No dataset "
+            "name, no description, no domain guidance; its Python sandbox cannot read other files. It inferred an "
+            "orbit itself (r nearly constant, r oscillating once per period, plane precessing about one axis).\n"
+            "- **Refit.** Constants the agent typed (e.g. 4 significant figures) are re-estimated by flow-map shooting "
+            "on 2017; only the refitted law is forecast. Unrefitted, rounding alone gave 5,133 km at 30 days.\n"
+            "- **Neural net.** The MLP step model looks close at orbit scale, but its orbit plane is tilted: it swings "
+            "±1,000 km out of plane every orbit (right panel of the video). It is worse than plain Kepler for the "
+            "first day, better after a week (Kepler misses the precession).\n"
+            f"- **Physics reference.** Kepler + J₂ fitted by flow-map shooting: J₂ = {n['J2'] * 1e3:.5f}×10⁻³ "
+            f"(accepted {J2_ACCEPTED * 1e3:.5f}), node drift {n['node']['Kepler + J2']:.4f} vs measured "
+            f"{n['node']['data']:.4f} °/day. This is a human-chosen model, shown only for comparison.\n"
+            "- **Retracted.** An earlier agent result (13.6 km) was produced with the system named in the prompt and a "
+            "domain skill available; it is not shown.\n"
+            "- **Data.** orbit_discover workshop repository (MIT).")
         if (SHOW / "lageos" / "errors.png").exists():
             st.image(str(SHOW / "lageos" / "errors.png"), caption="Error vs time, and node drift over 6 years.")
-        st.markdown(
-            "- **Protocol.** Train on 2017 only (hourly, real). Forecast January 2018 from the last observed state. "
-            "The neural step model is trained on the same year.\n"
-            "- **Honesty.** The J₂ formula is textbook physics that the LLM knows; the *value* is fitted from data and "
-            "lands within 0.03% of the accepted one.\n"
-            "- **Data.** orbit_discover workshop repository (MIT); nondimensional units with the μ and Rₑ given there.")
 
 
 # ============================================================================= Kuramoto-Sivashinsky
@@ -206,8 +265,7 @@ def page_ks():
             {"label": "Agent cost", "value": f"${info.get('cost_usd') or 0:.2f}",
              "delta": f"{(info.get('wall_s') or 0) / 60:.0f} min" if info.get("wall_s") else None},
         ])
-        ui.chips([("intuit", "mean conserved → flux form"), ("weak SINDy", "3 terms found"),
-                  ("assessment", "each term ΔBIC ≈ 1100"), ("repair", "extra terms rejected")])
+        tool_chips(info.get("tools"))
     errs = {lab: a[f"err{i}"] for i, lab in enumerate(info["labels"]) if i > 0}
     show(viz.ks_errors(a["t_lyap"], errs), "ks_err")
     with st.expander("Details & caveats"):
@@ -217,6 +275,7 @@ def page_ks():
             f"- **Protocol.** Real KS data, blinded by rescaling x, t and u, so the coefficients are not textbook values. "
             f"Add 2% noise, train on t ∈ [0, {r['train_window'][1]:.1f}], forecast t ∈ [{r['test_window'][0]:.1f}, "
             f"{r['test_window'][1]:.1f}] from the noisy last state. Lyapunov exponent {r['lyapunov_exponent']:.3f}.\n"
+            "- **Data only.** One unnamed field u(x, t); no description, no domain guidance.\n"
             "- **Caveat.** Here weak SINDy alone (no LLM) does as well as the agent. The agent adds the verdict, the "
             "per-term evidence and the refit with confidence intervals.\n"
             f"- FNO trained for {r.get('fno', {}).get('train_minutes', '?')} min on the same noisy training window.")
@@ -253,7 +312,7 @@ def page_gs():
             ui.verdict_chip("VALIDATED", "held-out trajectory")
             ui.equations(ui.rhs_latex(agent["refit"], pde=True, digits=3), small=True)
         else:
-            ui.verdict_chip("PENDING", "agent run pending · target law shown")
+            ui.verdict_chip("PENDING", "data-only agent run in progress · true law shown")
             ui.equations([r"\partial_t A = d_A \nabla^2 A - A B^2 + F(1-A)",
                           r"\partial_t B = d_B \nabla^2 B + A B^2 - (F+k)B"])
         best = "eqdisc agent (refit)" if "eqdisc agent (refit)" in vr else "weak SINDy (no LLM)"
@@ -271,8 +330,11 @@ def page_gs():
                       {"label": "Test", "value": "held-out", "delta": "unseen trajectory"},
                       {"label": "Well paper best", "value": "0.29", "delta": "VRMSE, steps 6–12"},
                       {"label": "Our forecast", "value": "pending", "delta": "run in progress"}])
-        ui.chips(["2 noisy training movies", "forecast held-out trajectory", "VRMSE as in The Well",
-                  "FNO on same data"], title="protocol")
+        if agent:
+            tool_chips(info.get("tools"))
+        else:
+            ui.chips(["2 noisy training movies", "forecast held-out trajectory", "VRMSE as in The Well",
+                      "FNO on same data"], title="protocol")
     if vr:
         show(viz.gs_vrmse(vr), "gs_vrmse")
     else:
@@ -301,6 +363,10 @@ def page_gs():
             f"- **Data.** The Well (Ohana et al., NeurIPS 2024), gray_scott_reaction_diffusion, regime '{info['regime']}' "
             f"(F = {p.get('F')}, k = {p.get('k')}). Train: 2 trajectories × 60 frames with {info['noise']:.0%} noise. "
             "Test: a third trajectory, forecast from its noisy first frame.\n"
+            "- **Data only.** Two unnamed fields A, B on a grid; no dataset name, no description, no domain guidance. "
+            "Coefficients are refitted from the data, so remembered parameter values earn nothing.\n"
+            "- **Retracted.** An earlier noise sweep showed the agent the dataset name and a one-line description; "
+            "it typed The Well's published parameters exactly, so it is not shown.\n"
             "- **Reference lines.** The Well paper's neural surrogates, trained on hundreds of trajectories, rollout VRMSE "
             "windows 6–12 / 13–30: FNO 0.89 / >10, U-net 0.57 / >10, CNextU-net 0.29 / 7.62. Their windows start at "
             "the trajectory's beginning; ours at snapshot 50, so the comparison is indicative.")
@@ -316,8 +382,13 @@ def page_home():
     info, _ = load_case("lageos")
     if info:
         n = lageos_numbers(info)
-        cards.append(("🛰️ LAGEOS-1 satellite (real)", f"{km(n['J'])} vs {km(n['K'])}",
-                      "30-day forecast error: discovered law vs Kepler", "lageos", PAGES[1]))
+        pe_ag = (info.get("agent") or {}).get("position_error_km")
+        if pe_ag:
+            cards.append(("🛰️ LAGEOS-1 satellite (real)", f"{km(pe_ag['30d'])} vs {km(n['N'])}",
+                          "30-day forecast error: data-only agent vs neural net", "lageos", PAGES[1]))
+        else:
+            cards.append(("🛰️ LAGEOS-1 satellite (real)", "agent pending",
+                          f"30-day error: Kepler {km(n['K'])}, neural net {km(n['N'])}", "lageos", PAGES[1]))
     info, _ = load_case("ks")
     if info:
         vt = info["results"]["valid_time_lyapunov"]
@@ -349,11 +420,8 @@ def page_home():
 
 # ============================================================================= live
 EXAMPLES = {
-    "Example: pendulum (time series)": (DEMO / "examples" / "pendulum.csv",
-                                        "Angle (rad) and angular velocity (rad/s) of a pendulum; 4 releases; "
-                                        "time-correlated sensor noise."),
-    "Example: E. coli growth (static law)": (DEMO / "examples" / "ecoli_growth.csv",
-                                             "Bacterial growth rate db vs population b, substrate s, temperature temp, pH."),
+    "Example: pendulum (time series)": (DEMO / "examples" / "pendulum.csv", ""),
+    "Example: E. coli growth (static law)": (DEMO / "examples" / "ecoli_growth.csv", ""),
 }
 
 
@@ -465,7 +533,8 @@ def page_live(fake):
             path, ctx_default = EXAMPLES[src]
             if path.exists():
                 df, fname = pd.read_csv(path), path.stem
-        context = st.text_input("Context (optional)", value=ctx_default, disabled=running, key=f"ctx_{src}")
+        context = st.text_input("Context (optional; leave empty for a data-only run)", value=ctx_default,
+                                disabled=running, key=f"ctx_{src}")
     with c2:
         mode = st.segmented_control("Mode", ["Auto", "Dynamics", "Static y = f(x)"], default="Auto",
                                     disabled=running, key="mode") or "Auto"
@@ -532,7 +601,7 @@ def page_how():
 digraph G { rankdir=LR; bgcolor="transparent"; node [shape=box, style="rounded,filled", fillcolor="#eef2ff",
   color="#6366f1", fontname="Helvetica", fontsize=11]; edge [color="#888888"];
   D [label="data"]; I [label="ingest +\\ndata card"]; P [label="intuition"];
-  B [label="parallel Claude agents\\n(weak SINDy, PySR, skeleton fits,\\ninvariants, own Python, plots)"];
+  B [label="parallel Claude agents\\n(weak SINDy, PySR, skeleton fits, flow-map fits,\\ninvariants, sandboxed Python, plots)"];
   T [label="tournament"]; A [label="red team", fillcolor="#fee2e2", color="#dc2626"];
   Q [label="assessment\\nCIs · ΔBIC · noise floor"]; V [label="verdict +\\nnext experiment", fillcolor="#dcfce7", color="#16a34a"];
   D->I->P->B->T->A->Q->V; }""")
@@ -541,12 +610,16 @@ digraph G { rankdir=LR; bgcolor="transparent"; node [shape=box, style="rounded,f
                 "| ✓ CONFIDENT | every term supported, error at the noise floor, predicts held-out data |\n"
                 "| ◐ COLLECT MORE DATA | competing models remain; it names the experiment that separates them |\n"
                 "| ? INCONCLUSIVE | the data cannot determine the model |")
-    with st.expander("Earlier experiments (in-sample or less strict; not shown as results)"):
+    with st.expander("Retracted / earlier experiments (not shown as results)"):
+        st.markdown(
+            "- **Domain leakage (retracted).** Earlier agent runs could see the dataset name, a one-line description "
+            "of the system, and domain 'skills' (orbital mechanics, oscillators, PDEs, kinetics). All are removed; "
+            "every agent result shown now comes from a data-only rerun.")
         st.markdown(
             "- Synthetic orbit with exaggerated J₂ = 0.5: recovered, but noise-free generator data.\n"
             "- Noisy pendulum: verdict COLLECT MORE DATA with a ranked next experiment.\n"
             "- LLM-SR E. coli growth: low error, but the equation structure is published (possible recall).\n"
-            "- Unpublished oscillators: 3/4 exact vs PySR 0/4 (static symbolic regression).\n"
+            "- Unpublished oscillators, 3/4 exact vs PySR 0/4: retracted (3-digit coefficients the agent typed exactly; rerun with full precision, noise and blinded names).\n"
             "- Real KS, unblinded: textbook coefficients, so recall cannot be excluded.")
 
 

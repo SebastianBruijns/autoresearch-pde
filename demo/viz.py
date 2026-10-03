@@ -16,9 +16,10 @@ def _layout(fig, h=360, legend_top=False, **kw):
 
 
 # ----------------------------------------------------------------------------- LAGEOS
-LAGEOS_STYLE = {"Kepler": (ORANGE, "dash"), "Kepler + J2": (BLUE, "solid"), "neural step model (MLP)": (AQUA, "dot")}
-LAGEOS_LABEL = {"Kepler": "Kepler (−μr/r³)", "Kepler + J2": "discovered law (Kepler + J2)",
-                "neural step model (MLP)": "neural net (MLP), same data"}
+LAGEOS_STYLE = {"Kepler": (ORANGE, "dash"), "Kepler + J2": (GREY, "dot"), "neural step model (MLP)": (VIOLET, "solid"),
+                "agent": (AQUA, "solid")}
+LAGEOS_LABEL = {"Kepler": "Kepler (−μr/r³)", "Kepler + J2": "physics reference (Kepler + J2, hand-built)",
+                "neural step model (MLP)": "neural net (MLP), same data", "agent": "data-only agent (refit)"}
 
 
 def lageos_errors(days, errs, agent_pts=None):
@@ -30,7 +31,7 @@ def lageos_errors(days, errs, agent_pts=None):
                                  hovertemplate="%{y:,.3g} km<extra>" + LAGEOS_LABEL.get(name, name) + "</extra>"))
     if agent_pts:
         fig.add_trace(go.Scatter(x=[p[0] for p in agent_pts], y=[p[1] for p in agent_pts], mode="markers",
-                                 name="eqdisc agent's own law", marker=dict(size=11, color=VIOLET, symbol="diamond")))
+                                 name="data-only agent", marker=dict(size=11, color=AQUA, symbol="diamond")))
     fig.update_layout(xaxis_title="days into the unseen month (after the 2017 training year)",
                       yaxis=dict(type="log", title="position error (km)", exponentformat="power"))
     return _layout(fig, 340)
@@ -39,6 +40,56 @@ def lageos_errors(days, errs, agent_pts=None):
 # ----------------------------------------------------------------------------- KS
 KS_STYLE = {"true PDE from noisy state": (GREY, "dash"), "weak SINDy (no LLM)": (AQUA, "dot"),
             "eqdisc agent (refit)": (BLUE, "solid"), "FNO (same noisy data)": (ORANGE, "solid")}
+
+
+def _earth_mesh(n_lat=36, n_lon=72):
+    lat = np.linspace(-np.pi / 2, np.pi / 2, n_lat)
+    lon = np.linspace(-np.pi, np.pi, n_lon)
+    LON, LAT = np.meshgrid(lon, lat)
+    return go.Surface(x=np.cos(LAT) * np.cos(LON), y=np.cos(LAT) * np.sin(LON), z=np.sin(LAT),
+                      surfacecolor=np.sin(LAT), colorscale=[[0, "#1e4f9a"], [1, "#3f8fd8"]], showscale=False,
+                      hoverinfo="skip", name="Earth", opacity=0.95,
+                      lighting=dict(ambient=0.6, diffuse=0.7, specular=0.2))
+
+
+def lageos_training(orbits, dates, h=None):
+    """The training data in 3-D: one orbit every two weeks of 2017 (real, hourly samples densified for display),
+    animated through the year so the orbit plane's slow turn about Earth's axis is visible."""
+    lim = 2.2
+    ax = dict(range=[-lim, lim], showbackground=False, showgrid=False, zeroline=False, showticklabels=False, title="",
+              showspikes=False)
+    n = len(orbits)
+    cols = [f"rgba(42,120,214,{0.15 + 0.6 * i / max(n - 1, 1):.2f})" for i in range(n)]
+    fig = go.Figure()
+    fig.add_trace(_earth_mesh())
+    fig.add_trace(go.Scatter3d(x=[0, 0], y=[0, 0], z=[-1.7, 1.7], mode="lines", name="Earth's spin axis",
+                               line=dict(color="rgba(150,150,150,0.9)", width=4, dash="dash"), hoverinfo="skip"))
+    for i, O in enumerate(orbits):          # faint history of all fortnightly orbits
+        fig.add_trace(go.Scatter3d(x=O[:, 0], y=O[:, 1], z=O[:, 2], mode="lines", showlegend=i == 0,
+                                   name="2017 training orbits (one every 2 weeks)",
+                                   line=dict(color=cols[i], width=2), hoverinfo="skip"))
+    cur = lambda i: go.Scatter3d(x=orbits[i][:, 0], y=orbits[i][:, 1], z=orbits[i][:, 2], mode="lines",
+                                 name="orbit on this date", line=dict(color="#eb6834", width=7),
+                                 hovertemplate=f"{dates[i]}<extra></extra>")
+    fig.add_trace(cur(0))
+    k = len(fig.data) - 1
+    fig.frames = [go.Frame(data=[cur(i)], traces=[k], name=str(i)) for i in range(n)]
+    fig.update_layout(
+        scene=dict(xaxis=ax, yaxis=ax, zaxis=ax, aspectmode="cube", bgcolor="rgba(0,0,0,0)",
+                   camera=dict(eye=dict(x=1.1, y=1.1, z=0.7))),
+        updatemenus=[dict(type="buttons", showactive=False, x=0, y=0.02, xanchor="left", yanchor="top",
+                          direction="left", pad=dict(t=8, r=8),
+                          buttons=[dict(label="▶ Play", method="animate",
+                                        args=[None, dict(frame=dict(duration=180, redraw=True), fromcurrent=True,
+                                                         transition=dict(duration=0), mode="immediate")]),
+                                   dict(label="⏸", method="animate",
+                                        args=[[None], dict(frame=dict(duration=0, redraw=False), mode="immediate")])])],
+        sliders=[dict(active=0, y=0.02, x=0.14, len=0.86, xanchor="left", yanchor="top", pad=dict(t=8),
+                      currentvalue=dict(prefix="", visible=True), ticklen=0,
+                      steps=[dict(method="animate", label=d, args=[[str(i)], dict(mode="immediate",
+                             frame=dict(duration=0, redraw=True), transition=dict(duration=0))])
+                             for i, d in enumerate(dates)])])
+    return _layout(fig, 520, legend_top=True)
 
 
 def ks_errors(t_lyap, errs, thr=0.5):

@@ -12,7 +12,9 @@
    56.57142857142858,
    142.85714285714286
   ],
-  "lyapunov_exponent": 0.09046508863346599,
+  "lyapunov_exponent": 0.08520034196187014,
+  "lyapunov_se": 0.009107150213562738,
+  "lyapunov_twin_crude": 0.09046508863346599,
   "weak_sindy": {
    "rhs": {
     "u": "-1.1836*u_xx -1.9978*u_xxxx -0.56869*u*u_x"
@@ -62,17 +64,17 @@
     "headline": "We are confident this is your equation.",
     "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. To validate it independently, the most demanding test would be: single Fourier mode k=6 (wavelength L/6), data amplitude."
    },
-   "cost_usd": 0.309,
-   "report": "runs/oos_ks_agent/discover/report.html"
+   "cost_usd": 0.627,
+   "report": "runs/oos_ks_dataonly/discover/report.html"
   },
   "fno": {
-   "train_minutes": 2.0
+   "train_minutes": 3.1
   },
   "valid_time_lyapunov": {
-   "true PDE from noisy state": 4.81,
-   "weak SINDy (no LLM)": 4.76,
-   "eqdisc agent (refit)": 4.76,
-   "FNO (same noisy data)": 0.83
+   "true PDE from noisy state": 4.53,
+   "weak SINDy (no LLM)": 4.48,
+   "eqdisc agent (refit)": 4.48,
+   "FNO (same noisy data)": 0.78
   },
   "valid_time": {
    "true PDE from noisy state": 53.14,
@@ -89,43 +91,43 @@
   "FNO (same noisy data)"
  ],
  "story": {
-  "headline": "The system is a one-dimensional conserved scalar field u(x,t) whose evolution is well described by a Kuramoto\u2013Sivashinsky equation: u_t = \u22120.569\u00b7u\u00b7u_x \u2212 1.184\u00b7u_xx \u2212 1.998\u00b7u_xxxx. In words, the field is driven by nonlinear self-advection, destabilised by negative (anti-)diffusion and stabilised by fourth-order hyperdiffusion.",
+  "headline": "The data come from a one-dimensional field u(x,t) that develops a front which breaks up into spatiotemporal cellular chaos, and the discovered equation is a rescaled Kuramoto\u2013Sivashinsky equation: u_t = \u22120.569\u00b7u\u00b7u_x \u2212 1.184\u00b7u_xx \u2212 1.998\u00b7u_xxxx, combining nonlinear advection, a destabilising negative diffusion and stabilising fourth-order hyperdiffusion.",
   "key_steps": [
    {
-    "observation": "The spatial mean of u appears to be conserved.",
-    "decision": "Restrict the candidate library to flux-form terms by excluding the source terms 1, u and u\u00b2. Search derivatives up to 4th order with polynomial degree 2, using weak-form SINDy.",
-    "outcome": "A sparse 3-term model emerged: u\u00b7u_x, u_xx and u_xxxx, with a short-window validity time of about 6.3 time units."
+    "observation": "Diagnostics showed a single PDE trajectory (100 snapshots \u00d7 1024 grid points, t \u2208 [0, 56.6]) whose spatial mean stays constant.",
+    "decision": "Treat the dynamics as a conservation (flux-form) law and exclude source terms (1, u, u\u00b2) from the candidate library, allowing derivatives up to 4th order.",
+    "outcome": "This narrowed the search to transport, diffusion and dispersion-type terms."
    },
    {
-    "observation": "The identified terms and signs match the canonical Kuramoto\u2013Sivashinsky structure.",
-    "decision": "Submit the 3-term model without further library expansion. The identical fit was re-run and resubmitted with no change.",
-    "outcome": "The final model is u_t = \u22120.5687\u00b7u\u00b7u_x \u2212 1.1836\u00b7u_xx \u2212 1.9978\u00b7u_xxxx."
+    "observation": "Weak-form SINDy, which avoids noisy pointwise high-order derivatives, returned three terms: u\u00b7u_x, u_xx and u_xxxx.",
+    "decision": "Check that this sparse model is stable under different settings: polynomial degree 1 vs 2, and 1500 test functions.",
+    "outcome": "Coefficients were reproduced to about 0.05% (\u22120.5687, \u22121.1838, \u22121.998), so the identification is robust."
    },
    {
-    "observation": "The statistical assessment bootstrapped the coefficients and tested removing each term.",
-    "decision": "Check whether each term is necessary.",
-    "outcome": "All three 90% CIs are narrow (relative uncertainty about 0.2%) and exclude zero. Removing any term costs about 1100 BIC units, so every term is strongly required."
+    "observation": "The plotted field shows a front dissolving into cellular chaos, the hallmark of the Kuramoto\u2013Sivashinsky equation.",
+    "decision": "Compare the discovered model with a near-identical variant using cross-validated derivative error.",
+    "outcome": "The two variants were statistically indistinguishable. The 3-term weak-SINDy model was preferred and submitted."
    },
    {
-    "observation": "Candidate additions were tested: u_xxx (dispersion), u\u00b2\u00b7u_x, u_x (drift) and u\u00b2\u00b7u_xxx.",
-    "decision": "Check for missing physics.",
-    "outcome": "Every addition is penalised (\u0394BIC between +3.5 and +4.6) and reduces error by under 1%. No missing term is supported."
+    "observation": "A nonlinear skeleton refit (fit_skeleton) converged to coefficients 20\u20133000\u00d7 smaller, yet reported the same valid time (6.29).",
+    "decision": "Disregard the skeleton refit and keep the weak-form coefficients.",
+    "outcome": "Bootstrap analysis later confirmed the weak-form values with tight 90% CIs (relative uncertainty \u22480.2%)."
    },
    {
-    "observation": "The model was rolled out from a held-out initial state.",
-    "decision": "Assess predictive skill over the full record.",
-    "outcome": "Error stayed within 30% over the entire data span (horizon 56.6). Overall confidence was rated high."
+    "observation": "Removing any term raises BIC by more than 1100. Adding any single extra term (u_xxx, u\u00b2u_x, u_x, u\u00b2u_xxx) raises BIC by about 3.5\u20134.6 and reduces error by less than 1%.",
+    "decision": "Accept the 3-term structure as final.",
+    "outcome": "The structure is well determined, rated high confidence."
    }
   ],
-  "physical_interpretation": "The \u22121.18\u00b7u_xx term is negative diffusion: it pumps energy into long wavelengths and is the source of instability. The \u22122.00\u00b7u_xxxx term is hyperdiffusion that damps short wavelengths. Together they give a linear growth rate \u03c3(k) = 1.18k\u00b2 \u2212 2.00k\u2074, so modes with k up to about 0.77 grow and the fastest-growing mode is near k \u2248 0.54. The \u22120.57\u00b7u\u00b7u_x term is Burgers-type nonlinear advection that transfers energy from unstable to stable scales and saturates the instability into spatiotemporal chaos, as seen in flame-front, thin-film and phase-turbulence systems. The 0.57 prefactor can be absorbed by rescaling the amplitude of u.",
+  "physical_interpretation": "The \u2212u\u00b7u_x term is Burgers-type nonlinear self-advection, which transfers energy between scales and steepens gradients. The \u2212u_xx term is negative (anti-)diffusion that amplifies long-wavelength perturbations. The \u2212u_xxxx term is hyperdiffusion that damps short wavelengths. Their balance selects a preferred cell size: the fastest-growing wavenumber is k* = \u221a(1.184/(2\u00b71.998)) \u2248 0.54, with marginal wavenumber \u221a(1.184/1.998) \u2248 0.77. Together the three terms produce the chaotic cellular pattern typical of flame fronts, thin falling films or phase turbulence; the coefficients are simply a rescaling of the canonical KS form.",
   "caveats": [
-   "Only one trajectory was available. Coefficients were identified from a single initial condition, so generalisation to other initial states is untested.",
-   "The source terms (1, u, u\u00b2) were excluded a priori on the basis of a conserved mean. This assumption was not tested explicitly in the trail.",
-   "The agent's rationale mentions cubic fields, but the run used poly_degree 2. Cubic candidates were checked only afterwards, in the assessment, and were not supported.",
-   "The KS equation is chaotic, so pointwise prediction will eventually diverge on long horizons regardless of coefficient accuracy. The two skill numbers also differ: SINDy's validity time was about 6.3, while the assessment's 30%-error horizon covered the full span. These likely use different metrics or thresholds, so long-term skill should be judged statistically (spectra, correlation lengths).",
-   "The data card was empty. Domain length, boundary conditions (presumably periodic), noise level and units are therefore not documented here."
+   "All results come from a single trajectory. The coefficients are precise for this run, but generalisation to other initial conditions or amplitudes has not been tested.",
+   "Source terms (1, u, u\u00b2) were excluded a priori on the basis of mean conservation and were never re-tested as candidates in the missing-term analysis.",
+   "Rollout metrics conflict. The tool-reported valid time is only \u22486.3 time units (about 11% of the span), while the assessment reports held-out agreement for the full horizon. For a chaotic system, pointwise trajectory divergence is expected and is not by itself evidence of model error.",
+   "The skeleton refit returned wildly different coefficients with the same valid-time score. This suggests the valid-time metric is insensitive or the optimiser failed, so valid time should not be used to rank coefficient sets here.",
+   "Domain length and boundary conditions (presumably periodic) are not documented in the data card. Grid units for x and t are also unstated."
   ],
-  "recommendation": "Use the model: the structure is well determined and the coefficients are tightly constrained. If further validation is wanted, the cheapest step is an independent run from a different initial condition. The top-ranked design was a single Fourier mode with k = 6 (wavelength L/6) at data amplitude, which would mainly sharpen the u_xx and u_xxxx coefficients. However, its predicted signal-to-noise ratio is low (about 0.2), so expect only modest gains."
+  "recommendation": "Use the model: it is a well-determined rescaled Kuramoto\u2013Sivashinsky equation with tight coefficient uncertainties. To confirm it beyond this single run, collect one independent trajectory starting from a single Fourier mode k=6 (wavelength L/6) at data amplitude. This is predicted to sharpen the u_xx and u_xxxx coefficients most (information gain \u224833\u00d7 and \u224810\u00d7 over existing data) by directly probing the linear growth/decay balance."
  },
  "verdict": {
   "status": "CONFIDENT",
@@ -211,6 +213,19 @@
    }
   ]
  },
- "cost_usd": 0.309,
- "wall_s": 190.7
+ "cost_usd": 0.627,
+ "wall_s": 249.9,
+ "tools": [
+  "diagnose",
+  "weak_sindy",
+  "submit",
+  "diagnose",
+  "plot_data",
+  "weak_sindy",
+  "compare_models",
+  "plot_model",
+  "fit_skeleton",
+  "weak_sindy",
+  "submit"
+ ]
 }

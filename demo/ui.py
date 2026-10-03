@@ -12,6 +12,7 @@ VERDICT = {  # status -> (colour, label)
     "INCONCLUSIVE": ("#dc2626", "? INCONCLUSIVE"),
     "VALIDATED": ("#16a34a", "✓ VALIDATED OUT OF SAMPLE"),
     "PENDING": ("#64748b", "… RESULTS PENDING"),
+    "NOT RECOVERED": ("#dc2626", "✗ NOT RECOVERED"),
     "RESULT": ("#475569", "RESULT"),
 }
 
@@ -55,7 +56,7 @@ def verdict_chip(status, note=None):
 def chips(items, title="how it was found"):
     """items: list of (tool, finding) or plain strings; ≤6 words each."""
     parts = []
-    for it in items[:4]:
+    for it in items[:6]:
         if isinstance(it, (tuple, list)):
             parts.append(f"<span class='chip'><b>{html.escape(it[0])}</b> → {html.escape(it[1])}</span>")
         else:

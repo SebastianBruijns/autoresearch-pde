@@ -19,7 +19,7 @@ RUNS = DEMO / "_live_runs"
 TOOL_ICON = {"intuit": "💡", "weak_sindy": "🧮", "run_sindy": "🧮", "ensemble_sindy": "🧮", "sparse_fit": "🧮",
              "run_pysr": "🧬", "fit_skeleton": "🦴", "find_invariants": "⚖️", "detect_symmetries": "🪞",
              "equivariant_sindy": "🪞", "transform": "🔄", "compare_models": "🏆", "coefficient_uncertainty": "📏",
-             "assess_model": "📋", "run_python": "🐍", "plot_data": "📈", "plot_model": "📈", "load_skill": "📚",
+             "assess_model": "📋", "run_python": "🐍", "plot_data": "📈", "plot_model": "📈",
              "submit": "📤", "repair": "🔧", "describe": "🔍", "validate": "✔️", "ask_human": "🙋",
              "request_experiment": "🧪"}
 

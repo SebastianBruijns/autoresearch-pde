@@ -25,6 +25,8 @@ sys.path.insert(0, str(REPO))
 
 OUT = DEMO / "showcase"
 AR = Path("/Users/danield/iterate-hackathon/autoresearch")
+import os as _os
+LAGEOS_CSV = Path(_os.environ.get("EQDISC_LAGEOS_CSV", "/Users/danield/iterate-hackathon/orbit_discover/data/lageos1.csv"))
 
 
 def _f32(a):
@@ -63,6 +65,16 @@ def _copy(src, dst):
     return True
 
 
+def _tools(*transcripts):
+    """Tool names actually called by the agent(s), in order, from transcript.json files."""
+    out = []
+    for t in transcripts:
+        for f in sorted(Path(t).glob("**/transcript.json")) if Path(t).is_dir() else [Path(t)]:
+            if f.exists():
+                out += [e["name"] for e in json.loads(f.read_text()) if e.get("type") == "tool"]
+    return out
+
+
 def _fresh(case):
     d = OUT / case
     if d.exists():
@@ -79,7 +91,10 @@ def build_lageos():
     if res is None:
         raise FileNotFoundError(src / "results.json")
     d = _fresh("lageos")
-    agent = _json(src / "agent_results.json")
+    # agent arm: data-only runs (neutral variable names, no context, no domain guidance, sandboxed code).
+    # Headline: the stricter run in random units (mu and the Earth radius are not 1); the other is shown in details.
+    agent = _json(REPO / "runs/oos_lageos_dataonly_units/agent_results.json")
+    agent_alt = _json(REPO / "runs/oos_lageos_dataonly/agent_results.json")
     _copy(src / "lageos_forecast.mp4", d / "video.mp4")
     _copy(src / "lageos_errors.png", d / "errors.png")
     _thumb(d / "video.mp4", d / "thumb.jpg", at=6.0)
@@ -88,11 +103,28 @@ def build_lageos():
     models = [k[2:] for k in z.files if k.startswith("P_")]
     for i, m in enumerate(models):
         arrays[f"err{i}"] = _f32(np.linalg.norm(z[f"P_{m}"][:, :3] - z["truth"][:, :3], axis=1) * RE_E / 1e3)
+    fa = REPO / "runs/oos_lageos_dataonly_units/agent_forecast.npz"
+    if fa.exists():
+        S = np.load(fa)["S"]
+        arrays["err_agent"] = _f32(np.linalg.norm(S[:, :3] - z["truth"][:len(S), :3], axis=1) * RE_E / 1e3)
     arrays["years_long"] = _f32(z["days_long"] / 365.25)
     for k in ("data", "Kepler", "Kepler + J2"):
         v = z[f"node_{k}"]
         arrays[f"node_{k}"] = _f32(v - v[0])
-    info = {"results": res, "agent": agent, "models": models, "RE_km": RE_E / 1e3, "T_s": float(T_E)}
+    # training data: one densified orbit every ~2 weeks of 2017, to show the orbit plane turning over the year
+    if LAGEOS_CSV.exists():
+        from eqdisc.oos import _densify, load_lageos
+        t_, X_, dates_ = load_lageos(LAGEOS_CSV)
+        starts = np.arange(0, 24 * 365 - 6, 24 * 14)
+        arrays["train_orbits"] = _f32(np.stack([_densify(X_[i:i + 5], t_[1] - t_[0], 24) for i in starts]))
+        arrays["train_full"] = _f32(X_[:24 * 365, :3])
+        train_dates = [str(dates_.iloc[i].date()) for i in starts]
+        h = np.cross(X_[:24 * 365, :3], X_[:24 * 365, 3:])
+        arrays["train_h"] = _f32(h / np.linalg.norm(h, axis=1, keepdims=True))
+    else:
+        train_dates = []
+    info = {"results": res, "agent": agent, "agent_alt": agent_alt, "models": models, "RE_km": RE_E / 1e3,
+            "T_s": float(T_E), "train_dates": train_dates}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)
 
@@ -100,7 +132,7 @@ def build_lageos():
 # ----------------------------------------------------------------------------- B. Kuramoto-Sivashinsky (blinded)
 def build_ks():
     from eqdisc.oos import rel_err_t
-    src = REPO / "runs/oos_ks_agent"
+    src = REPO / "runs/oos_ks_dataonly"
     res = _json(src / "results.json")
     if res is None:
         raise FileNotFoundError(src / "results.json")
@@ -119,7 +151,8 @@ def build_ks():
     a = disc.get("assessment") or {}
     info = {"results": res, "labels": labels, "story": disc.get("story"), "verdict": disc.get("verdict"),
             "assessment": {k: a.get(k) for k in ("terms", "confidence", "noise_floor", "missing_term_evidence")},
-            "cost_usd": (res.get("agent") or {}).get("cost_usd") or disc.get("cost_usd"), "wall_s": disc.get("wall_s")}
+            "cost_usd": (res.get("agent") or {}).get("cost_usd") or disc.get("cost_usd"), "wall_s": disc.get("wall_s"),
+            "tools": _tools(src / "discover")}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)
 
@@ -129,10 +162,10 @@ def build_gray_scott(regime="spirals", noise=0.05):
     from eqdisc import solvers
     from eqdisc.well_gs import REGIMES
     import os
-    src = Path(os.environ.get("EQDISC_GS_OOS_DIR") or REPO / f"runs/oos_gs_{regime}_n{noise:g}")   # override for testing
+    src = Path(os.environ.get("EQDISC_GS_OOS_DIR") or REPO / "runs/oos_gs_dataonly")   # data-only agent run
     d = _fresh("gray_scott")
     res = _json(src / "results.json")
-    sweep = _json(REPO / "runs/well_gs/results.json")
+    sweep = None   # the earlier noise sweep showed the agent the dataset name and a context line: not shown
     ds = REPO / f"datasets/well_gs_{regime}_n{noise:g}"
     truth = _json(ds / "hidden/truth.json")
     has_video = _copy(src / "gs_forecast.mp4", d / "video.mp4")
@@ -158,7 +191,8 @@ def build_gray_scott(regime="spirals", noise=0.05):
             arrays[f"gal_{r}"] = _f32(np.load(f)["U"][0, 0, ::2, ::2, 1])
     info = {"results": res, "sweep": sweep, "regime": regime, "noise": noise, "truth": (truth or {}).get("rhs"),
             "params": (truth or {}).get("params"), "regimes": {k: list(v) for k, v in REGIMES.items()},
-            "has_video": has_video}
+            "has_video": has_video, "tools": _tools(REPO / "runs/dataonly/gs_agent"),
+            "agent_cost": (_json(REPO / "runs/dataonly/gs_agent/result.json") or {}).get("cost_usd")}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)
 
