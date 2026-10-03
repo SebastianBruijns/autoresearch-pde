@@ -13,6 +13,7 @@ import pandas as pd
 
 DEMO = Path(__file__).resolve().parent
 SHOW = DEMO / "showcase"
+REH = SHOW / "rehearsal"
 RUNS = DEMO / "_live_runs"
 
 TOOL_ICON = {"intuit": "💡", "weak_sindy": "🧮", "run_sindy": "🧮", "ensemble_sindy": "🧮", "sparse_fit": "🧮",
@@ -157,8 +158,7 @@ def fake_dynamics(csv_path, run_dir, n_branches, adversary, context, on_event, s
     on_event({"type": "stage", "text": "[0/6] ingest: inferring the layout and writing a data card"})
     ds, card = ingest(csv_path, out_dir=str(run_dir / "dataset"))          # real, local, no API
     on_event({"type": "stage", "text": (card or {}).get("summary", "")[:200]})
-    case = json.loads((SHOW / "pendulum" / "case.json").read_text())
-    disc = case["discovery"]
+    disc = json.loads((REH / "pendulum.json").read_text())
     branches = ["structure-first", "symbolic", "sparse-regression"][:n_branches]
     script = [
         ({"type": "stage", "text": "[1/6] intuition pre-analysis"}, 0.4),
@@ -188,10 +188,10 @@ def fake_dynamics(csv_path, run_dir, n_branches, adversary, context, on_event, s
         _sleep(dt * speed)
     meta, _ = load(ds)
     use_upload = set(meta["variables"]) == set(disc["final_model"])
-    res = {"kind": "dynamics", **{k: disc[k] for k in ("verdict", "final_model", "story", "insights", "assessment",
-                                                       "branches", "winner_branch", "tournament")},
-           "dataset_path": str(ds if use_upload else SHOW / "pendulum" / "dataset"),
-           "report": str(SHOW / "pendulum" / "report.html"), "data_card": card, "cost_usd": 0.0,
+    res = {"kind": "dynamics", **{k: disc.get(k) for k in ("verdict", "final_model", "story", "insights", "assessment",
+                                                           "winner_branch")},
+           "dataset_path": str(ds if use_upload else REH / "pendulum_dataset"),
+           "report": str(REH / "pendulum_report.html"), "data_card": card, "cost_usd": 0.0,
            "rehearsal": True, "rehearsal_note": None if use_upload else
            "Rehearsal mode replays the precomputed pendulum result; your file's variables differ, so plots use the pendulum data."}
     on_event({"type": "stage", "text": f"\n{res['verdict']['status']}: {res['verdict']['headline']}"})
@@ -207,7 +207,7 @@ def fake_static(csv_path, target, context, n_sessions, on_event, speed=1.0):
     _sleep(0.4 * speed)
     on_event({"type": "stage", "text": f"[2/3] {n_sessions} parallel agent sessions"})
     if {"b", "s", "temp", "pH"} <= set(names) and target == "db":
-        expr = json.loads((SHOW / "ecoli" / "case.json").read_text())["expr"]
+        expr = json.loads((REH / "ecoli.json").read_text())["expr"]
         steps = [("describe", "{}", None), ("fit_skeleton", '{"expr": "p0*b*s/(p1+s)"}', "0.31*b*s/(1.0+s)"),
                  ("run_python", '{"code": "partial dependence on temp, pH"}', None),
                  ("fit_skeleton", '{"expr": "... /(1+((temp-p2)/p3)**4) ..."}', "0.49*b*s/(1+s)/(1+((temp-35.1)/3.7)**4)"),

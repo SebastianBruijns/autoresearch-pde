@@ -5,7 +5,9 @@
    invariants (a conserved sum of variables means the library columns are collinear: drop one
    variable's terms or use the constraint), and for PDEs the spectrum (k_max_resolved) and whether
    the spatial mean is conserved (this suggests conservative/flux form).
-2. Choose differentiation from the noise level. Use a small Savitzky-Golay window (5-9) at noise
+2. If the signal changes a lot between samples (coarse sampling: a few samples per oscillation or orbit),
+   derivative-based fits fail: compare candidate structures with `fit_flow` (one-interval shooting) instead.
+   Choose differentiation from the noise level. Use a small Savitzky-Golay window (5-9) at noise
    below 1%, and larger windows (11-21) or a stronger low-pass at 5-10%. For PDEs keep
    lowpass_frac just above k_max_resolved / k_nyquist. High derivatives (u_xxx, u_xxxx) are very
    noise-sensitive.
