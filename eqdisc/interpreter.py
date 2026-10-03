@@ -36,6 +36,7 @@ def run_code(code, meta, data, workdir, timeout=60, max_output=6000):
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
     before = {p: p.stat().st_mtime for p in workdir.glob("*")}
+    meta = {k: v for k, v in meta.items() if k not in ("system", "name")}   # names can reveal the system
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         (tmp / "in.pkl").write_bytes(pickle.dumps((meta, data)))
