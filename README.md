@@ -34,7 +34,7 @@ The output is a self-contained HTML report:
 ## Install
 
 ```bash
-git clone https://github.com/danieldeh/eqdisc && cd eqdisc
+git clone https://github.com/danieldeh/autoresearch-pde && cd autoresearch-pde
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[notebooks]"          # add ",pysr" for symbolic regression (installs Julia on first use)
 ```
