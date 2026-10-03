@@ -1,0 +1,204 @@
+{
+ "results": {
+  "noise": 0.01,
+  "train_samples": 8640,
+  "test_samples": 8641,
+  "units": [
+   0.53,
+   1.7
+  ],
+  "Kepler_mu": {
+   "p0": 0.8138405980284165
+  },
+  "agent": {
+   "submitted": {
+    "u1": "u4",
+    "u2": "u5",
+    "u3": "u6",
+    "u4": "u1*(0.174 - 0.0696*(u1**2 + u2**2) - 0.0916*u3**2 - 2.144*(u4**2 + u5**2) - 3.1497*u6**2)",
+    "u5": "u2*(0.174 - 0.0696*(u1**2 + u2**2) - 0.0916*u3**2 - 2.144*(u4**2 + u5**2) - 3.1497*u6**2)",
+    "u6": "u3*(0.2441 - 0.0842*(u1**2 + u2**2) - 0.1065*u3**2 - 4.5671*(u4**2 + u5**2 + u6**2))"
+   },
+   "cost_usd": 3.153,
+   "n_tool_calls": 20,
+   "tools": [
+    "intuit",
+    "diagnose",
+    "weak_sindy",
+    "find_invariants",
+    "run_python",
+    "run_python",
+    "run_python",
+    "run_python",
+    "weak_sindy",
+    "fit_skeleton",
+    "validate",
+    "find_invariants",
+    "transform",
+    "weak_sindy",
+    "run_python",
+    "run_python",
+    "run_python",
+    "run_python",
+    "validate",
+    "submit"
+   ],
+   "rationale": "Weak SINDy found the kinematics u1'=u4, u2'=u5, u3'=u6 with coefficient 1.000. find_invariants showed that the angular momentum Lz = u1*u5 - u2*u4 is conserved, which means the dynamics are rotationally symmetric in the (u1,u2) plane. I therefore restricted the accelerations to equivariant forms: x_i'' = x_i * F(rho^2, z^2, |v_p|^2, w^2). I fitted the coefficients by integral-form least squares, which avoids differentiating the noisy data. The u6 equation came out the same across sparsity thresholds, and it matches the term structure from the weak SINDy runs. Among the in-plane candidates I compared by integral fit plus short rollout (a rotating Jx or Jv term, damping-like v*(x.v), v*(u3*u6), v*1), only v*(x.v) or Jv lowered the residual slightly (0.254 to 0.240), and none clearly improved the valid time, so I kept the simplest, symmetric form. Held-out results: deriv_nrmse 0.25, valid time about 15 time units, no blow-up. The less constrained 30-term polynomial models blew up.",
+   "refit": {
+    "submitted_constants": [
+     0.174,
+     0.0696,
+     0.0916,
+     2.144,
+     3.1497,
+     0.2441,
+     0.0842,
+     0.1065,
+     4.5671
+    ],
+    "refit_constants": [
+     0.14647088157889393,
+     0.057724634739282826,
+     0.0773837005260834,
+     1.8681938157600444,
+     2.9230198139295185,
+     0.2291845218140987,
+     0.07660144418628044,
+     0.10046044795802357,
+     4.364320290380982
+    ],
+    "sigma": [
+     0.0030402184980639103,
+     0.001472810253830982,
+     0.0015897266160670221,
+     0.03229986279370451,
+     0.026085407783635793,
+     0.004139737434462935,
+     0.0018047029711245643,
+     0.0021019022159856748,
+     0.04497004618414972
+    ],
+    "one_step_rel_err_heldout": 0.05659133516327237
+   },
+   "refit_rhs": {
+    "u1": "u4",
+    "u2": "u5",
+    "u3": "u6",
+    "u4": "u1*(-0.0577246347392828*u1**2 - 0.0577246347392828*u2**2 - 0.0773837005260834*u3**2 - 1.86819381576004*u4**2 - 1.86819381576004*u5**2 - 2.92301981392952*u6**2 + 0.146470881578894)",
+    "u5": "u2*(-0.0577246347392828*u1**2 - 0.0577246347392828*u2**2 - 0.0773837005260834*u3**2 - 1.86819381576004*u4**2 - 1.86819381576004*u5**2 - 2.92301981392952*u6**2 + 0.146470881578894)",
+    "u6": "u3*(-0.0766014441862804*u1**2 - 0.0766014441862804*u2**2 - 0.100460447958024*u3**2 - 4.36432029038098*u4**2 - 4.36432029038098*u5**2 - 4.36432029038098*u6**2 + 0.229184521814099)"
+   }
+  },
+  "position_error_km": {
+   "Kepler + J2": {
+    "1h": 3.589555431587341,
+    "12h": 16.088501445056934,
+    "24h": 29.644674279497046,
+    "72h": 83.18574840140516
+   },
+   "Kepler": {
+    "1h": 20061.31618024456,
+    "12h": 13462.374494154392,
+    "24h": 37370.319288397965,
+    "72h": 16472.939541299984
+   },
+   "data-only agent": {
+    "1h": 2820.8450080564917,
+    "12h": 11113.159501313241,
+    "24h": 26376.291611467528,
+    "72h": 27674.202163974933
+   },
+   "neural step model (MLP)": {
+    "1h": 4489.886990135344,
+    "12h": 4668.417846877672,
+    "24h": 15624.38038902128,
+    "72h": 4100.57077434131
+   }
+  }
+ },
+ "models": [
+  "Kepler + J2",
+  "Kepler",
+  "data-only agent",
+  "neural step model (MLP)"
+ ],
+ "agent": {
+  "submitted": {
+   "u1": "u4",
+   "u2": "u5",
+   "u3": "u6",
+   "u4": "u1*(0.174 - 0.0696*(u1**2 + u2**2) - 0.0916*u3**2 - 2.144*(u4**2 + u5**2) - 3.1497*u6**2)",
+   "u5": "u2*(0.174 - 0.0696*(u1**2 + u2**2) - 0.0916*u3**2 - 2.144*(u4**2 + u5**2) - 3.1497*u6**2)",
+   "u6": "u3*(0.2441 - 0.0842*(u1**2 + u2**2) - 0.1065*u3**2 - 4.5671*(u4**2 + u5**2 + u6**2))"
+  },
+  "cost_usd": 3.153,
+  "n_tool_calls": 20,
+  "tools": [
+   "intuit",
+   "diagnose",
+   "weak_sindy",
+   "find_invariants",
+   "run_python",
+   "run_python",
+   "run_python",
+   "run_python",
+   "weak_sindy",
+   "fit_skeleton",
+   "validate",
+   "find_invariants",
+   "transform",
+   "weak_sindy",
+   "run_python",
+   "run_python",
+   "run_python",
+   "run_python",
+   "validate",
+   "submit"
+  ],
+  "rationale": "Weak SINDy found the kinematics u1'=u4, u2'=u5, u3'=u6 with coefficient 1.000. find_invariants showed that the angular momentum Lz = u1*u5 - u2*u4 is conserved, which means the dynamics are rotationally symmetric in the (u1,u2) plane. I therefore restricted the accelerations to equivariant forms: x_i'' = x_i * F(rho^2, z^2, |v_p|^2, w^2). I fitted the coefficients by integral-form least squares, which avoids differentiating the noisy data. The u6 equation came out the same across sparsity thresholds, and it matches the term structure from the weak SINDy runs. Among the in-plane candidates I compared by integral fit plus short rollout (a rotating Jx or Jv term, damping-like v*(x.v), v*(u3*u6), v*1), only v*(x.v) or Jv lowered the residual slightly (0.254 to 0.240), and none clearly improved the valid time, so I kept the simplest, symmetric form. Held-out results: deriv_nrmse 0.25, valid time about 15 time units, no blow-up. The less constrained 30-term polynomial models blew up.",
+  "refit": {
+   "submitted_constants": [
+    0.174,
+    0.0696,
+    0.0916,
+    2.144,
+    3.1497,
+    0.2441,
+    0.0842,
+    0.1065,
+    4.5671
+   ],
+   "refit_constants": [
+    0.14647088157889393,
+    0.057724634739282826,
+    0.0773837005260834,
+    1.8681938157600444,
+    2.9230198139295185,
+    0.2291845218140987,
+    0.07660144418628044,
+    0.10046044795802357,
+    4.364320290380982
+   ],
+   "sigma": [
+    0.0030402184980639103,
+    0.001472810253830982,
+    0.0015897266160670221,
+    0.03229986279370451,
+    0.026085407783635793,
+    0.004139737434462935,
+    0.0018047029711245643,
+    0.0021019022159856748,
+    0.04497004618414972
+   ],
+   "one_step_rel_err_heldout": 0.05659133516327237
+  },
+  "refit_rhs": {
+   "u1": "u4",
+   "u2": "u5",
+   "u3": "u6",
+   "u4": "u1*(-0.0577246347392828*u1**2 - 0.0577246347392828*u2**2 - 0.0773837005260834*u3**2 - 1.86819381576004*u4**2 - 1.86819381576004*u5**2 - 2.92301981392952*u6**2 + 0.146470881578894)",
+   "u5": "u2*(-0.0577246347392828*u1**2 - 0.0577246347392828*u2**2 - 0.0773837005260834*u3**2 - 1.86819381576004*u4**2 - 1.86819381576004*u5**2 - 2.92301981392952*u6**2 + 0.146470881578894)",
+   "u6": "u3*(-0.0766014441862804*u1**2 - 0.0766014441862804*u2**2 - 0.100460447958024*u3**2 - 4.36432029038098*u4**2 - 4.36432029038098*u5**2 - 4.36432029038098*u6**2 + 0.229184521814099)"
+  }
+ }
+}

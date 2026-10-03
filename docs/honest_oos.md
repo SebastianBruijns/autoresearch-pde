@@ -59,6 +59,24 @@ Reproduce with `eqdisc/oos.py`: `ks_case`, `lageos_case`, `lageos_agent(..., uni
 - The MLP looks close at orbit scale, but its orbit plane is tilted: it swings ±1,000 km out of plane every orbit.
 - The agent's law is textbook physics. What is new is that the agent *inferred* the setting from the numbers alone.
 
+## 1b. Synthetic orbit with a large bulge (orbit_discover Challenge1; J₂ = 0.5) — a failure
+
+**Setup.**
+- Data: 30-second samples over 6 days, with 1% noise on every column.
+- The agent saw the first 3 days only: six unnamed columns in random units, no context.
+- Forecasts of the last 3 days start from a shooting-estimated state: each law fits its own trajectory to the last two training orbits. The neural net is given the true law's state estimate, the most generous start.
+
+**Result: not recovered.** The agent found the kinematics and the rotational symmetry (conserved L_z). It then fitted a polynomial x·F(ρ², z², v², w²) instead of inverse-square gravity plus a bulge term. Its own diagnostics showed 25% derivative error, and it submitted anyway ($3.15, 20 tool calls).
+
+| model | 1 h (km) | 1 day (km) | 3 days (km) |
+|---|---|---|---|
+| true law (generator), own state estimate | 3.6 | 30 | 83 |
+| data-only agent (refit) | 2,821 | 26,376 | 27,674 |
+| neural network, same data | 4,490 | 15,624 | 4,101 |
+| round-Earth gravity (μ fitted) | 20,061 | 37,370 | 16,473 |
+
+**Contrast with LAGEOS.** There, a near-circular orbit with a small J₂ made "Kepler plus a correction" visible in the numbers. Here, the huge bulge and eccentric orbit (r from 1.1 to 2.5) hide that structure, and a symmetric polynomial is a tempting local fit. The verdict should have been *not confident*; the final assessment was not run in this arm.
+
 ## 2. Kuramoto–Sivashinsky (real data, blinded, 2% noise, chaotic)
 
 **Setup.**

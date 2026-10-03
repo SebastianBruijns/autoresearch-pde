@@ -134,6 +134,62 @@ def video_1d(path, x, t, rows, title, fps=12, lyap=None):
     return str(path)
 
 
+def spacetime_video(path, x, t, truth, models, lyap=None, title="", fps=15, nx=256, valid=None):
+    """'Creeping' space-time video: the field u(x, t) is revealed left to right as time advances, for the truth and
+    each model (filled contours), with each model's error |model - truth| in the rows below.
+    models: list of (label, Y); valid: optional {label: valid time in Lyapunov times} drawn as dashed lines."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.animation as anim
+    import matplotlib.pyplot as plt
+    st = max(1, len(x) // nx)
+    xs, U = x[::st], truth[:, ::st]
+    T = (t - t[0]) * (lyap or 1.0)
+    tlab = "Lyapunov times into the unseen future" if lyap else "time into the unseen future"
+    vmax = float(np.abs(U).max())
+    lv = np.linspace(-vmax, vmax, 31)
+    E = [(lab, np.abs(Y[:, ::st] - U)) for lab, Y in models]
+    emax = float(np.percentile(np.concatenate([e.ravel() for _, e in E]), 99))
+    le = np.linspace(0, emax, 21)
+    panels = [("truth (what really happened)", U, "field")] + [(lab, Y[:, ::st], "field") for lab, Y in models] + \
+             [(f"error of {lab}", e, "err") for lab, e in E]
+    fig, axes = plt.subplots(len(panels), 1, figsize=(11, 1.55 * len(panels) + 0.9), sharex=True)
+    sup = fig.suptitle(title, fontsize=11)
+    for ax, (lab, _, kind) in zip(axes, panels):
+        ax.set_ylabel("x", fontsize=8)
+        ax.set_xlim(T[0], T[-1])
+        ax.set_ylim(xs[0], xs[-1])
+        ax.tick_params(labelsize=7)
+    axes[-1].set_xlabel(tlab)
+    m1 = plt.cm.ScalarMappable(cmap="RdBu_r", norm=plt.Normalize(-vmax, vmax))
+    m2 = plt.cm.ScalarMappable(cmap="magma", norm=plt.Normalize(0, emax))
+    fig.colorbar(m1, ax=axes[:1 + len(models)], fraction=0.015, pad=0.01, label="u")
+    fig.colorbar(m2, ax=axes[1 + len(models):], fraction=0.015, pad=0.01, label="|error|")
+
+    def upd(i):
+        k = max(i + 1, 2)
+        for ax, (lab, Z, kind) in zip(axes, panels):
+            for c in list(ax.collections):
+                c.remove()
+            for ln in list(ax.lines):
+                ln.remove()
+            if kind == "field":
+                ax.contourf(T[:k], xs, Z[:k].T, levels=lv, cmap="RdBu_r", extend="both")
+            else:
+                ax.contourf(T[:k], xs, np.minimum(Z[:k], emax).T, levels=le, cmap="magma")
+            ax.axvline(T[k - 1], color="k", lw=0.8)
+            name = lab.replace("error of ", "")
+            if valid and name in valid and valid[name] <= T[k - 1]:
+                ax.axvline(valid[name], color="w" if kind == "err" else "k", ls="--", lw=1.2)
+            ax.set_title(lab + (f"   (valid for {valid[name]:.1f} Lyapunov times)" if valid and name in valid
+                                and kind == "field" else ""), fontsize=8.5, loc="left")
+        return []
+    fig.tight_layout(rect=(0, 0, 0.93, 0.95))
+    a = anim.FuncAnimation(fig, upd, frames=len(T), interval=1000 / fps)
+    a.save(path, writer=anim.FFMpegWriter(fps=fps, bitrate=3000))
+    plt.close(fig)
+
+
 def spacetime_figure(path, x, t, rows, lyap=None):
     import matplotlib
     matplotlib.use("Agg")
@@ -230,6 +286,12 @@ def ks_case(out="runs/oos_ks", noise=0.02, t_split=60.0, scale=(1.3, 0.7, 1.6), 
     xs = x - x[0]
     spacetime_figure(out / "ks_spacetime.png", xs, tt, rows, lyap=lam)
     video_1d(out / "ks_oos.mp4", xs, tt, rows, "Kuramoto–Sivashinsky (blinded, 2% noise): forecasting the unseen future", lyap=lam)
+    ks_lab = {"eqdisc agent (refit)": "eqdisc: equation found from the data",
+              "FNO (same noisy data)": "neural operator (FNO) trained on the same data"}
+    mods = [(ks_lab[lab], Y) for lab, Y, _ in rows if lab in ks_lab]
+    vt_ = res.get("valid_time_lyapunov", {})
+    spacetime_video(out / "ks_spacetime.mp4", xs, tt, rows[0][1], mods, lyap=lam, valid={ks_lab[k]: v for k, v in vt_.items() if k in ks_lab},
+                    title="Kuramoto–Sivashinsky (chaotic; blinded; trained on 2%-noise data): forecasting the unseen future")
     np.savez_compressed(out / "rollouts.npz", t=tt, x=xs, **{f"Y{i}": Y for i, (_, Y, _) in enumerate(rows)},
                         labels=np.array([lab for lab, _, _ in rows]))
     (out / "results.json").write_text(json.dumps(res, indent=1, default=str))
@@ -424,9 +486,15 @@ def lageos_figures(out, tt, truth, preds, days, node, res):
 
 LAGEOS_COLORS = {"data-only agent": "#16a34a", "Kepler + J2": "tab:red", "Kepler": "tab:orange",
                  "neural step model (MLP)": "#7c3aed"}
+# plain-language names for the audience (legend) and short ones (running title)
+PLAIN = {"data-only agent": "eqdisc: equation found from the data", "neural step model (MLP)":
+         "neural network trained on the same data", "Kepler": "Newton's gravity, perfectly round Earth",
+         "Kepler + J2": "textbook model incl. Earth's bulge (reference)", "measured": "real satellite (measured)"}
+SHORT = {"data-only agent": "eqdisc", "neural step model (MLP)": "neural net", "Kepler": "round-Earth gravity",
+         "Kepler + J2": "textbook"}
 
 
-def lageos_video(path, tt, truth, preds, days=3, colors=None):
+def lageos_video(path, tt, truth, preds, days=3, colors=None, name="LAGEOS-1", title_where="Close-up"):
     """Left: 3-D view, Earth to scale, real track vs forecasts. Right: the same forecasts seen from the real
     satellite (offset in km, along-track vs out-of-plane; radial offsets are small for all models), so errors
     invisible at orbit scale become visible.
@@ -438,10 +506,19 @@ def lageos_video(path, tt, truth, preds, days=3, colors=None):
     import matplotlib.pyplot as plt
     colors = {**LAGEOS_COLORS, **(colors or {})}
     hrs = tt * T_E / 3600
-    n = min(len(tt), 24 * days + 1)
-    per, sm = 8, 3                                   # frames per hour; line points per frame step
-    fine_t = np.linspace(hrs[0], hrs[n - 1], per * (n - 1) + 1)
-    dense = lambda P: _densify(P[:n], tt[1] - tt[0], per * sm)
+    dt_h = float(hrs[1] - hrs[0])
+    if dt_h > 0.25:                                  # coarse (hourly) samples: densify by two-body propagation
+        n = min(len(tt), int(round(24 * days / dt_h)) + 1)
+        per, sm = 8, 3                               # frames per hour; line points per frame step
+        fine_t = np.linspace(hrs[0], hrs[n - 1], per * (n - 1) + 1)
+        dense = lambda P: _densify(P[:n], tt[1] - tt[0], per * sm)
+    else:                                            # already dense: one frame every ~1/8 h of samples
+        sm = max(1, int(round(0.125 / dt_h)))
+        n = min(len(tt), int(round(24 * days / dt_h)) + 1)
+        n = (n - 1) // sm * sm + 1
+        per = 8
+        fine_t = hrs[:n:sm]
+        dense = lambda P: np.asarray(P[:n, :3])
     T = dense(truth)
     # truth velocity direction for the local frame, from the dense track (central differences)
     V = np.gradient(T, axis=0)
@@ -461,16 +538,16 @@ def lageos_video(path, tt, truth, preds, days=3, colors=None):
     ax.set(xlim=(-1.5, 1.5), ylim=(-1.5, 1.5), zlim=(-1.5, 1.5))
     ax.set_axis_off()
     lines, dots, olines, odots = {}, {}, {}, {}
-    lines["measured"], = ax.plot([], [], [], color="k", lw=2.5, label="measured (real satellite)")
+    lines["measured"], = ax.plot([], [], [], color="k", lw=2.5, label=PLAIN["measured"])
     dots["measured"], = ax.plot([], [], [], "o", color="k", ms=6)
     for k in tracks:
-        lines[k], = ax.plot([], [], [], color=colors.get(k), lw=1.4, label=k)
+        lines[k], = ax.plot([], [], [], color=colors.get(k), lw=1.4, label=PLAIN.get(k, k))
         dots[k], = ax.plot([], [], [], "o", color=colors.get(k), ms=6)
         olines[k], = bx.plot([], [], color=colors.get(k), lw=1.5, alpha=0.6)
-        odots[k], = bx.plot([], [], "o", color=colors.get(k), ms=9, label=k)
-    bx.plot([0], [0], "k+", ms=18, mew=2.5, label="real satellite")
-    bx.set(xlim=(-lim, lim), ylim=(-lim, lim), xlabel="along-track offset (km)", ylabel="out-of-plane offset (km)",
-           title="seen from the real satellite")
+        odots[k], = bx.plot([], [], "o", color=colors.get(k), ms=9, label=PLAIN.get(k, k))
+    bx.plot([0], [0], "k+", ms=18, mew=2.5, label="the real satellite")
+    bx.set(xlim=(-lim, lim), ylim=(-lim, lim), xlabel="ahead (+) / behind (−) the real satellite along its orbit (km)",
+           ylabel="off the real orbit's plane (km)", title=f"{title_where}: where each forecast is, relative to the real satellite")
     bx.set_aspect("equal")
     bx.grid(alpha=0.3)
     bx.legend(loc="upper left", fontsize=8)
@@ -491,8 +568,9 @@ def lageos_video(path, tt, truth, preds, days=3, colors=None):
             olines[k].set_data(seg[:, 0], seg[:, 1])
             odots[k].set_data([o[g, 0]], [o[g, 1]])
         err = {k: np.linalg.norm(tracks[k][g] - T[g]) * RE_E / 1e3 for k in tracks}
-        title.set_text(f"LAGEOS-1, {fine_t[f]:.1f} h into the unseen future     " +
-                       "   ".join(f"{k}: {e:,.0f} km" if e >= 10 else f"{k}: {e:.1f} km" for k, e in err.items()))
+        title.set_text(f"{name}, {fine_t[f]:.1f} h into the unseen future · distance from the real satellite:  " +
+                       "   ".join(f"{SHORT.get(k, k)} {e:,.0f} km" if e >= 10 else f"{SHORT.get(k, k)} {e:.1f} km"
+                                  for k, e in err.items()))
         ax.view_init(elev=20, azim=30 + 0.25 * f * 6 / per)
         return list(lines.values()) + list(dots.values())
     fig.tight_layout(rect=(0, 0, 1, 0.94))
@@ -635,31 +713,171 @@ def gs_case(regime="spirals", noise=0.05, out=None, agent_rhs=None, n_steps=30, 
     np.savez_compressed(out / "rollouts.npz", t=t, **{f"Y{i}": Y.astype(np.float32) for i, (_, Y) in enumerate(rows)},
                         labels=np.array([lab for lab, _ in rows]))
     (out / "results.json").write_text(json.dumps(res, indent=1, default=str))
-    gs_video(out / "gs_forecast.mp4", t, rows, f"Gray–Scott ({regime}, {int(noise * 100)}% noise): forecasting a held-out trajectory")
+    gs_video(out / "gs_forecast.mp4", t, rows, f"Gray–Scott reaction–diffusion ({int(noise * 100)}% noise): forecasting a held-out run",
+             labels={"truth (held-out trajectory)": "truth (what really happened)", "weak SINDy (no LLM)": "sparse regression, no LLM",
+                     "eqdisc agent (refit)": "eqdisc: equation from the data", "FNO (same noisy data)": "neural operator (FNO), same data"})
     return res
 
 
-def gs_video(path, t, rows, title, field=1, fps=6):
+def gs_video(path, t, rows, title, field=1, fps=6, labels=None):
+    """Top row: field B for the held-out truth and each forecast. Bottom row: |forecast - truth| as filled contours."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.animation as anim
     import matplotlib.pyplot as plt
+    labels = labels or {}
     show = [r for r in rows if not r[0].startswith("true PDE")]
-    fig, axes = plt.subplots(1, len(show), figsize=(3.3 * len(show), 3.8))
-    vmin, vmax = float(np.nanmin(rows[0][1][..., field])), float(np.nanmax(rows[0][1][..., field]))
+    U = show[0][1]
+    nc = len(show)
+    fig, axes = plt.subplots(2, nc, figsize=(3.3 * nc, 7.0))
+    vmin, vmax = float(np.nanmin(U[..., field])), float(np.nanmax(U[..., field]))
+    emax = 0.6 * (vmax - vmin)
+    le = np.linspace(0, emax, 16)
     ims = []
-    for ax, (lab, Y) in zip(axes, show):
+    for c, (lab, Y) in enumerate(show):
+        ax = axes[0, c]
         ims.append(ax.imshow(Y[0, ..., field].T, origin="lower", cmap="magma", vmin=vmin, vmax=vmax))
-        ax.set_title(lab, fontsize=9)
+        ax.set_title(labels.get(lab, lab), fontsize=9)
         ax.set_axis_off()
+        axes[1, c].set_axis_off()
+    axes[1, 0].text(0.5, 0.5, "this row: where each\nforecast is wrong\n|forecast − truth|\n(dark = right)",
+                    ha="center", va="center", fontsize=10, transform=axes[1, 0].transAxes)
+    sm_ = plt.cm.ScalarMappable(cmap="inferno", norm=plt.Normalize(0, emax))
+    fig.colorbar(sm_, cax=fig.add_axes([0.915, 0.05, 0.012, 0.36]), label="|error|")
     sup = fig.suptitle(f"{title}\nstep 0", fontsize=11)
 
     def upd(i):
         for im, (_, Y) in zip(ims, show):
             im.set_data(np.where(np.isfinite(Y[i, ..., field]), Y[i, ..., field], np.nan).T)
+        for c, (lab, Y) in enumerate(show[1:], 1):
+            ax = axes[1, c]
+            for coll in list(ax.collections):
+                coll.remove()
+            e = np.abs(np.nan_to_num(Y[i, ..., field], nan=vmax) - U[i, ..., field])
+            ax.contourf(np.minimum(e, emax).T, levels=le, cmap="inferno", origin="lower")
+            ax.set_aspect("equal")
+            ax.set_title(f"error: {labels.get(lab, lab)}", fontsize=8.5)
         sup.set_text(f"{title}\nstep {i} (Δt = 10 per step) after the noisy first frame")
         return ims
-    fig.tight_layout(rect=(0, 0, 1, 0.86))
+    fig.subplots_adjust(left=0.02, right=0.9, top=0.86, bottom=0.03, wspace=0.12, hspace=0.18)
     a = anim.FuncAnimation(fig, upd, frames=len(t), interval=1000 / fps)
     a.save(path, writer=anim.FFMpegWriter(fps=fps, bitrate=2400))
     plt.close(fig)
+
+
+# ----------------------------------------------------------------------------- synthetic orbit with a big J2
+ORBIT_TRUTH = {"vx": "-x/r**3 - 0.75*x/r**5*(1 - 5*z**2/r**2)", "vy": "-y/r**3 - 0.75*y/r**5*(1 - 5*z**2/r**2)",
+               "vz": "-z/r**3 - 0.75*z/r**5*(3 - 5*z**2/r**2)"}        # generator: mu = 1, Re = 1, J2 = 0.5
+
+
+def refit_ode(meta, data, sub, stride=1, max_pairs=1500):
+    """Protocol refit of an agent's ODE law: keep the structure, re-estimate every decimal constant by flow-map
+    shooting on the training data. Returns (refit rhs, info)."""
+    from .flow import fit_flow
+    withp, init = parametrize_floats(sub)
+    if not init:
+        return sub, {"submitted_constants": []}
+    f = fit_flow(meta, data, withp, max_pairs=max_pairs, init=init, stride=stride)
+    return f["rhs"], {"submitted_constants": init, "refit_constants": list(f["params"].values()),
+                      "sigma": list(f["param_sigma"].values()), "one_step_rel_err_heldout": f["one_step_rel_err_heldout"]}
+
+
+def _std_rhs(names, rhs, sc=None, ts=1.0):
+    """Callable f(y) in standard units for a law written in (possibly blinded) units x_b = sc * x, t_b = ts * t."""
+    from .flow import make_flow_fn
+    f = make_flow_fn(names, rhs, [])
+    sc = np.ones(len(names)) if sc is None else np.asarray(sc, float)
+    return lambda y: f((np.asarray(y) * sc)[None], [])[0] * ts / sc
+
+
+def _shoot_state(f, t, Y, rtol=1e-9):
+    """Estimate the state at t[-1] from noisy observations Y on t (backward shooting, least squares)."""
+    from scipy.integrate import solve_ivp
+    from scipy.optimize import least_squares
+    tb = t[::-1]
+
+    def run(x):            # x is the state at time 0 (the end of the training window); t <= 0
+        return solve_ivp(lambda s_, y: f(y), (0.0, tb[-1]), x, t_eval=tb, rtol=rtol, atol=rtol * 1e-2,
+                         method="DOP853").y.T[::-1]
+    r = least_squares(lambda x: ((run(x) - Y) / Y.std(0)).ravel(), Y[-1], method="lm", max_nfev=200, x_scale="jac")
+    return r.x
+
+
+def orbit_case(path, out="runs/oos_orbit", noise=0.01, train_frac=0.5, units=(0.53, 1.7), agent=True, max_tools=20,
+               mlp_stride=10, shoot_orbits=2.0):
+    """Synthetic satellite with an exaggerated Earth bulge (orbit_discover Challenge1: mu = Re = 1, J2 = 0.5, 30 s
+    samples over 6 days). 1% noise. The agent gets the first 3 days only, as six unnamed columns in random units, and
+    no context. Every model forecasts the unseen last 3 days from a state estimated (by shooting) on the last two
+    training orbits (each law its own estimate); the MLP gets the true law's estimate, the most generous start."""
+    import pandas as pd
+    from scipy.integrate import solve_ivp
+    from .agent import run_agent
+    from .flow import fit_flow
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    df = pd.read_csv(path)
+    X = np.hstack([df[["rx", "ry", "rz"]].values / RE_E, df[["vx", "vy", "vz"]].values / (RE_E / T_E)])
+    t = np.arange(len(X)) * 30.0 / T_E
+    rng = np.random.default_rng(0)
+    Xn = X + noise * X.std(0) * rng.standard_normal(X.shape)
+    n_tr = int(len(X) * train_frac)
+    std_names = ["x", "y", "z", "vx", "vy", "vz"]
+    res = {"noise": noise, "train_samples": n_tr, "test_samples": len(X) - n_tr, "units": units}
+    # --- laws in standard units
+    with_r = lambda rhs: {k: v.replace("r**", "sqrt(x**2+y**2+z**2)**") for k, v in rhs.items()}
+    truth = {"x": "vx", "y": "vy", "z": "vz", **with_r(ORBIT_TRUTH)}
+    meta_std = {"kind": "ode", "variables": std_names, "dt": float(t[1] - t[0])}
+    kep = fit_flow(meta_std, {"U": Xn[None, :n_tr], "t": t[:n_tr]},
+                   {"x": "vx", "y": "vy", "z": "vz", **with_r({"vx": "-p0*x/r**3", "vy": "-p0*y/r**3", "vz": "-p0*z/r**3"})},
+                   stride=20, init=[1.0])
+    res["Kepler_mu"] = kep["params"]
+    laws = {"Kepler + J2": _std_rhs(std_names, truth), "Kepler": _std_rhs(std_names, kep["rhs"])}
+    # --- agent (data only, blinded)
+    if agent:
+        Ls, Ts = units
+        sc = np.array([Ls] * 3 + [Ls / Ts] * 3)
+        names = [f"u{i}" for i in range(1, 7)]
+        meta = {"name": "dataset", "kind": "ode", "variables": names, "dt": float(t[1] - t[0]) * Ts,
+                "allowed_symbols": names + ["t"], "n_traj": 1, "shape": [1, n_tr, 6], "system": None}
+        data = {"U": (Xn[:n_tr] * sc)[None], "t": t[:n_tr] * Ts}
+        d = write_ode_dataset(out / "agent_dataset", meta, data)
+        r = run_agent(d, max_tools=max_tools, verbose=False, out_dir=out / "agent", final_assessment=False,
+                      context=None, use_memory=False)
+        sub = (r.get("submitted") or {}).get("rhs")
+        ag = {"submitted": sub, "cost_usd": r["cost_usd"], "n_tool_calls": r["n_tool_calls"],
+              "tools": [ev["name"] for ev in json.loads((out / "agent" / "transcript.json").read_text())
+                        if ev["type"] == "tool"]}
+        rat = [ev.get("input", {}).get("rationale") for ev in json.loads((out / "agent" / "transcript.json").read_text())
+               if ev.get("name") == "submit"]
+        ag["rationale"] = rat[-1] if rat else None
+        if sub:
+            refit, ag["refit"] = refit_ode(meta, data, sub, stride=20)
+            ag["refit_rhs"] = refit
+            laws["data-only agent"] = _std_rhs(names, refit, sc, Ts)
+        res["agent"] = ag
+    # --- forecasts of the unseen half, from shooting-estimated states
+    k_sh = int(shoot_orbits * 18.4 / (t[1] - t[0]))
+    sl = np.arange(n_tr - 1, n_tr - 1 - k_sh, -5)[::-1]       # ends exactly on the last training sample
+    tt = t[n_tr - 1:] - t[n_tr - 1]
+    ev = np.arange(0, len(tt), 10)                     # store every 5 min
+    preds = {}
+    for k, f in laws.items():
+        x0 = _shoot_state(f, t[sl] - t[n_tr - 1], Xn[sl])
+        preds[k] = solve_ivp(lambda s_, y: f(y), (0, tt[-1]), x0, t_eval=tt[ev], rtol=1e-10, atol=1e-12,
+                             method="DOP853").y.T
+        if k == "Kepler + J2":
+            x0_best = x0         # oracle state estimate (true law): the most generous start for the neural net
+    roll = train_mlp_step(Xn[:n_tr:mlp_stride], max_minutes=4)
+    M = roll(x0_best, (len(tt) - 1) // mlp_stride)
+    preds["neural step model (MLP)"] = M[np.minimum(ev // mlp_stride, len(M) - 1)]
+    truth_tr = X[n_tr - 1:][ev]
+    hrs = tt[ev] * T_E / 3600
+    err = {k: np.linalg.norm(P[:, :3] - truth_tr[:, :3], axis=1) * RE_E / 1e3 for k, P in preds.items()}
+    res["position_error_km"] = {k: {f"{h}h": float(np.interp(h, hrs, e)) for h in (1, 12, 24, 72)} for k, e in err.items()}
+    np.savez_compressed(out / "forecasts.npz", tt=tt[ev], truth=truth_tr, t_all=t, X_noisy=Xn[:, :3].astype(np.float32),
+                        n_tr=n_tr, **{f"P_{k}": P for k, P in preds.items()})
+    (out / "results.json").write_text(json.dumps(res, indent=1, default=str))
+    print(json.dumps(res["position_error_km"], indent=1), flush=True)
+    lageos_video(out / "orbit_forecast.mp4", tt[ev], truth_tr, {k: P for k, P in preds.items() if k != "Kepler + J2"},
+                 days=1, name="Satellite with a large Earth bulge")
+    return res

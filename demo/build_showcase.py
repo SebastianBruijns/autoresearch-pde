@@ -129,6 +129,80 @@ def build_lageos():
     np.savez_compressed(d / "arrays.npz", **arrays)
 
 
+# ----------------------------------------------------------------------------- A2. synthetic orbit, big Earth bulge
+ORBIT_CSV = Path(_os.environ.get("EQDISC_ORBIT_CSV", "/Users/danield/iterate-hackathon/orbit_discover/data/Challenge1.csv"))
+
+
+def _orbit_elements(S):
+    """S (..., 6) -> RAAN, argument of perigee (rad), mu = 1."""
+    r, v = S[..., :3], S[..., 3:]
+    h = np.cross(r, v)
+    raan = np.arctan2(h[..., 0], -h[..., 1])
+    rn = np.linalg.norm(r, axis=-1, keepdims=True)
+    e = np.cross(v, h) - r / rn
+    n = np.stack([-h[..., 1], h[..., 0], np.zeros_like(h[..., 0])], -1)
+    cosw = np.sum(n * e, -1) / (np.linalg.norm(n, axis=-1) * np.linalg.norm(e, axis=-1) + 1e-300)
+    w = np.arccos(np.clip(cosw, -1, 1))
+    return raan, np.where(e[..., 2] < 0, 2 * np.pi - w, w)
+
+
+def build_orbit():
+    import pandas as pd
+    from scipy.integrate import solve_ivp
+    from eqdisc.oos import RE_E, T_E, _std_rhs
+    src = REPO / "runs/oos_orbit"
+    res = _json(src / "results.json")
+    if res is None:
+        raise FileNotFoundError(src / "results.json")
+    d = _fresh("orbit")
+    _copy(src / "orbit_forecast.mp4", d / "video.mp4")
+    _thumb(d / "video.mp4", d / "thumb.jpg", at=6.0)
+    z = np.load(src / "forecasts.npz")
+    n_tr = int(z["n_tr"])
+    df = pd.read_csv(ORBIT_CSV)
+    X = np.hstack([df[["rx", "ry", "rz"]].values / RE_E, df[["vx", "vy", "vz"]].values / (RE_E / T_E)])
+    Xn = X + res["noise"] * X.std(0) * np.random.default_rng(0).standard_normal(X.shape)   # exactly what was used
+    t = np.arange(len(X)) * 30.0 / T_E
+    hrs_all = t * T_E / 3600
+    tt = z["tt"]
+    hrs = tt * T_E / 3600 + hrs_all[n_tr - 1]
+    arrays = {"t_train": _f32(t[:n_tr:5]), "U_train": _f32(Xn[:n_tr:5, :3]), "hrs": _f32(hrs)}
+    models = [k[2:] for k in z.files if k.startswith("P_")]
+    for i, m in enumerate(models):
+        arrays[f"err{i}"] = _f32(np.linalg.norm(z[f"P_{m}"][:, :3] - z["truth"][:, :3], axis=1) * RE_E / 1e3)
+    # orbital elements: measured (one-orbit moving average, all 6 days) vs forecasts over the unseen half
+    win = int(round(18.4 / (t[1] - t[0])))
+    ker = np.ones(win) / win
+    sm = lambda a_: np.convolve(a_, ker, mode="valid")
+    ra, w = _orbit_elements(Xn)
+    arrays["el_hrs"] = _f32(sm(hrs_all))
+    arrays["raan_data"] = _f32(sm(np.degrees(np.unwrap(ra))))
+    arrays["argp_data"] = _f32(sm(np.degrees(np.unwrap(w))))
+    for key, m in (("disc", "data-only agent"), ("kep", "Kepler")):
+        if f"P_{m}" in z.files:
+            r_, w_ = _orbit_elements(z[f"P_{m}"])
+            for nm, ang, ref in (("raan", r_, arrays["raan_data"]), ("argp", w_, arrays["argp_data"])):
+                ang = np.degrees(np.unwrap(ang))
+                at = float(np.interp(hrs[0], arrays["el_hrs"], ref))     # join the measured curve (same branch)
+                arrays[f"{nm}_{key}"] = _f32(ang + 360.0 * np.round((at - ang[0]) / 360.0))
+    # same start, two laws, ~6 orbits: the bulge turns the orbit plane, round-Earth gravity does not
+    # (uses the TRUE generator law, labelled as such: the data-only agent did not recover it)
+    ag = res.get("agent") or {}
+    from eqdisc.oos import ORBIT_TRUTH
+    if True:
+        tl = {"x": "vx", "y": "vy", "z": "vz",
+              **{k: v.replace("r**", "sqrt(x**2+y**2+z**2)**") for k, v in ORBIT_TRUTH.items()}}
+        f_ag = _std_rhs(["x", "y", "z", "vx", "vy", "vz"], tl)
+        f_k = lambda y: np.r_[y[3:], -y[:3] / np.linalg.norm(y[:3]) ** 3]
+        x0 = z["P_Kepler + J2"][0]
+        ts = np.linspace(0, 110, 3000)
+        run = lambda f: solve_ivp(lambda s_, y: f(y), (0, ts[-1]), x0, t_eval=ts, rtol=1e-10, atol=1e-12).y.T
+        arrays["kj_t"], arrays["kj_disc"], arrays["kj_kep"] = _f32(ts), _f32(run(f_ag)[:, :3]), _f32(run(f_k)[:, :3])
+    info = {"results": res, "models": models, "agent": ag}
+    (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
+    np.savez_compressed(d / "arrays.npz", **arrays)
+
+
 # ----------------------------------------------------------------------------- B. Kuramoto-Sivashinsky (blinded)
 def build_ks():
     from eqdisc.oos import rel_err_t
@@ -138,7 +212,7 @@ def build_ks():
         raise FileNotFoundError(src / "results.json")
     d = _fresh("ks")
     disc = _json(src / "discover/discovery.json") or {}
-    _copy(src / "ks_oos.mp4", d / "video.mp4")
+    _copy(src / "ks_spacetime.mp4", d / "video.mp4") or _copy(src / "ks_oos.mp4", d / "video.mp4")
     _copy(src / "ks_spacetime.png", d / "spacetime.png")
     _copy(src / "discover/report.html", d / "report.html")
     _thumb(d / "video.mp4", d / "thumb.jpg", at=5.0)
@@ -222,7 +296,7 @@ def build_rehearsal():
     (d / "ecoli.json").write_text(json.dumps({"expr": r.get("expr")}, indent=1))
 
 
-CASES = {"lageos": build_lageos, "ks": build_ks, "gray_scott": build_gray_scott, "rehearsal": build_rehearsal}
+CASES = {"lageos": build_lageos, "orbit": build_orbit, "ks": build_ks, "gray_scott": build_gray_scott, "rehearsal": build_rehearsal}
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)

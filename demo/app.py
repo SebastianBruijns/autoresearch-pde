@@ -53,7 +53,7 @@ def tool_chips(tools, title="what the agent did (from its log)"):
         ui.chips([f"{k} ×{n}" if n > 1 else k for k, n in counts.items()], title=f"{title} · {len(tools)} tool calls")
 J2_ACCEPTED = 1.08263e-3
 PAGES = ["Home", "🛰️ LAGEOS-1 satellite", "🔥 Chaos (KS)", "🌀 Gray–Scott patterns", "⚡ Run on your data",
-         "⚙️ How it works"]
+         "⚙️ How it works", "🌍 Orbit with a big bulge"]
 
 
 @st.cache_data(show_spinner=False)
@@ -127,6 +127,18 @@ def lageos_latex(rhs):
     return out
 
 
+LEGEND_ORBIT = """
+<div class='small'><b>What the lines mean.</b>
+<b>Real satellite</b>: measured positions.
+<b>eqdisc</b>: the law of motion the agent worked out from the numbers alone: Newton's gravity plus a correction for
+Earth's equatorial bulge (the "J₂" term), which makes the orbit plane slowly turn.
+<b>Neural network</b>: learns step-to-step motion directly from the same data, with no equations.
+<b>Newton's gravity, perfectly round Earth</b>: the textbook ellipse (Kepler); it misses the bulge, so its orbit plane
+never turns and it falls further behind every day.
+<b>Textbook model incl. bulge</b>: what an expert would write down, fitted by us; shown for reference only.
+</div>"""
+
+
 def page_lageos():
     info, a = load_case("lageos")
     if not info:
@@ -177,6 +189,7 @@ def page_lageos():
     with c2:
         st.markdown("**Forecast error over the unseen month**")
         show(viz.lageos_errors(a["days"], errs), "lageos_err")
+    st.markdown(LEGEND_ORBIT, unsafe_allow_html=True)
     with st.expander("Details & caveats"):
         pe = info["results"]["position_error_km"]
         rows = {("physics reference (Kepler + J2)" if k == "Kepler + J2" else k): v for k, v in pe.items()}
@@ -215,6 +228,84 @@ def page_lageos():
             st.image(str(SHOW / "lageos" / "errors.png"), caption="Error vs time, and node drift over 6 years.")
 
 
+# ============================================================================= synthetic orbit, big bulge
+def page_orbit():
+    info, a = load_case("orbit")
+    if not info:
+        return missing("orbit")
+    r = info["results"]
+    pe = r["position_error_km"]
+    ag = info.get("agent") or {}
+    pa = pe.get("data-only agent")
+    ui.question("A satellite around a planet with a huge equatorial bulge: from 3 days of noisy positions, can the "
+                "agent find the law and forecast the next 3 days?")
+    left, right = st.columns([1.15, 1], gap="large")
+    with left:
+        hero_video("orbit")
+        st.caption("Synthetic data (orbit_discover workshop), bulge 500× Earth's (J₂ = 0.5). First unseen day shown.")
+    with right:
+        if pa:
+            ok = pa["24h"] < min(pe["neural step model (MLP)"]["24h"], pe["Kepler"]["24h"])
+            ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED", "data-only agent, unseen 3 days")
+            ui.equations(lageos_latex(lageos_agent_rhs(ag)), small=True)
+            st.caption("Its law with constants refitted on the 3 training days (r² = u1² + u2² + u3²); random units, "
+                       "unnamed columns, 1% noise, no context.")
+            ui.tiles([
+                {"label": "eqdisc: error after 1 day", "value": km(pa["24h"]), "delta": f"after 3 days: {km(pa['72h'])}"},
+                {"label": "Neural network", "value": km(pe["neural step model (MLP)"]["24h"]), "delta": "after 1 day"},
+                {"label": "Round-Earth gravity", "value": km(pe["Kepler"]["24h"]), "delta": "after 1 day"},
+                {"label": "True law (best possible)", "value": km(pe["Kepler + J2"]["24h"]), "delta": "after 1 day"},
+            ])
+            tool_chips(ag.get("tools"))
+        else:
+            ui.verdict_chip("PENDING", "data-only agent run in progress")
+        if pa and not ok:
+            st.markdown("<div class='small'><b>Why it failed.</b> The agent found the kinematics and the rotational "
+                        "symmetry (conserved L<sub>z</sub>) but fitted a polynomial in r², z², v² instead of inverse-"
+                        "square gravity plus a bulge term; its own diagnostics showed 25% derivative error and it "
+                        "submitted anyway. A correct verdict would have been <i>not confident</i>.</div>",
+                        unsafe_allow_html=True)
+    c1, c2 = st.columns(2, gap="large")
+    with c1:
+        st.markdown("**What the agent was given**: 3 days of noisy positions (and velocities)")
+        show(viz.orbit_animation(a["t_train"], a["U_train"]), "orbit_anim")
+        st.caption("Press ▶ to fly the first orbits. The faint tangle is all 3 training days: the orbit never closes on "
+                   "itself, because the bulge keeps turning it.")
+    with c2:
+        if "kj_t" in a:
+            st.markdown("**Why the bulge matters**: same start, two laws, ~6 orbits")
+            show(viz.orbit_kepler_vs_j2(a["kj_t"], a["kj_disc"], a["kj_kep"]), "orbit_kj")
+            st.caption("Round-Earth gravity (orange) repeats one ellipse in a fixed plane. The true law (blue) swings the "
+                       "plane around the polar axis, as the data do. This is what the agent needed to find.")
+    if "raan_disc" in a:
+        st.markdown("**The tell-tale drift**, measured over all 6 days vs the forecasts of the unseen half")
+        show(viz.orbit_elements(a["el_hrs"], a["raan_data"], a["argp_data"], a["hrs"], a["raan_disc"], a["argp_disc"],
+                                a["raan_kep"], a["argp_kep"]), "orbit_el")
+    errs = {m: a[f"err{i}"] for i, m in enumerate(info["models"])}
+    errs = {("agent" if m == "data-only agent" else m): v for m, v in errs.items()}
+    st.markdown("**Forecast error over the unseen 3 days**")
+    show(viz.lageos_errors((a["hrs"] - a["hrs"][0]) / 24, errs, xlabel="days into the unseen second half"), "orbit_err")
+    st.markdown(LEGEND_ORBIT.replace("Earth's equatorial bulge", "the planet's equatorial bulge").replace(
+        "fitted by us; shown for reference only", "here the exact law that generated the data"), unsafe_allow_html=True)
+    with st.expander("Details & caveats"):
+        st.dataframe(pd.DataFrame({PLAIN_ROW.get(k, k): v for k, v in pe.items()}).T.map(lambda v: f"{v:,.3g}"),
+                     width="content")
+        if ag.get("rationale"):
+            st.markdown("**The agent's own reasoning (from its submission)**")
+            st.markdown("> " + ag["rationale"][:1500].replace("\n", " "))
+        st.markdown(
+            "- **Protocol.** 30 s samples over 6 days; 1% noise on every column. Train on the first 3 days only, "
+            "forecast the last 3. Each law estimates its starting state by fitting its own trajectory to the last two "
+            "training orbits; the neural network gets the true law's estimate (the most generous start).\n"
+            "- **Data only.** Six unnamed columns in random units, no description, no domain guidance.\n"
+            "- **Retracted.** The earlier version of this case gave the agent the context 'satellite orbiting Earth' "
+            "and scored in-sample; it is replaced by this run.")
+
+
+PLAIN_ROW = {"data-only agent": "eqdisc (data-only agent, refit)", "Kepler": "round-Earth gravity",
+             "Kepler + J2": "true law (generator)", "neural step model (MLP)": "neural network"}
+
+
 # ============================================================================= Kuramoto-Sivashinsky
 def _coef_dict(expr):
     import sympy as sp
@@ -247,8 +338,9 @@ def page_ks():
     left, right = st.columns([1.15, 1], gap="large")
     with left:
         hero_video("ks")
-        st.caption("Unseen future of a blinded Kuramoto–Sivashinsky field (2% noise in training). "
-                   "Black: truth.")
+        st.caption("Space (vertical) vs time (horizontal), revealed as the unseen future unfolds: truth, eqdisc's "
+                   "equation, and a neural operator. The dark rows below show where each forecast is wrong; dashed "
+                   "lines mark when it stops being useful. Chaos defeats every forecast eventually.")
     with right:
         v = info.get("verdict") or ag.get("verdict") or {}
         ui.verdict_chip(v.get("status"), "agent's own verdict")
@@ -389,6 +481,12 @@ def page_home():
         else:
             cards.append(("🛰️ LAGEOS-1 satellite (real)", "agent pending",
                           f"30-day error: Kepler {km(n['K'])}, neural net {km(n['N'])}", "lageos", PAGES[1]))
+    info, _ = load_case("orbit")
+    if info and (info["results"]["position_error_km"].get("data-only agent")):
+        pe = info["results"]["position_error_km"]
+        cards.append(("🌍 Orbit with a big bulge (synthetic)", f"{km(pe['data-only agent']['24h'])} vs "
+                      f"{km(pe['neural step model (MLP)']['24h'])}", "1-day forecast error: data-only agent vs neural net",
+                      "orbit", PAGES[6]))
     info, _ = load_case("ks")
     if info:
         vt = info["results"]["valid_time_lyapunov"]
@@ -628,11 +726,11 @@ def main():
     env_fake = os.environ.get("EQDISC_DEMO_FAKE", "") not in ("", "0", "false")
     with st.sidebar:
         st.markdown("### 🧭 eqdisc")
-        page = st.radio("Navigate", PAGES, key="nav", label_visibility="collapsed")
+        page = st.radio("Navigate", [PAGES[i] for i in (0, 1, 6, 2, 3, 4, 5)], key="nav", label_visibility="collapsed")
         with st.expander("⚙️", expanded=False):
             fake = st.toggle("Rehearsal mode (no API calls)", value=env_fake, key="fake")
     {"Home": page_home, PAGES[1]: page_lageos, PAGES[2]: page_ks, PAGES[3]: page_gs,
-     PAGES[5]: page_how}.get(page, lambda: page_live(fake))()
+     PAGES[5]: page_how, PAGES[6]: page_orbit}.get(page, lambda: page_live(fake))()
 
 
 main()
