@@ -87,10 +87,10 @@ pip install -e ".[demo]"
 streamlit run demo/app.py                 # Showcase gallery + "Run on your data" (upload a CSV)
 EQDISC_DEMO_FAKE=1 streamlit run demo/app.py   # rehearsal mode: live tab replays results, no API calls
 ```
-The demo has three out-of-sample cases. Each case is one screen: a hero video, the verdict, the equation and the metrics.
-- **LAGEOS-1** (real satellite): a 30-day forecast with 11 km error, against 9,037 km for Kepler and 3,170 km for a neural net.
-- **Blinded chaotic KS**: the forecast is valid for 4.8 Lyapunov times, against 0.8 for an FNO.
-- **Gray–Scott** (The Well, 5% noise): VRMSE 0.07, against 0.48 for an FNO trained on the same data.
+The demo has three out-of-sample cases. In each, the agent gets **data only**: no system name, no description, neutral variable names and no domain guidance.
+- **LAGEOS-1** (real satellite, random units): the agent infers Kepler + J₂ from the numbers. 30-day forecast error 12 km, against 3,170 km for a neural net and 9,037 km for Kepler.
+- **Blinded chaotic KS**: the forecast is valid for 4.5 Lyapunov times, against 0.8 for an FNO; the true PDE gives 4.5.
+- **Gray–Scott** (The Well, 5% noise): VRMSE 0.07, against 0.45 for an FNO trained on the same data.
 
 See `demo/README.md` for the talk track.
 
@@ -139,7 +139,6 @@ of it works on public data only:
 | `repair`, `compare_models`, `coefficient_uncertainty` | single-term remove/add search; cross-validated model ranking against the noise floor; bootstrap intervals |
 | `assess_model` | the full confidence report and experiment design |
 | `run_python`, `plot_data`, `plot_model` | the agent writes its own analysis code and *looks at* figures (returned to Claude as images) |
-| `load_skill` | domain guidance (orbital mechanics, noisy PDEs, kinetics/ecology, oscillators). Method only, never answers |
 | `ask_human`, `request_experiment` | human in the loop; simulator-backed experiments on benchmark data |
 
 Each submission is reviewed by a **critic** before it is accepted. Identical repeated calls are blocked.
@@ -179,7 +178,7 @@ Rebuild with `python notebooks/build_notebooks.py [01 05 ...]`, then execute wit
 
 ## Results so far
 
-**Honest out-of-sample results** cover LAGEOS-1, blinded KS and Gray–Scott. The protocol:
+**Honest out-of-sample, data-only results** cover LAGEOS-1, blinded KS, Gray–Scott and unpublished oscillators. Earlier results that leaked domain information to the agent are retracted. The protocol:
 - noisy training data only;
 - autoregressive forecasts of unseen windows;
 - refitted coefficients;

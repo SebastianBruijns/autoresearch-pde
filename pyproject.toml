@@ -42,4 +42,4 @@ eqdisc-benchmark = "eqdisc.benchmark:main"
 include = ["eqdisc*"]
 
 [tool.setuptools.package-data]
-eqdisc = ["playbook.md", "skills/*.md"]
+eqdisc = ["playbook.md"]

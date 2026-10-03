@@ -25,6 +25,8 @@ sys.path.insert(0, str(REPO))
 
 OUT = DEMO / "showcase"
 AR = Path("/Users/danield/iterate-hackathon/autoresearch")
+import os as _os
+LAGEOS_CSV = Path(_os.environ.get("EQDISC_LAGEOS_CSV", "/Users/danield/iterate-hackathon/orbit_discover/data/lageos1.csv"))
 
 
 def _f32(a):
@@ -47,11 +49,40 @@ def _thumb(video, dst, at=4.0):
 
 
 def _copy(src, dst):
+    """Copy a file; mp4s are re-encoded (H.264, CRF 26, faststart) to keep the repo small, falling back to a copy."""
     src = Path(src)
-    if src.exists():
-        shutil.copy(src, dst)
-        return True
-    return False
+    if not src.exists():
+        return False
+    if src.suffix == ".mp4":
+        try:
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-c:v", "libx264", "-crf", "26",
+                            "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(dst)],
+                           check=True, timeout=600)
+            return True
+        except Exception:  # noqa: BLE001
+            pass
+    shutil.copy(src, dst)
+    return True
+
+
+def _tools(*transcripts):
+    """Tool names actually called by the agent(s), in order, from transcript.json files."""
+    out = []
+    for t in transcripts:
+        for f in sorted(Path(t).glob("**/transcript.json")) if Path(t).is_dir() else [Path(t)]:
+            if f.exists():
+                out += [e["name"] for e in json.loads(f.read_text()) if e.get("type") == "tool"]
+    return out
+
+
+def _uq_slim(a, verdict=None):
+    """What the confidence panel needs from an eqdisc assessment."""
+    if not a:
+        return None
+    from eqdisc import insights
+    return {"verdict": verdict or insights.verdict(a), "terms": a.get("terms"), "missing": a.get("missing_term_evidence"),
+            "validation": a.get("validation"), "experiments": ((a.get("experiments") or {}).get("ranked") or [])[:3],
+            "data_advice": a.get("data_advice"), "confidence": a.get("confidence")}
 
 
 def _fresh(case):
@@ -70,7 +101,10 @@ def build_lageos():
     if res is None:
         raise FileNotFoundError(src / "results.json")
     d = _fresh("lageos")
-    agent = _json(src / "agent_results.json")
+    # agent arm: data-only runs (neutral variable names, no context, no domain guidance, sandboxed code).
+    # Headline: the stricter run in random units (mu and the Earth radius are not 1); the other is shown in details.
+    agent = _json(REPO / "runs/oos_lageos_dataonly_units/agent_results.json")
+    agent_alt = _json(REPO / "runs/oos_lageos_dataonly/agent_results.json")
     _copy(src / "lageos_forecast.mp4", d / "video.mp4")
     _copy(src / "lageos_errors.png", d / "errors.png")
     _thumb(d / "video.mp4", d / "thumb.jpg", at=6.0)
@@ -79,11 +113,107 @@ def build_lageos():
     models = [k[2:] for k in z.files if k.startswith("P_")]
     for i, m in enumerate(models):
         arrays[f"err{i}"] = _f32(np.linalg.norm(z[f"P_{m}"][:, :3] - z["truth"][:, :3], axis=1) * RE_E / 1e3)
+    fa = REPO / "runs/oos_lageos_dataonly_units/agent_forecast.npz"
+    if fa.exists():
+        S = np.load(fa)["S"]
+        arrays["err_agent"] = _f32(np.linalg.norm(S[:, :3] - z["truth"][:len(S), :3], axis=1) * RE_E / 1e3)
     arrays["years_long"] = _f32(z["days_long"] / 365.25)
     for k in ("data", "Kepler", "Kepler + J2"):
         v = z[f"node_{k}"]
         arrays[f"node_{k}"] = _f32(v - v[0])
-    info = {"results": res, "agent": agent, "models": models, "RE_km": RE_E / 1e3, "T_s": float(T_E)}
+    # training data: one densified orbit every ~2 weeks of 2017, to show the orbit plane turning over the year
+    if LAGEOS_CSV.exists():
+        from eqdisc.oos import _densify, load_lageos
+        t_, X_, dates_ = load_lageos(LAGEOS_CSV)
+        starts = np.arange(0, 24 * 365 - 6, 24 * 14)
+        arrays["train_orbits"] = _f32(np.stack([_densify(X_[i:i + 5], t_[1] - t_[0], 24) for i in starts]))
+        arrays["train_full"] = _f32(X_[:24 * 365, :3])
+        train_dates = [str(dates_.iloc[i].date()) for i in starts]
+        h = np.cross(X_[:24 * 365, :3], X_[:24 * 365, 3:])
+        arrays["train_h"] = _f32(h / np.linalg.norm(h, axis=1, keepdims=True))
+    else:
+        train_dates = []
+    uq = _json(REPO / "runs/assess_lageos.json")
+    if uq:
+        uq["data_advice"] = (uq.get("data_advice") or []) + [
+            "The ± ranges are statistical only: the agent noted a slow drift its law does not explain (other forces), "
+            "so the true bulge value sits ~0.03% away, just outside the 90% range."]
+    info = {"results": res, "agent": agent, "agent_alt": agent_alt, "models": models, "RE_km": RE_E / 1e3,
+            "T_s": float(T_E), "train_dates": train_dates, "uq": uq}
+    (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
+    np.savez_compressed(d / "arrays.npz", **arrays)
+
+
+# ----------------------------------------------------------------------------- A2. synthetic orbit, big Earth bulge
+ORBIT_CSV = Path(_os.environ.get("EQDISC_ORBIT_CSV", "/Users/danield/iterate-hackathon/orbit_discover/data/Challenge1.csv"))
+
+
+def _orbit_elements(S):
+    """S (..., 6) -> RAAN, argument of perigee (rad), mu = 1."""
+    r, v = S[..., :3], S[..., 3:]
+    h = np.cross(r, v)
+    raan = np.arctan2(h[..., 0], -h[..., 1])
+    rn = np.linalg.norm(r, axis=-1, keepdims=True)
+    e = np.cross(v, h) - r / rn
+    n = np.stack([-h[..., 1], h[..., 0], np.zeros_like(h[..., 0])], -1)
+    cosw = np.sum(n * e, -1) / (np.linalg.norm(n, axis=-1) * np.linalg.norm(e, axis=-1) + 1e-300)
+    w = np.arccos(np.clip(cosw, -1, 1))
+    return raan, np.where(e[..., 2] < 0, 2 * np.pi - w, w)
+
+
+def build_orbit():
+    import pandas as pd
+    from scipy.integrate import solve_ivp
+    from eqdisc.oos import RE_E, T_E, _std_rhs
+    src = REPO / "runs/oos_orbit"
+    res = _json(src / "results.json")
+    if res is None:
+        raise FileNotFoundError(src / "results.json")
+    d = _fresh("orbit")
+    _copy(src / "orbit_forecast.mp4", d / "video.mp4")
+    _thumb(d / "video.mp4", d / "thumb.jpg", at=6.0)
+    z = np.load(src / "forecasts.npz")
+    n_tr = int(z["n_tr"])
+    df = pd.read_csv(ORBIT_CSV)
+    X = np.hstack([df[["rx", "ry", "rz"]].values / RE_E, df[["vx", "vy", "vz"]].values / (RE_E / T_E)])
+    Xn = X + res["noise"] * X.std(0) * np.random.default_rng(0).standard_normal(X.shape)   # exactly what was used
+    t = np.arange(len(X)) * 30.0 / T_E
+    hrs_all = t * T_E / 3600
+    tt = z["tt"]
+    hrs = tt * T_E / 3600 + hrs_all[n_tr - 1]
+    arrays = {"t_train": _f32(t[:n_tr:5]), "U_train": _f32(Xn[:n_tr:5, :3]), "hrs": _f32(hrs)}
+    models = [k[2:] for k in z.files if k.startswith("P_")]
+    for i, m in enumerate(models):
+        arrays[f"err{i}"] = _f32(np.linalg.norm(z[f"P_{m}"][:, :3] - z["truth"][:, :3], axis=1) * RE_E / 1e3)
+    # orbital elements: measured (one-orbit moving average, all 6 days) vs forecasts over the unseen half
+    win = int(round(18.4 / (t[1] - t[0])))
+    ker = np.ones(win) / win
+    sm = lambda a_: np.convolve(a_, ker, mode="valid")
+    ra, w = _orbit_elements(Xn)
+    arrays["el_hrs"] = _f32(sm(hrs_all))
+    arrays["raan_data"] = _f32(sm(np.degrees(np.unwrap(ra))))
+    arrays["argp_data"] = _f32(sm(np.degrees(np.unwrap(w))))
+    for key, m in (("disc", "data-only agent"), ("kep", "Kepler")):
+        if f"P_{m}" in z.files:
+            r_, w_ = _orbit_elements(z[f"P_{m}"])
+            for nm, ang, ref in (("raan", r_, arrays["raan_data"]), ("argp", w_, arrays["argp_data"])):
+                ang = np.degrees(np.unwrap(ang))
+                at = float(np.interp(hrs[0], arrays["el_hrs"], ref))     # join the measured curve (same branch)
+                arrays[f"{nm}_{key}"] = _f32(ang + 360.0 * np.round((at - ang[0]) / 360.0))
+    # same start, two laws, ~6 orbits: the bulge turns the orbit plane, round-Earth gravity does not
+    # (uses the TRUE generator law, labelled as such: the data-only agent did not recover it)
+    ag = res.get("agent") or {}
+    from eqdisc.oos import ORBIT_TRUTH
+    if True:
+        tl = {"x": "vx", "y": "vy", "z": "vz",
+              **{k: v.replace("r**", "sqrt(x**2+y**2+z**2)**") for k, v in ORBIT_TRUTH.items()}}
+        f_ag = _std_rhs(["x", "y", "z", "vx", "vy", "vz"], tl)
+        f_k = lambda y: np.r_[y[3:], -y[:3] / np.linalg.norm(y[:3]) ** 3]
+        x0 = z["P_Kepler + J2"][0]
+        ts = np.linspace(0, 110, 3000)
+        run = lambda f: solve_ivp(lambda s_, y: f(y), (0, ts[-1]), x0, t_eval=ts, rtol=1e-10, atol=1e-12).y.T
+        arrays["kj_t"], arrays["kj_disc"], arrays["kj_kep"] = _f32(ts), _f32(run(f_ag)[:, :3]), _f32(run(f_k)[:, :3])
+    info = {"results": res, "models": models, "agent": ag, "uq": _json(REPO / "runs/assess_orbit.json")}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)
 
@@ -91,16 +221,16 @@ def build_lageos():
 # ----------------------------------------------------------------------------- B. Kuramoto-Sivashinsky (blinded)
 def build_ks():
     from eqdisc.oos import rel_err_t
-    src = REPO / "runs/oos_ks_agent"
+    src = REPO / "runs/oos_ks_dataonly"
     res = _json(src / "results.json")
     if res is None:
         raise FileNotFoundError(src / "results.json")
     d = _fresh("ks")
     disc = _json(src / "discover/discovery.json") or {}
-    _copy(src / "ks_oos.mp4", d / "video.mp4")
+    _copy(src / "ks_spacetime.mp4", d / "video.mp4") or _copy(src / "ks_oos.mp4", d / "video.mp4")
     _copy(src / "ks_spacetime.png", d / "spacetime.png")
     _copy(src / "discover/report.html", d / "report.html")
-    _thumb(d / "video.mp4", d / "thumb.jpg", at=5.0)
+    _thumb(d / "video.mp4", d / "thumb.jpg", at=9.0)
     z = np.load(src / "rollouts.npz")
     labels = [str(s) for s in z["labels"]]
     lam = float(res["lyapunov_exponent"])
@@ -110,7 +240,9 @@ def build_ks():
     a = disc.get("assessment") or {}
     info = {"results": res, "labels": labels, "story": disc.get("story"), "verdict": disc.get("verdict"),
             "assessment": {k: a.get(k) for k in ("terms", "confidence", "noise_floor", "missing_term_evidence")},
-            "cost_usd": (res.get("agent") or {}).get("cost_usd") or disc.get("cost_usd"), "wall_s": disc.get("wall_s")}
+            "uq": _uq_slim(a, disc.get("verdict")),
+            "cost_usd": (res.get("agent") or {}).get("cost_usd") or disc.get("cost_usd"), "wall_s": disc.get("wall_s"),
+            "tools": _tools(src / "discover")}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)
 
@@ -120,10 +252,10 @@ def build_gray_scott(regime="spirals", noise=0.05):
     from eqdisc import solvers
     from eqdisc.well_gs import REGIMES
     import os
-    src = Path(os.environ.get("EQDISC_GS_OOS_DIR") or REPO / f"runs/oos_gs_{regime}_n{noise:g}")   # override for testing
+    src = Path(os.environ.get("EQDISC_GS_OOS_DIR") or REPO / "runs/oos_gs_dataonly")   # data-only agent run
     d = _fresh("gray_scott")
     res = _json(src / "results.json")
-    sweep = _json(REPO / "runs/well_gs/results.json")
+    sweep = None   # the earlier noise sweep showed the agent the dataset name and a context line: not shown
     ds = REPO / f"datasets/well_gs_{regime}_n{noise:g}"
     truth = _json(ds / "hidden/truth.json")
     has_video = _copy(src / "gs_forecast.mp4", d / "video.mp4")
@@ -149,7 +281,9 @@ def build_gray_scott(regime="spirals", noise=0.05):
             arrays[f"gal_{r}"] = _f32(np.load(f)["U"][0, 0, ::2, ::2, 1])
     info = {"results": res, "sweep": sweep, "regime": regime, "noise": noise, "truth": (truth or {}).get("rhs"),
             "params": (truth or {}).get("params"), "regimes": {k: list(v) for k, v in REGIMES.items()},
-            "has_video": has_video}
+            "has_video": has_video, "tools": _tools(REPO / "runs/dataonly/gs_agent"),
+            "uq": _json(REPO / "runs/assess_gray_scott.json"),
+            "agent_cost": (_json(REPO / "runs/dataonly/gs_agent/result.json") or {}).get("cost_usd")}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)
 
@@ -179,7 +313,7 @@ def build_rehearsal():
     (d / "ecoli.json").write_text(json.dumps({"expr": r.get("expr")}, indent=1))
 
 
-CASES = {"lageos": build_lageos, "ks": build_ks, "gray_scott": build_gray_scott, "rehearsal": build_rehearsal}
+CASES = {"lageos": build_lageos, "orbit": build_orbit, "ks": build_ks, "gray_scott": build_gray_scott, "rehearsal": build_rehearsal}
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)

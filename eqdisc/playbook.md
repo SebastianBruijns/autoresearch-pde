@@ -5,7 +5,7 @@
    invariants (a conserved sum of variables means the library columns are collinear: drop one
    variable's terms or use the constraint), and for PDEs the spectrum (k_max_resolved) and whether
    the spatial mean is conserved (this suggests conservative/flux form).
-2. If the signal changes a lot between samples (coarse sampling: a few samples per oscillation or orbit),
+2. If the signal changes a lot between samples (coarse sampling: a few samples per characteristic period),
    derivative-based fits fail: compare candidate structures with `fit_flow` (one-interval shooting) instead.
    Choose differentiation from the noise level. Use a small Savitzky-Golay window (5-9) at noise
    below 1%, and larger windows (11-21) or a stronger low-pass at 5-10%. For PDEs keep
@@ -14,8 +14,8 @@
 3. Look for structure that a human modeller would exploit, before fitting in the raw variables.
    You are expected to propose this yourself; nobody is in the loop.
    - Call `find_invariants` (try include_log for positive variables, and custom terms such as cos(theta)).
-     A *constraint* (e.g. S+I+R = const) means the library is collinear: use `transform` to drop one variable
-     and reconstruct it from the constraint. A *first integral* suggests Hamiltonian/Lotka-Volterra
+     A *constraint* (e.g. x+y+z = const) means the library is collinear: use `transform` to drop one variable
+     and reconstruct it from the constraint. A *first integral* suggests Hamiltonian / conservative
      structure; the coordinates in which it is simple (e.g. log x, log y) usually make the dynamics simple too.
    - Rotation or oscillation around a point: try polar coordinates about that point (r, theta), and fit r with
      `library_vars=["r"]`, since an unwrapped angle should not enter the library.

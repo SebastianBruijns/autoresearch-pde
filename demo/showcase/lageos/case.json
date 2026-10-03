@@ -49,32 +49,136 @@
  },
  "agent": {
   "submitted": {
-   "x": "vx",
-   "y": "vy",
-   "z": "vz",
-   "vx": "-0.9999995889*x/(x**2+y**2+z**2)**1.5*(1 + 0.0016239213/(x**2+y**2+z**2)*(1 - 5*z**2/(x**2+y**2+z**2)))",
-   "vy": "-0.9999995889*y/(x**2+y**2+z**2)**1.5*(1 + 0.0016239213/(x**2+y**2+z**2)*(1 - 5*z**2/(x**2+y**2+z**2)))",
-   "vz": "-0.9999995889*z/(x**2+y**2+z**2)**1.5*(1 + 0.0016239213/(x**2+y**2+z**2)*(3 - 5*z**2/(x**2+y**2+z**2)))"
+   "u1": "u4",
+   "u2": "u5",
+   "u3": "u6",
+   "u4": "-0.006024*u1/(u1**2+u2**2+u3**2)**1.5 - 1.3346e-6*u1*(1 - 5*u3**2/(u1**2+u2**2+u3**2))/(u1**2+u2**2+u3**2)**2.5",
+   "u5": "-0.006024*u2/(u1**2+u2**2+u3**2)**1.5 - 1.3346e-6*u2*(1 - 5*u3**2/(u1**2+u2**2+u3**2))/(u1**2+u2**2+u3**2)**2.5",
+   "u6": "-0.006024*u3/(u1**2+u2**2+u3**2)**1.5 - 1.3346e-6*u3*(3 - 5*u3**2/(u1**2+u2**2+u3**2))/(u1**2+u2**2+u3**2)**2.5"
   },
-  "cost_usd": 0.754,
-  "n_tool_calls": 11,
+  "cost_usd": 2.134,
+  "n_tool_calls": 20,
+  "units": [
+   0.37,
+   2.9
+  ],
   "tools": [
-   "load_skill",
+   "intuit",
    "diagnose",
+   "plot_data",
+   "fit_flow",
    "fit_flow",
    "run_python",
    "run_python",
    "run_python",
-   "fit_flow",
-   "fit_flow",
+   "run_python",
+   "validate",
+   "run_python",
+   "run_python",
+   "plot_model",
+   "run_python",
+   "run_python",
+   "submit",
+   "run_python",
    "run_python",
    "run_python",
    "submit"
   ],
   "position_error_km": {
-   "1d": 0.22900280332783374,
-   "7d": 2.2332268192143663,
-   "30d": 13.554706889651342
+   "1d": 0.16878517390758543,
+   "7d": 1.8027180399933582,
+   "30d": 11.94862441128491
+  },
+  "refit_rhs": {
+   "u1": "u4",
+   "u2": "u5",
+   "u3": "u6",
+   "u4": "-1.33880719766186e-6*u1*(-5*u3**2/(u1**2 + u2**2 + u3**2) + 1)/(u1**2 + u2**2 + u3**2)**2.5 - 0.00602294607022788*u1/(u1**2 + u2**2 + u3**2)**1.5",
+   "u5": "-1.33880719766186e-6*u2*(-5*u3**2/(u1**2 + u2**2 + u3**2) + 1)/(u1**2 + u2**2 + u3**2)**2.5 - 0.00602294607022788*u2/(u1**2 + u2**2 + u3**2)**1.5",
+   "u6": "-1.33880719766186e-6*u3*(-5*u3**2/(u1**2 + u2**2 + u3**2) + 3)/(u1**2 + u2**2 + u3**2)**2.5 - 0.00602294607022788*u3/(u1**2 + u2**2 + u3**2)**1.5"
+  },
+  "refit": {
+   "submitted_constants": [
+    0.006024,
+    1.3346e-06
+   ],
+   "refit_constants": [
+    0.00602294607022788,
+    1.3388071976618582e-06
+   ],
+   "sigma": [
+    1.6687165903976138e-10,
+    1.2446203493298187e-10
+   ],
+   "one_step_rel_err_heldout": 4.904069303873173e-06
+  },
+  "position_error_km_submitted": {
+   "1d": 168.58862000367023,
+   "7d": 1208.6836955648598,
+   "30d": 5133.039185841351
+  }
+ },
+ "agent_alt": {
+  "submitted": {
+   "u1": "u4",
+   "u2": "u5",
+   "u3": "u6",
+   "u4": "-u1*(u1**2+u2**2+u3**2)**(-1.5) - 0.001623*u1*(u1**2+u2**2+u3**2)**(-2.5) + 0.008115*u1*u3**2*(u1**2+u2**2+u3**2)**(-3.5)",
+   "u5": "-u2*(u1**2+u2**2+u3**2)**(-1.5) - 0.001623*u2*(u1**2+u2**2+u3**2)**(-2.5) + 0.008115*u2*u3**2*(u1**2+u2**2+u3**2)**(-3.5)",
+   "u6": "-u3*(u1**2+u2**2+u3**2)**(-1.5) - 0.004869*u3*(u1**2+u2**2+u3**2)**(-2.5) + 0.008115*u3**3*(u1**2+u2**2+u3**2)**(-3.5)"
+  },
+  "cost_usd": 0.966,
+  "n_tool_calls": 13,
+  "tools": [
+   "intuit",
+   "diagnose",
+   "plot_data",
+   "run_python",
+   "run_python",
+   "run_python",
+   "run_python",
+   "run_python",
+   "run_python",
+   "fit_flow",
+   "run_python",
+   "validate",
+   "submit"
+  ],
+  "position_error_km": {
+   "1d": 0.8254341271646036,
+   "7d": 6.553286489295995,
+   "30d": 31.10840355598135
+  },
+  "refit_rhs": {
+   "u1": "u4",
+   "u2": "u5",
+   "u3": "u6",
+   "u4": "0.00812264773891087*u1*u3**2/(u1**2 + u2**2 + u3**2)**3.5 - 0.00162116887918551*u1/(u1**2 + u2**2 + u3**2)**2.5 - u1/(u1**2 + u2**2 + u3**2)**1.5",
+   "u5": "0.00812264773891087*u2*u3**2/(u1**2 + u2**2 + u3**2)**3.5 - 0.00162116887918551*u2/(u1**2 + u2**2 + u3**2)**2.5 - u2/(u1**2 + u2**2 + u3**2)**1.5",
+   "u6": "0.00812264773891087*u3**3/(u1**2 + u2**2 + u3**2)**3.5 - 0.00487545392247554*u3/(u1**2 + u2**2 + u3**2)**2.5 - u3/(u1**2 + u2**2 + u3**2)**1.5"
+  },
+  "refit": {
+   "submitted_constants": [
+    0.001623,
+    0.008115,
+    0.004869
+   ],
+   "refit_constants": [
+    0.0016211688791855094,
+    0.008122647738910874,
+    0.00487545392247554
+   ],
+   "sigma": [
+    2.2053903075231448e-07,
+    7.596521315157393e-07,
+    5.736442406192735e-07
+   ],
+   "one_step_rel_err_heldout": 4.779407830800564e-06
+  },
+  "position_error_km_submitted": {
+   "1d": 0.5420588866624008,
+   "7d": 4.398988242995164,
+   "30d": 22.661343791006207
   }
  },
  "models": [
@@ -83,5 +187,142 @@
   "neural step model (MLP)"
  ],
  "RE_km": 6378.13646,
- "T_s": 806.8110217166428
+ "T_s": 806.8110217166428,
+ "train_dates": [
+  "2017-01-01",
+  "2017-01-15",
+  "2017-01-29",
+  "2017-02-12",
+  "2017-02-26",
+  "2017-03-12",
+  "2017-03-26",
+  "2017-04-09",
+  "2017-04-23",
+  "2017-05-07",
+  "2017-05-21",
+  "2017-06-04",
+  "2017-06-18",
+  "2017-07-02",
+  "2017-07-16",
+  "2017-07-30",
+  "2017-08-13",
+  "2017-08-27",
+  "2017-09-10",
+  "2017-09-24",
+  "2017-10-08",
+  "2017-10-22",
+  "2017-11-05",
+  "2017-11-19",
+  "2017-12-03",
+  "2017-12-17",
+  "2017-12-31"
+ ],
+ "uq": {
+  "terms": [
+   {
+    "var": "u4..u6",
+    "term": "central pull (1/r\u00b2)",
+    "coef": 0.006022945673365612,
+    "ci90": [
+     0.006022945366181626,
+     0.006022945980549597
+    ],
+    "rel_uncertainty": 5.100228404994002e-08,
+    "significant": true,
+    "dBIC_if_removed": 179564.32964278784
+   },
+   {
+    "var": "u4..u6",
+    "term": "equatorial bulge (J\u2082)",
+    "coef": 1.338535922678333e-06,
+    "ci90": [
+     1.3383044668192256e-06,
+     1.3387673785374405e-06
+    ],
+    "rel_uncertainty": 0.00017291718151601866,
+    "significant": true,
+    "dBIC_if_removed": 67992.38068787851
+   }
+  ],
+  "missing": [
+   {
+    "var": "\u00b7",
+    "term": "inverse-square pull  \u2212u/r\u00b3",
+    "dBIC_if_added": 8.881715215160511,
+    "error_reduction": 8.409016594157492e-09
+   },
+   {
+    "var": "\u00b7",
+    "term": "drag-like  \u2212v",
+    "dBIC_if_added": 7.800220270873979,
+    "error_reduction": 7.510940373967046e-05
+   },
+   {
+    "var": "\u00b7",
+    "term": "extra radial 1/r\u2074",
+    "dBIC_if_added": 5.101373255049111,
+    "error_reduction": 0.0002624976976953741
+   }
+  ],
+  "validation": {
+   "rollout_valid_time": 22670.587668823224,
+   "rollout_horizon": 22670.587668823224,
+   "rollout_blew_up": false,
+   "criterion": "position error < 1% of radius",
+   "max_rel_error": 0.00625744938777651
+  },
+  "experiments": [
+   {
+    "description": "second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 0\u00b0",
+    "informs_coefficients": [
+     {
+      "coefficient": "equatorial bulge (J\u2082)",
+      "info_gain_vs_existing": 13.14498896208837
+     },
+     {
+      "coefficient": "central pull (1/r\u00b2)",
+      "info_gain_vs_existing": 1.6498354455533384
+     }
+    ],
+    "score": 13.14498896208837
+   },
+   {
+    "description": "second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 45\u00b0",
+    "informs_coefficients": [
+     {
+      "coefficient": "equatorial bulge (J\u2082)",
+      "info_gain_vs_existing": 5.538500270315294
+     },
+     {
+      "coefficient": "central pull (1/r\u00b2)",
+      "info_gain_vs_existing": 1.6463283177197494
+     }
+    ],
+    "score": 5.538500270315294
+   },
+   {
+    "description": "second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 90\u00b0",
+    "informs_coefficients": [
+     {
+      "coefficient": "central pull (1/r\u00b2)",
+      "info_gain_vs_existing": 1.6428263573010158
+     },
+     {
+      "coefficient": "equatorial bulge (J\u2082)",
+      "info_gain_vs_existing": 0.8050150944392358
+     }
+    ],
+    "score": 1.6428263573010158
+   }
+  ],
+  "data_advice": [
+   "Only one satellite, at one height and one inclination: the bulge term is seen from a single geometry, so it cannot be told apart from similar higher-order terms.",
+   "The \u00b1 ranges are statistical only: the agent noted a slow drift its law does not explain (other forces), so the true bulge value sits ~0.03% away, just outside the 90% range."
+  ],
+  "verdict": {
+   "status": "CONFIDENT",
+   "headline": "We are confident this is your equation.",
+   "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. To validate it independently, the most demanding test would be: second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 0\u00b0."
+  }
+ }
 }

@@ -124,7 +124,7 @@ def coefficient_errors(rhs, truth_params):
     return err
 
 
-CONTEXT = "Measured concentrations of two interacting chemical species A and B on a periodic 2-D domain."
+CONTEXT = None   # data only: no description of the system
 
 
 def run_benchmark(noises=(0.0, 0.01, 0.05, 0.1), regimes=None, out="runs/well_gs", agent=True, workers=2,
@@ -171,7 +171,7 @@ def run_benchmark(noises=(0.0, 0.01, 0.05, 0.1), regimes=None, out="runs/well_gs
             m, _ = load(d)
             truth = json.loads((d / "hidden" / "truth.json").read_text())
             try:
-                res = run_agent(d, client=client, verbose=False, max_tools=max_tools, use_skills=False,
+                res = run_agent(d, client=client, verbose=False, max_tools=max_tools,
                                 use_memory=False, context=CONTEXT, out_dir=out / f"agent_{r}_n{n:g}",
                                 final_assessment=False, report=True)
                 rhs = (res.get("submitted") or {}).get("rhs")

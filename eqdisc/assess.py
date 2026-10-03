@@ -476,7 +476,7 @@ def assess(meta, data, rhs, alternatives=None, n_coef_draws=12, seed=0, basis="a
         nf = uq.noise_floor(meta, data)
         res["noise_floor"] = {"floor": nf.get("deriv_nrmse_floor_mean")}
     val = tb.validate(meta, data, rhs)
-    res["validation"] = {k: val.get(k) for k in ("deriv_nrmse", "rollout_valid_time", "rollout_horizon", "rollout_blew_up")}
+    res["validation"] = {k: val.get(k) for k in ("deriv_nrmse", "rollout_valid_time", "rollout_horizon", "rollout_blew_up", "rollout_timed_out")}
     # 3. plausible model set: coefficient draws + structural alternatives
     models = {"submitted": rhs}
     for i in range(n_coef_draws if meta["kind"] == "ode" else 4):
