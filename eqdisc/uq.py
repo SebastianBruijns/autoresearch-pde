@@ -30,6 +30,7 @@ import numpy as np
 import sympy as sp
 
 from .baselines import lowpass, stlsq, to_expr
+from . import solvers
 from .solvers import integrate_ode, integrate_pde, parse
 from .toolbox import (_pde_step, build_library, diagnose, eval_exprs, feature_arrays, smooth_and_differentiate,
                       split_rows, symbols, validate)
@@ -195,7 +196,11 @@ def _rollout(prep, rhs, seg, max_rollout_steps=3000):
         n_obs = max(2, min(len(tt), int(max_rollout_steps * h / meta["dt"]) + 1))
         tt = tt[:n_obs]
         sub = max(1, int(round(meta["dt"] / h)))
-        roll = integrate_pde(meta["variables"], rhs, meta["L"], Us[j, a], tt, meta["dt"] / sub)
+        lay = solvers.pde_layout(meta)
+        if len(lay["spatial_dims"]) == 1 and lay["boundary"] == "periodic":       # legacy 1-D path (unchanged)
+            roll = integrate_pde(meta["variables"], rhs, meta["L"], Us[j, a], tt, meta["dt"] / sub)
+        else:                                                                    # 2-D / non-periodic grids
+            roll = solvers.integrate_pde_general(meta["variables"], rhs, lay, Us[j, a], tt, meta["dt"] / sub)
         ref = Us[j, a:a + n_obs]
     red = tuple(range(1, roll.ndim))
     with np.errstate(all="ignore"):
