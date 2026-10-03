@@ -151,6 +151,25 @@ Rebuild with `python notebooks/build_notebooks.py [01 05 ...]`, then execute wit
   pipeline.
 - `eqdisc-evolve` evolves discovery programs or the agent's playbook with an AlphaEvolve-style loop.
 
+## Results so far
+
+**Blinded held-out benchmark** (12 systems never used for tuning; variables renamed and coefficients perturbed;
+2% noise). The table counts models symbolically equivalent to the hidden truth:
+
+| method | held-out matches |
+|---|---|
+| plain SINDy (fixed defaults) | 1 / 12 |
+| auto-configured (heuristics, no LLM) | 3 / 12 |
+| single Claude agent (no skills, memory or context) | **10 / 12** |
+| full pipeline (branches, tournament, adversary) | **3 / 3** (subset) |
+
+Total cost $9.21. Full table, protocol and an honest account of the failures, including LLM recall of functional
+forms despite blinding: [`docs/benchmark_v1.md`](docs/benchmark_v1.md).
+
+**Real data** (no ground truth). On `examples/data/KS_data.mat` all three branches independently recover
+u_t = −u·u_x − u_xx − u_xxxx (coefficients −0.996 to −1.002), and the verdict is CONFIDENT. On the orbit
+`Challenge1.csv` (with domain context) it recovers two-body gravity plus J2 with J2 = 0.5, matching the data generator.
+
 ## Related work
 LLM-SR / LLM-SRBench (Shojaee et al.), KeplerAgent (Yang et al. 2026), STRIDE (Su et al. 2026), AlphaEvolve
 (Georgiev, Gómez-Serrano, Tao, Wagner), weak-form SINDy (Messenger & Bortz), E-SINDy (Fasel et al.).

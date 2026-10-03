@@ -229,6 +229,8 @@ class Session:
         self.critic = critic            # callable(session, rhs) -> dict, or None
         self.critic_rounds = 1
         self.critic_notes = []
+        self.last_proposal = None       # last submit, even if a review sent it back
+        self.budget_left = 10 ** 9      # updated by run_agent; the critic is skipped when the budget is nearly spent
         self.human = human              # callable(prompt: str) -> str, or None (fully autonomous)
         self.human_rounds = human_rounds
         self.human_log = []
@@ -403,7 +405,8 @@ class Session:
             return self.request_experiment(**args)
         if name == "submit":
             rhs, mapped = self.to_original(args["rhs"])
-            if self.critic is not None and self.critic_rounds > 0:
+            self.last_proposal = {"rhs": rhs, "rationale": args.get("rationale", "")}
+            if self.critic is not None and self.critic_rounds > 0 and self.budget_left > 2:
                 self.critic_rounds -= 1
                 review = self.critic(self, rhs)
                 self.critic_notes.append(json.dumps(review))
@@ -613,6 +616,7 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
         results = []
         for u in uses:
             n_tools += 1
+            sess.budget_left = max_tools - n_tools
             ts = time.time()
             try:
                 out = sess.call(u.name, dict(u.input))
@@ -637,6 +641,9 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
         if n_tools >= max_tools + 3 and sess.submitted is None:
             break
 
+    if sess.submitted is None and sess.last_proposal is not None:
+        # budget ran out after a review sent the model back: keep the last proposal rather than nothing
+        sess.submitted = {**sess.last_proposal, "not_accepted_by_review": True}
     result = {"dataset": sess.dataset.name, "dataset_path": str(sess.dataset), "submitted": sess.submitted,
               "n_tool_calls": n_tools, "wall_s": round(time.time() - t0, 1), "critic": sess.critic_notes,
               "self_validation": tb.validate(sess.meta, sess.data, sess.submitted["rhs"]) if sess.submitted else None}
