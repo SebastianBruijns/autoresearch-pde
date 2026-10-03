@@ -216,6 +216,7 @@ class _Problem:
         self.pnames = _params(rhs_with_params, names)
         U, t = data["U"], data["t"]
         dt = float(t[1] - t[0])
+        self.auto_nsub = nsub is None
         self.nsub = int(nsub or (5 if self.pde else 10))
         h = dt / self.nsub
         if self.pde:          # keep each residual evaluation affordable: ~1e6 grid values per batch
@@ -237,6 +238,20 @@ class _Problem:
             self.run = _ode_stepper(meta, _prep_ode(meta, rhs_with_params, self.pnames), h, self.nsub)
             self.make = lambda nsub: _ode_stepper(meta, _prep_ode(meta, rhs_with_params, self.pnames), dt / nsub, nsub)
         self.scale = np.array([U[..., i].std() + 1e-12 for i in range(U.shape[-1])])
+
+    def set_nsub(self, ns):
+        self.nsub, self.run = int(ns), self.make(int(ns))
+
+    def choose_nsub(self, p, max_nsub=80, tol=0.02):
+        """Double the sub-steps until the held-out error stops changing (and is finite). Returns the error."""
+        e = self.skill(p, self.test)
+        while self.nsub < max_nsub:
+            e2 = self.skill(p, self.test, self.make(self.nsub * 2))
+            if np.isfinite(e) and e < 1e3 and abs(e2 - e) <= tol * max(e, 1e-3) + 1e-4:
+                return e
+            self.set_nsub(self.nsub * 2)
+            e = e2
+        return e
 
     def _batch(self, pairs):
         U, t = self.data["U"], self.data["t"]
@@ -278,7 +293,9 @@ def fit_trajectories(meta, data, rhs_with_params, init=None, horizon=None, subst
                      max_train=None, max_test=None, seed=0):
     """Fit free parameters p0, p1, ... of a structure by matching `horizon`-step forward simulations to the data.
     init: list of starting values (default: fit_skeleton on derivatives, else ones). horizon: sampling steps per
-    simulation (default: 1 for PDEs; for ODEs enough steps for a ~20% change, starting from smoothed states)."""
+    simulation (default: 1 for PDEs; for ODEs enough steps for a ~20% change, starting from smoothed states).
+    substeps: integrator steps per sampling interval (default: start at 5 (PDE) / 10 (ODE) and double until the
+    held-out error no longer changes, before and after the fit)."""
     t0 = time.time()
     prob = _Problem(meta, data, rhs_with_params, horizon, substeps, max_train, max_test, seed)
     names = derivative_symbols(meta["variables"], solvers.pde_layout(meta)["spatial_dims"]) if prob.pde \
@@ -293,13 +310,20 @@ def fit_trajectories(meta, data, rhs_with_params, init=None, horizon=None, subst
         except Exception:  # noqa: BLE001
             init = [1.0] * len(prob.pnames)
     init = np.asarray(init, float)
-    sol = least_squares(lambda p: prob.residual(p, prob.train)[0], init, method="trf", x_scale="jac",
-                        max_nfev=max_nfev, diff_step=1e-4)
-    p = sol.x
-    err_tr, err_te = prob.skill(p, prob.train), prob.skill(p, prob.test)
+    if prob.auto_nsub:
+        prob.choose_nsub(init)
+    p = init
+    for _ in range(4):                            # refit if the fitted model needs finer sub-steps
+        sol = least_squares(lambda q: prob.residual(q, prob.train)[0], p, method="trf", x_scale="jac",
+                            max_nfev=max_nfev, diff_step=1e-4)
+        p = sol.x
+        err_te = prob.skill(p, prob.test)
+        err_fine = prob.skill(p, prob.test, prob.make(prob.nsub * 2))   # integrator check: halve the sub-step
+        if not prob.auto_nsub or abs(err_fine - err_te) <= 0.02 * max(err_te, 1e-3) + 1e-4 or prob.nsub >= 80:
+            break
+        prob.set_nsub(prob.nsub * 2)
+    err_tr = prob.skill(p, prob.train)
     err_init = prob.skill(init, prob.test)
-    fine = prob.make(prob.nsub * 2)               # integrator check: halve the sub-step
-    err_fine = prob.skill(p, prob.test, fine)
     rhs = _numeric_rhs(rhs_with_params, prob.pnames, p, names)
     out = {"rhs": rhs, "params": {k: float(f"{v:.6g}") for k, v in zip(prob.pnames, p)},
            "init_params": {k: float(f"{v:.6g}") for k, v in zip(prob.pnames, init)},
@@ -320,6 +344,8 @@ def fit_trajectories(meta, data, rhs_with_params, init=None, horizon=None, subst
 def one_step_error(meta, data, rhs, horizon=None, substeps=None, max_test=None, seed=0):
     """Held-out one-step (or `horizon`-step) prediction error of a fixed model, relative to 'no change'."""
     prob = _Problem(meta, data, rhs, horizon, substeps, max_train=1, max_test=max_test, seed=seed)
+    if prob.auto_nsub:
+        return prob.choose_nsub(np.zeros(0))
     return prob.skill(np.zeros(0), prob.test)
 
 
