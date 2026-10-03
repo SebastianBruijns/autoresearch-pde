@@ -134,7 +134,7 @@ TOOLS = [
     {"name": "run_python", "description": "Run your own Python analysis code (exploratory analysis, custom "
      "plots, quick checks). Preloaded: meta, data (public data in the ACTIVE coordinates), np, sp, plt, tb (toolbox), "
      "co (coordinates), WORK (folder for files). print() what you need. PNG files you save in WORK are shown to you. "
-     "60 s limit. Use the dedicated tools for actual model fitting.",
+     "600 s limit. Use the dedicated tools for actual model fitting.",
      "input_schema": _obj({"code": _str}, ["code"])},
     {"name": "plot_data", "description": "Overview figure of the data in the active coordinates (time series and phase "
      "portrait / space-time plot and spectrum). Returned as an image.", "input_schema": _obj({})},
