@@ -103,6 +103,16 @@ TOOLS = [
                              "description": "'rollout' re-scores the whole Pareto front by validation (recommended)"},
          "parsimony": {**_bool, "description": "default true: forbid singular junk like exp(x)/cos(x)"}},
          ["target"])},
+    {"name": "fit_trajectories", "description": "Fit parameters p0, p1, ... of a structure by FORWARD SIMULATION: "
+     "simulate the model from many data frames for `horizon` sampling steps and match the next frames (no derivative "
+     "estimates). Use it whenever the sampling is coarse (diagnose: mean_change_per_step_rel > 0.15) or stiff terms "
+     "(u_xxxx) make derivative fits unreliable, and to polish coefficients of any structure you trust. Periodic PDEs "
+     "(exact exponential treatment of the stiff linear part; only modes above the noise floor are compared) and ODEs. "
+     "Same rhs_with_params format as fit_skeleton; init defaults to fit_skeleton's estimate. Reports the held-out "
+     "one-step error relative to 'no change' (0 perfect, 1 useless) and an integrator check.",
+     "input_schema": _obj({"rhs_with_params": _rhs, "init": {"type": "array", "items": _num},
+                           "horizon": {**_int, "description": "sampling steps per simulation (default: 1 for PDEs, auto for ODEs)"}},
+                          ["rhs_with_params"])},
     {"name": "fit_skeleton", "description": "Fit numeric parameters p0, p1, ... in a proposed structure by "
      "least squares on smoothed derivatives (multi-start). Parameters can be shared across equations. "
      "Example: {'s': 'p0 - p1*s/(p2 + s)'}. Give every variable an equation.",
@@ -407,12 +417,25 @@ class Session:
             return self._augment(repair.local_search(m, d, args["rhs"], args.get("pool")))
         if name == "fit_skeleton":
             return self._augment(tb.fit_skeleton(m, d, **args))
+        if name == "fit_trajectories":
+            from .trajfit import fit_trajectories
+            return self._augment(fit_trajectories(m, d, **args))
         if name == "validate":
             rhs, mapped = self.to_original(args["rhs"])
             if mapped:
-                return {"active_coordinates": tb.validate(m, d, args["rhs"]), "rhs_original": rhs,
-                        "validation_original": self.validate_original(rhs, args["rhs"])}
-            return tb.validate(self.meta, self.data, rhs)
+                out = {"active_coordinates": tb.validate(m, d, args["rhs"]), "rhs_original": rhs,
+                       "validation_original": self.validate_original(rhs, args["rhs"])}
+            else:
+                out = tb.validate(self.meta, self.data, rhs)
+            from . import trajfit
+            if trajfit.coarse_sampling(m, d):     # derivative errors mislead on coarse data: add the simulation check
+                try:
+                    out["one_step_rel_err_heldout"] = round(trajfit.one_step_error(m, d, args["rhs"]), 4)
+                    out["note"] = ("coarse sampling: judge by one_step_rel_err_heldout (simulated next frame vs data; "
+                                   "0 perfect, 1 = no better than 'no change'), not deriv_nrmse")
+                except Exception as e:  # noqa: BLE001
+                    out["one_step_error_failed"] = str(e)[:200]
+            return out
         if name == "request_experiment":
             return self.request_experiment(**args)
         if name == "submit":
