@@ -87,15 +87,12 @@ pip install -e ".[demo]"
 streamlit run demo/app.py                 # Showcase gallery + "Run on your data" (upload a CSV)
 EQDISC_DEMO_FAKE=1 streamlit run demo/app.py   # rehearsal mode: live tab replays results, no API calls
 ```
-The Showcase covers six cases:
-- a satellite orbit, where J2 oblateness makes the orbit plane precess, rendered in 3-D;
-- real Kuramoto–Sivashinsky data;
-- Gray–Scott patterns from The Well;
-- a noisy pendulum with its "measure here next" recommendation;
-- previously unseen oscillators;
-- E. coli growth.
+The demo has three out-of-sample cases. Each case is one screen: a hero video, the verdict, the equation and the metrics.
+- **LAGEOS-1** (real satellite): a 30-day forecast with 11 km error, against 9,037 km for Kepler and 3,170 km for a neural net.
+- **Blinded chaotic KS**: the forecast is valid for 4.8 Lyapunov times, against 0.8 for an FNO.
+- **Gray–Scott** (The Well, 5% noise): VRMSE 0.07, against 0.48 for an FNO trained on the same data.
 
-See `demo/README.md` for the 5-minute talk track.
+See `demo/README.md` for the talk track.
 
 ## Static laws y = f(x) (symbolic regression mode)
 `eqdisc.sr.solve(task)` runs parallel Claude sessions with these tools:
@@ -181,6 +178,15 @@ Rebuild with `python notebooks/build_notebooks.py [01 05 ...]`, then execute wit
 - `eqdisc-evolve` evolves discovery programs or the agent's playbook with an AlphaEvolve-style loop.
 
 ## Results so far
+
+**Honest out-of-sample results** cover LAGEOS-1, blinded KS and Gray–Scott. The protocol:
+- noisy training data only;
+- autoregressive forecasts of unseen windows;
+- refitted coefficients;
+- FNO or MLP baselines.
+
+Results and caveats: [`docs/honest_oos.md`](docs/honest_oos.md). This protocol supersedes the earlier in-sample numbers below.
+
 
 **Blinded held-out benchmark** (12 systems never used for tuning; variables renamed and coefficients perturbed;
 2% noise). The table counts models symbolically equivalent to the hidden truth:

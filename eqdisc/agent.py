@@ -149,6 +149,13 @@ TOOLS = [
     {"name": "load_skill", "description": "Load a domain skill: expert guidance for a class of systems (which terms, "
      "coordinates, invariants and pitfalls to expect). See the list in the system prompt.",
      "input_schema": _obj({"name": _str}, ["name"])},
+    {"name": "fit_flow", "description": "Flow-map (shooting) fit for COARSELY SAMPLED ODE data, where derivatives "
+     "cannot be estimated (e.g. only a few samples per oscillation or orbit). Proposes rhs with constants p0, p1, ...; "
+     "integrates it from each observed state over one sampling interval and matches the next observation. Returns "
+     "fitted constants with 1-sigma errors and the one-step prediction error on held-out pairs. Use it to compare "
+     "structures when diagnose shows a large change per step.",
+     "input_schema": _obj({"rhs_with_params": _rhs, "init": {"type": "array", "items": _num}, "max_pairs": _int},
+                          ["rhs_with_params"])},
     {"name": "intuit", "description": "Pre-analysis 'intuition' before fitting: positivity and decades, oscillations, fixed "
      "points with linearisation, single-variable dependence shapes (sin, saturating, cubic, ...), interaction "
      "tests, conservation, amplitude-period relation (ODE); dispersion relation of Fourier modes, travelling-wave speed "
@@ -359,6 +366,12 @@ class Session:
         if name == "load_skill":
             f = SKILLS_DIR / f"{args['name']}.md"
             return {"skill": f.read_text()} if f.exists() else {"error": f"unknown skill; available: {list(list_skills())}"}
+        if name == "fit_flow":
+            from .flow import fit_flow
+            if m["kind"] != "ode":
+                return {"error": "fit_flow is for ODE data"}
+            out = fit_flow(m, d, args["rhs_with_params"], max_pairs=args.get("max_pairs", 600), init=args.get("init"))
+            return self._augment({**out, "validation": tb.validate(m, d, out["rhs"])}) if c is None else self._augment(out)
         if name == "intuit":
             return intuit(m, d)
         if name == "weak_sindy":

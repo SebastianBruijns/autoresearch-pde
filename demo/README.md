@@ -1,77 +1,62 @@
-# eqdisc demo app
+# eqdisc demo
 
-A Streamlit app for presenting eqdisc. It has three pages: a **Showcase** of six precomputed cases, a live
-**Run on your data** page, and **How it works**.
+A Streamlit app with three out-of-sample cases, one screen each, plus a live "Run on your data" page.
 
 ```bash
-cd autoresearch-pde        # repo root
-PY=python                  # the venv where eqdisc is installed (pip install -e ".[demo]")
+cd /Users/danield/eqdisc
+PY=/Users/danield/iterate-hackathon/.venv/bin/python
 
-# 1. collect results and trimmed data into demo/showcase/ (about 13 MB, about 15 s, no API calls)
-PYTHONPATH=. $PY demo/build_showcase.py                 # all cases
-PYTHONPATH=. $PY demo/build_showcase.py gray_scott      # refresh one case, e.g. once the Well benchmark finishes
+PYTHONPATH=. $PY demo/build_showcase.py                  # copy artifacts into demo/showcase/ (seconds, no API calls)
+PYTHONPATH=. $PY demo/build_showcase.py gray_scott       # refresh one case once its run finishes
+PYTHONPATH=. $PY -m streamlit run demo/app.py            # restart after a rebuild (results are cached)
 
-# 2. run the app
-PYTHONPATH=. $PY -m streamlit run demo/app.py           # add --theme.base dark for dark mode
-
-# rehearsal: the live page replays a scripted run (no API calls, no cost)
-EQDISC_DEMO_FAKE=1 PYTHONPATH=. $PY -m streamlit run demo/app.py
+EQDISC_DEMO_FAKE=1 PYTHONPATH=. $PY -m streamlit run demo/app.py   # rehearsal: live page replays a scripted run
 ```
 
-The app reads only `demo/showcase/` and `demo/examples/`. Live runs write to `demo/_live_runs/`. You can also
-switch rehearsal mode on or off from the small ⚙️ expander at the bottom of the sidebar.
+**Honest protocol, used in every case:**
+- Train on noisy data.
+- Forecast an unseen future or a held-out trajectory, autoregressively, from a noisy observed state.
+- Refit the coefficients; never round them.
+- Train a neural baseline on the same data.
+
+## What each screen shows
+Each case screen has the same parts:
+- a one-line question;
+- a hero video;
+- the equation, a verdict chip, 4 metric tiles and "how it was found" chips;
+- one chart;
+- a collapsed *Details & caveats* expander.
+
+| case | source | headline |
+|---|---|---|
+| 🛰️ LAGEOS-1 (centrepiece) | `runs/oos_lageos/` | Trained on 2017 real hourly data. 30-day forecast error: 11 km (Kepler + J₂) vs 9,037 km (Kepler) vs 3,170 km (MLP). Fitted J₂ = 1.08226e-3 ± 1.4e-7 (accepted value 1.08263e-3). Node drift 0.3411 °/day vs 0.3425 measured. The agent's own run gives J₂ = 1.08261e-3 and a 13.6 km error at 30 days. |
+| 🔥 Chaos, blinded KS | `runs/oos_ks_agent/` | Coefficients are non-textbook and training noise is 2%. The forecast holds for 4.76 Lyapunov times; the true PDE manages 4.81 from a noisy start, and the FNO 0.83. All 3 true coefficients fall inside the 90% CIs. Caveat: weak SINDy matches the agent here. |
+| 🌀 Gray–Scott (The Well) | `runs/oos_gs_spirals_n0.05/`, `runs/well_gs/results.json` | VRMSE of the held-out forecast vs an FNO trained on the same data and the paper's neural surrogates. Shows "agent pending" until `results.json` has an `agent` entry. |
+
+## 4-minute talk track
+1. **Home (20 s).** Read the protocol banner out loud: "everything here is forecast on data the method never saw."
+2. **LAGEOS-1 (90 s).**
+   - The video shows the real track and three forecasts.
+   - Kepler drifts by thousands of km; the neural net trained on the same year still misses by about 3,000 km.
+   - The discovered law is within 11 km after a month.
+   - J₂ is *fitted* from 2017 data to 0.03% of the accepted value, and the orbit-plane drift matches.
+   - Be honest that the J₂ form is textbook physics; the value comes from the data.
+3. **Chaos (70 s).**
+   - The coefficients are rescaled so no LLM can recall them.
+   - The forecast lasts as long as the true equation's own limit from noisy data, 6× the FNO.
+   - Say openly that weak SINDy alone also gets this; the agent adds the verdict and the confidence intervals.
+4. **Gray–Scott (40 s).** One reaction law; the chart compares against the neural surrogates from The Well paper.
+5. **Live (40 s).** Pick the pendulum example and press Discover. Tool calls stream in, then the compact result appears.
+   Use rehearsal mode if the network or the clock is tight.
 
 ## Files
-| file | purpose |
-|---|---|
-| `build_showcase.py` | copies the discovery JSONs and float32 data subsets into `showcase/<case>/`. It also precomputes the orbit integrations (Kepler and the discovered law, rtol 1e-10), the KS and Gray–Scott PDE rollouts, the pendulum coefficient fan and the SR predictions. |
-| `app.py` | the Streamlit app |
-| `ui.py` | shared result layout: verdict banner, LaTeX equations, key-steps timeline, confidence table, next experiments |
-| `viz.py` | Plotly figures, including the animated ones |
-| `live.py` | background job runner, the real backends (`discover`, `sr.solve`) and the scripted rehearsal backends |
-| `examples/` | `pendulum.csv` (from the pendulum dataset) and `ecoli_growth.csv` (LLM-SR bactgrow, train and test_id) |
+- `app.py`: the pages.
+- `ui.py`: verdict chip, tiles, chips and the LaTeX helpers.
+- `viz.py`: the one chart per case.
+- `live.py`: background jobs, the real backends (`orchestrate.discover`, `sr.solve`) and the scripted rehearsal backends.
+- `build_showcase.py`: copies the artifacts into `showcase/`, makes thumbnails and the error-curve arrays, and builds
+  the rehearsal data.
+- `examples/`: `pendulum.csv` and `ecoli_growth.csv`. The E. coli data is from the LLM-SR benchmark, MIT licence;
+  see `ECOLI_ATTRIBUTION.txt`.
 
-## Rehearsal mode details
-- **Dynamics:** ingests your CSV for real (local, no API) and streams a scripted event log for about 5 s. It then
-  returns the precomputed pendulum discovery, with figures from `eqdisc.plots` and the bundled report.
-- **Static:** if the columns are b, s, temp, pH → db, it replays the E. coli law. Otherwise it fits a least-squares
-  linear law. In both cases it then runs the real local `assess_sr` to produce the verdict and confidence.
-
-## Live mode
-In live mode, dynamics runs call `eqdisc.orchestrate.discover`: Quick = 2 branches, no adversary; Full = 3 branches
-plus the adversary. Static runs call `eqdisc.sr.solve` on a 90/10 split: Quick = 2 sessions, Full = 3. Both need
-Claude credentials (`ANTHROPIC_API_KEY` or `ant auth login`). Expect $0.5–3 and 2–8 minutes per run. Progress
-streams from the `on_event` callback.
-
-## 5-minute talk track
-1. **Hook (20 s).** "You give it measurements. You get back the equation, how it was found, how sure it is, and what
-   to measure next." Point at the pipeline line in the sidebar.
-2. **Satellite orbit (75 s).** Press ▶ on the globe: six days of a satellite track that never closes on itself. The
-   CONFIDENT verdict comes with the equation: Kepler plus a J2 term. Open *How we got there*: Kepler alone left
-   anisotropic residuals, so the agents tried a multipole library, then rejected J3, J4 and a rotating frame, and
-   shot the trajectory to get J2 = 0.5. Scroll to *why it matters*: from the same start, Kepler keeps one ellipse
-   while the discovered law precesses the orbit plane. The node drift is 3.12°/unit in both the data and the model,
-   and 0 for Kepler. Be honest that the context "satellite orbiting Earth" was given, and that J2 was exaggerated by
-   the data generator.
-3. **Gray–Scott from The Well (60 s).** Six visually different regimes come from one two-term reaction law. The
-   held-out trajectory animates next to the rollout. The VRMSE chart compares SINDy, weak SINDy and the agent with
-   The Well's neural surrogates (dashed lines). Those networks train on hundreds of trajectories; the agent sees 2
-   noisy trajectories and returns an equation.
-4. **Pendulum: "collect more data, here" (50 s).** The verdict is amber, not green: three structures fit, and the
-   damping is ±24%. The ★ shows where to release the pendulum next. The blue fan shows the plausible models agreeing
-   on the old data and diverging from ★1, so that one swing is 2.8× more informative than repeating old conditions.
-   The point is that the system knows what it does not know.
-5. **Fresh oscillators (45 s).** These four laws were written for this test and never published, so they cannot
-   have been memorised. The agent recovers 3 exactly (NMSE ~1e-31 in and out of distribution); PySR recovers 0/4.
-   On v1 it is partial but still ~10,000× better out-of-distribution, and its own verdict says COLLECT MORE DATA.
-   Mention that batch A was used for development (expander).
-6. **Live upload (40 s).** Switch to *Run on your data*, pick an example or upload a CSV, and press Discover. The
-   tool calls stream in: intuit → weak_sindy → fit_skeleton → compare_models → submit. Use rehearsal mode if the
-   network or the clock is tight.
-7. **Spare cases** (if asked): E. coli growth (LLM-SR benchmark, ~190× lower OOD error than published results, with a
-   contamination caveat) and real Kuramoto–Sivashinsky data (CONFIDENT; the rollout tracks 100 time units of chaos).
-
-## Data attribution
-- E. coli growth data: LLM-SR benchmark (Shojaee et al., ICLR 2025), MIT License. See `showcase/ecoli/ATTRIBUTION.txt`.
-- Gray–Scott: The Well (Ohana et al., NeurIPS 2024), `gray_scott_reaction_diffusion`.
-- KS: PySINDy tutorial data (`KS_data.mat`).
+Live runs write to `demo/_live_runs/`, which is gitignored. They need Claude credentials.
