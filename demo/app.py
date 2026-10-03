@@ -190,6 +190,8 @@ def page_lageos():
         st.markdown("**Forecast error over the unseen month**")
         show(viz.lageos_errors(a["days"], errs), "lageos_err")
     st.markdown(LEGEND_ORBIT, unsafe_allow_html=True)
+    if info.get("uq"):
+        ui.confidence_panel(info["uq"], "lageos")
     with st.expander("Details & caveats"):
         pe = info["results"]["position_error_km"]
         rows = {("physics reference (Kepler + J2)" if k == "Kepler + J2" else k): v for k, v in pe.items()}
@@ -262,8 +264,9 @@ def page_orbit():
         if pa and not ok:
             st.markdown("<div class='small'><b>Why it failed.</b> The agent found the kinematics and the rotational "
                         "symmetry (conserved L<sub>z</sub>) but fitted a polynomial in r², z², v² instead of inverse-"
-                        "square gravity plus a bulge term; its own diagnostics showed 25% derivative error and it "
-                        "submitted anyway. A correct verdict would have been <i>not confident</i>.</div>",
+                        "square gravity plus a bulge term, and submitted it. The confidence checks below (run "
+                        "afterwards, on the training data only) catch it: they flag a missing inverse-square pull and "
+                        "a failed hold-out forecast, and say <i>not established</i>.</div>",
                         unsafe_allow_html=True)
     c1, c2 = st.columns(2, gap="large")
     with c1:
@@ -287,6 +290,8 @@ def page_orbit():
     show(viz.lageos_errors((a["hrs"] - a["hrs"][0]) / 24, errs, xlabel="days into the unseen second half"), "orbit_err")
     st.markdown(LEGEND_ORBIT.replace("Earth's equatorial bulge", "the planet's equatorial bulge").replace(
         "fitted by us; shown for reference only", "here the exact law that generated the data"), unsafe_allow_html=True)
+    if info.get("uq") and not info["uq"].get("error"):
+        ui.confidence_panel(info["uq"], "orbit")
     with st.expander("Details & caveats"):
         st.dataframe(pd.DataFrame({PLAIN_ROW.get(k, k): v for k, v in pe.items()}).T.map(lambda v: f"{v:,.3g}"),
                      width="content")
@@ -360,6 +365,9 @@ def page_ks():
         tool_chips(info.get("tools"))
     errs = {lab: a[f"err{i}"] for i, lab in enumerate(info["labels"]) if i > 0}
     show(viz.ks_errors(a["t_lyap"], errs), "ks_err")
+    if info.get("uq"):
+        ui.confidence_panel(info["uq"], "ks", names={"u_xx": "u_xx (anti-diffusion)", "u_xxxx": "u_xxxx (hyper-diffusion)",
+                                                       "u*u_x": "u·u_x (steepening)"})
     with st.expander("Details & caveats"):
         st.dataframe(pd.DataFrame([{**x, "90% CI": f"[{x['90% CI'][0]:.4g}, {x['90% CI'][1]:.4g}]"} for x in rows]),
                      hide_index=True)
@@ -429,6 +437,11 @@ def page_gs():
                       "FNO on same data"], title="protocol")
     if vr:
         show(viz.gs_vrmse(vr), "gs_vrmse")
+    if info.get("uq") and not info["uq"].get("error"):
+        ui.confidence_panel(info["uq"], "gs", names={"A_xx": "diffusion of A (x)", "A_yy": "diffusion of A (y)",
+                                                      "B_xx": "diffusion of B (x)", "B_yy": "diffusion of B (y)",
+                                                      "A*B**2": "reaction A·B²", "A": "decay of A", "B": "decay of B",
+                                                      "1": "feed (constant)"})
     else:
         gal = {k[4:]: v for k, v in a.items() if k.startswith("gal_")}
         if gal:

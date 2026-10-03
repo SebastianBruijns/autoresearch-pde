@@ -200,5 +200,184 @@
    "u5": "u2*(-0.0577246347392828*u1**2 - 0.0577246347392828*u2**2 - 0.0773837005260834*u3**2 - 1.86819381576004*u4**2 - 1.86819381576004*u5**2 - 2.92301981392952*u6**2 + 0.146470881578894)",
    "u6": "u3*(-0.0766014441862804*u1**2 - 0.0766014441862804*u2**2 - 0.100460447958024*u3**2 - 4.36432029038098*u4**2 - 4.36432029038098*u5**2 - 4.36432029038098*u6**2 + 0.229184521814099)"
   }
+ },
+ "uq": {
+  "terms": [
+   {
+    "var": "\u00b7",
+    "term": "constant p0",
+    "coef": 0.18204403231142915,
+    "ci90": [
+     0.17204073690392635,
+     0.19204732771893196
+    ],
+    "rel_uncertainty": 0.05494986724085418,
+    "significant": true,
+    "dBIC_if_removed": 802.9012118714236
+   },
+   {
+    "var": "\u00b7",
+    "term": "constant p1",
+    "coef": 0.07257139355278223,
+    "ci90": [
+     0.06785579883794356,
+     0.07728698826762091
+    ],
+    "rel_uncertainty": 0.06497869868530168,
+    "significant": true,
+    "dBIC_if_removed": 586.3273028778785
+   },
+   {
+    "var": "\u00b7",
+    "term": "constant p2",
+    "coef": 0.09428059165881206,
+    "ci90": [
+     0.08888556598066936,
+     0.09967561733695475
+    ],
+    "rel_uncertainty": 0.05722307829448633,
+    "significant": true,
+    "dBIC_if_removed": 789.4395889353545
+   },
+   {
+    "var": "\u00b7",
+    "term": "constant p3",
+    "coef": 2.2994933013507013,
+    "ci90": [
+     2.1981877552034184,
+     2.4007988474979842
+    ],
+    "rel_uncertainty": 0.044055595242559226,
+    "significant": true,
+    "dBIC_if_removed": 1061.8300889592429
+   },
+   {
+    "var": "\u00b7",
+    "term": "constant p4",
+    "coef": 3.221800045790411,
+    "ci90": [
+     3.131965001982551,
+     3.311635089598271
+    ],
+    "rel_uncertainty": 0.027883494484779666,
+    "significant": true,
+    "dBIC_if_removed": 2723.2844809223607
+   },
+   {
+    "var": "\u00b7",
+    "term": "constant p5",
+    "coef": 0.24818788744626025,
+    "ci90": [
+     0.23336556088154817,
+     0.26301021401097235
+    ],
+    "rel_uncertainty": 0.05972219964973729,
+    "significant": true,
+    "dBIC_if_removed": 630.5065676140148
+   },
+   {
+    "var": "\u00b7",
+    "term": "constant p6",
+    "coef": 0.08469288010723577,
+    "ci90": [
+     0.07821337101645115,
+     0.0911723891980204
+    ],
+    "rel_uncertainty": 0.07650594811016526,
+    "significant": true,
+    "dBIC_if_removed": 388.4822035857287
+   },
+   {
+    "var": "\u00b7",
+    "term": "constant p7",
+    "coef": 0.10985791533743901,
+    "ci90": [
+     0.10227082474881119,
+     0.11744500592606683
+    ],
+    "rel_uncertainty": 0.06906275770228615,
+    "significant": true,
+    "dBIC_if_removed": 463.1178800725247
+   },
+   {
+    "var": "\u00b7",
+    "term": "constant p8",
+    "coef": 4.577119175966333,
+    "ci90": [
+     4.41617119248541,
+     4.738067159447255
+    ],
+    "rel_uncertainty": 0.035163599044139626,
+    "significant": true,
+    "dBIC_if_removed": 1686.7066801699693
+   }
+  ],
+  "missing": [
+   {
+    "var": "\u00b7",
+    "term": "inverse-square pull  \u2212u/r\u00b3",
+    "dBIC_if_added": -644.2298557606118,
+    "error_reduction": 0.06573040049831136
+   },
+   {
+    "var": "\u00b7",
+    "term": "drag-like  \u2212v",
+    "dBIC_if_added": 14.64956066076411,
+    "error_reduction": -0.0006432473640622938
+   },
+   {
+    "var": "\u00b7",
+    "term": "extra radial 1/r\u2074",
+    "dBIC_if_added": -625.8815355820116,
+    "error_reduction": 0.06394303903355958
+   }
+  ],
+  "validation": {
+   "rollout_valid_time": 0.2528473143140104,
+   "rollout_horizon": 109.2300397836546,
+   "rollout_blew_up": false,
+   "criterion": "position error < 1% of radius",
+   "max_rel_error": 3.3830326969970637
+  },
+  "verdict": {
+   "status": "INCONCLUSIVE",
+   "headline": "The data do not determine the model well, and no simulated experiment clearly separates the candidates.",
+   "recommendation": "Do not use this law yet."
+  },
+  "experiments": [
+   {
+    "description": "new track further out (1.6\u00d7 radius), tilt 0\u00b0",
+    "score": 2.393150441038081,
+    "informs_coefficients": [
+     {
+      "coefficient": "agent's law vs the same law + inverse-square pull",
+      "info_gain_vs_existing": 2.393150441038081
+     }
+    ]
+   },
+   {
+    "description": "new track further out (1.6\u00d7 radius), tilt 45\u00b0",
+    "score": 2.3615977780860717,
+    "informs_coefficients": [
+     {
+      "coefficient": "agent's law vs the same law + inverse-square pull",
+      "info_gain_vs_existing": 2.3615977780860717
+     }
+    ]
+   },
+   {
+    "description": "new track further out (1.6\u00d7 radius), tilt 90\u00b0",
+    "score": 2.195635114559971,
+    "informs_coefficients": [
+     {
+      "coefficient": "agent's law vs the same law + inverse-square pull",
+      "info_gain_vs_existing": 2.195635114559971
+     }
+    ]
+   }
+  ],
+  "data_advice": [
+   "The checks say the law is missing an inverse-square pull: refit with it, then test on the new track above, where the two laws disagree most."
+  ]
  }
 }

@@ -1,6 +1,7 @@
 """Compact presentation components: one screen per case (question, hero, equation + verdict chip + tiles + chips,
 one chart, one collapsed details expander)."""
 import html
+import numpy as np
 import re
 
 import streamlit as st
@@ -164,3 +165,96 @@ def experiments(assessment, top=3):
         where = e.get("description") or ("start at (" + ", ".join(f"{x:.3g}" for x in e.get("initial_condition") or []) + ")")
         gain = e.get("gain_vs_existing_data")
         st.markdown(f"**#{i}** {where}" + (f" · {_fmt(gain)}× more informative than repeating" if gain else ""))
+
+
+# ----------------------------------------------------------------------------- confidence + next data
+PLAIN_VERDICT = {
+    "CONFIDENT": ("#16a34a", "✓ Very likely the law", "Every check passed."),
+    "CONFIDENT IN PREDICTIONS": ("#0891b2", "✓ Predictions trustworthy", "Rival forms fit equally well, but they all "
+                                 "predict the same behaviour over the data range."),
+    "COLLECT MORE DATA": ("#d97706", "◐ Not sure yet: collect more data", "The best model so far is not confirmed."),
+    "INCONCLUSIVE": ("#dc2626", "✗ Not established", "The data do not pin down a law."),
+}
+
+
+def _checks(a):
+    terms = a.get("terms") or []
+    weak = [t for t in terms if not t.get("significant")]
+    strong_add = [m for m in (a.get("missing") or []) if (m.get("dBIC_if_added") or 0) < -10
+                  and (m.get("error_reduction") is None or m["error_reduction"] >= 0.02)]
+    val = a.get("validation") or {}
+    ok_roll = (not val.get("rollout_blew_up")) and val.get("rollout_valid_time") is not None and \
+        val.get("rollout_horizon") and val["rollout_valid_time"] >= 0.7 * val["rollout_horizon"]
+    out = [("Every term earns its place", not weak and bool(terms),
+            f"{len(terms)} terms, all 90% ranges exclude zero" if not weak and terms
+            else (f"{len(weak)} term(s) could be zero: " + ", ".join(t['term'] for t in weak[:3]) if weak else "no term statistics"))]
+    out.append(("Nothing obvious is missing", not strong_add,
+                "no extra term improves the fit enough to justify itself" if not strong_add
+                else "data favour adding " + ", ".join(m["term"] for m in strong_add[:2])))
+    if val:
+        frac = (val.get("rollout_valid_time") or 0) / (val.get("rollout_horizon") or 1)
+        crit = f" ({val['criterion']})" if val.get("criterion") else ""
+        out.append(("Forecasts data it was not fitted to", bool(ok_roll),
+                    ("the forecast blew up" if val.get("rollout_blew_up") else
+                     f"refit without the last part of the training data, it forecasts that part: valid for {frac:.0%} of it{crit}")))
+    return out
+
+
+def _decades(vals):
+    v = [x for x in vals if x and x > 0] or [1.0]
+    lo, hi = int(np.floor(np.log10(min(v)))), int(np.ceil(np.log10(max(v))))
+    step = max(1, (hi - lo) // 4)
+    return [10.0 ** e for e in range(lo, hi + 1, step)]
+
+
+def confidence_panel(a, key, names=None):
+    """a: slim assessment {verdict, terms, missing, validation, experiments}. Verdict, three checks, coefficient
+    precision chart, and the single most useful next measurement."""
+    import plotly.graph_objects as go
+    names = names or {}
+    v = (a.get("verdict") or {})
+    color, label, sub = PLAIN_VERDICT.get(v.get("status"), PLAIN_VERDICT["INCONCLUSIVE"])
+    st.markdown("#### How sure are we, and what next?")
+    c1, c2, c3 = st.columns([1.05, 1, 1], gap="large")
+    with c1:
+        st.markdown(f"<div style='background:{color};color:white;border-radius:10px;padding:12px 14px;"
+                    f"font-weight:700;font-size:1.15rem'>{html.escape(label)}</div>"
+                    f"<div class='small' style='margin:6px 0 10px'>{html.escape(sub)}</div>", unsafe_allow_html=True)
+        for name, ok, detail in _checks(a):
+            st.markdown(f"<div style='margin:4px 0'>{'✅' if ok else '⚠️'} <b>{html.escape(name)}</b><br>"
+                        f"<span class='small'>{html.escape(detail)}</span></div>", unsafe_allow_html=True)
+    with c2:
+        terms = a.get("terms") or []
+        if terms:
+            lab = [f"{names.get(t['term'], t['term'])}  (d{t['var']}/dt)" for t in terms]
+            pct = [100 * float(t.get("rel_uncertainty") or 0) for t in terms]
+            col = ["#16a34a" if (t.get("significant") and p < 10) else "#d97706" if t.get("significant") else "#dc2626"
+                   for t, p in zip(terms, pct)]
+            fig = go.Figure(go.Bar(x=pct, y=lab, orientation="h", marker_color=col,
+                                   text=[f"±{p:.2g}%" for p in pct], textposition="outside",
+                                   hovertemplate="%{y}: ±%{x:.3g}%<extra></extra>"))
+            fig.update_layout(height=60 + 34 * len(terms), margin=dict(l=10, r=40, t=30, b=10),
+                              title=dict(text="How precisely each coefficient is known (90%)", font=dict(size=13)),
+                              xaxis=dict(type="log", title=None, tickvals=_decades(pct), ticktext=[f"{v:g}%" for v in _decades(pct)],
+                                         range=[np.log10(_decades(pct)[0]), np.log10(_decades(pct)[-1]) + 0.3]),
+                              yaxis=dict(autorange="reversed"),
+                              showlegend=False)
+            st.plotly_chart(fig, key=f"conf_{key}", config={"displayModeBar": False})
+    with c3:
+        ex = (a.get("experiments") or [])
+        st.markdown("<div class='small'><b>Most useful next measurement</b></div>", unsafe_allow_html=True)
+        if ex:
+            e = ex[0]
+            what = e.get("description") or ("start at (" + ", ".join(f"{x:.3g}" for x in e.get("initial_condition", [])) + ")")
+            gains = e.get("informs_coefficients") or []
+            pins = "".join(f"<li>{html.escape(names.get(g['coefficient'].split(' in ')[0], g['coefficient']))}: "
+                           f"{g['info_gain_vs_existing']:.3g}× more information than repeating existing runs</li>"
+                           for g in gains[:2] if g.get("info_gain_vs_existing"))
+            st.markdown(f"<div style='border:1px solid rgba(128,128,128,.35);border-radius:10px;padding:10px 12px'>"
+                        f"📍 <b>{html.escape(str(what))}</b>"
+                        + (f"<ul style='margin:6px 0 0 0;padding-left:18px' class='small'>{pins}</ul>" if pins else "")
+                        + "</div>", unsafe_allow_html=True)
+        for adv in (a.get("data_advice") or [])[:1]:
+            st.markdown(f"<div class='small' style='margin-top:8px'>💡 {html.escape(adv)}</div>", unsafe_allow_html=True)
+        if v.get("recommendation") and not ex:
+            st.markdown(f"<div class='small'>{html.escape(v['recommendation'])}</div>", unsafe_allow_html=True)

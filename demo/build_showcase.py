@@ -75,6 +75,16 @@ def _tools(*transcripts):
     return out
 
 
+def _uq_slim(a, verdict=None):
+    """What the confidence panel needs from an eqdisc assessment."""
+    if not a:
+        return None
+    from eqdisc import insights
+    return {"verdict": verdict or insights.verdict(a), "terms": a.get("terms"), "missing": a.get("missing_term_evidence"),
+            "validation": a.get("validation"), "experiments": ((a.get("experiments") or {}).get("ranked") or [])[:3],
+            "data_advice": a.get("data_advice"), "confidence": a.get("confidence")}
+
+
 def _fresh(case):
     d = OUT / case
     if d.exists():
@@ -123,8 +133,13 @@ def build_lageos():
         arrays["train_h"] = _f32(h / np.linalg.norm(h, axis=1, keepdims=True))
     else:
         train_dates = []
+    uq = _json(REPO / "runs/assess_lageos.json")
+    if uq:
+        uq["data_advice"] = (uq.get("data_advice") or []) + [
+            "The ± ranges are statistical only: the agent noted a slow drift its law does not explain (other forces), "
+            "so the true bulge value sits ~0.03% away, just outside the 90% range."]
     info = {"results": res, "agent": agent, "agent_alt": agent_alt, "models": models, "RE_km": RE_E / 1e3,
-            "T_s": float(T_E), "train_dates": train_dates}
+            "T_s": float(T_E), "train_dates": train_dates, "uq": uq}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)
 
@@ -198,7 +213,7 @@ def build_orbit():
         ts = np.linspace(0, 110, 3000)
         run = lambda f: solve_ivp(lambda s_, y: f(y), (0, ts[-1]), x0, t_eval=ts, rtol=1e-10, atol=1e-12).y.T
         arrays["kj_t"], arrays["kj_disc"], arrays["kj_kep"] = _f32(ts), _f32(run(f_ag)[:, :3]), _f32(run(f_k)[:, :3])
-    info = {"results": res, "models": models, "agent": ag}
+    info = {"results": res, "models": models, "agent": ag, "uq": _json(REPO / "runs/assess_orbit.json")}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)
 
@@ -225,6 +240,7 @@ def build_ks():
     a = disc.get("assessment") or {}
     info = {"results": res, "labels": labels, "story": disc.get("story"), "verdict": disc.get("verdict"),
             "assessment": {k: a.get(k) for k in ("terms", "confidence", "noise_floor", "missing_term_evidence")},
+            "uq": _uq_slim(a, disc.get("verdict")),
             "cost_usd": (res.get("agent") or {}).get("cost_usd") or disc.get("cost_usd"), "wall_s": disc.get("wall_s"),
             "tools": _tools(src / "discover")}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
@@ -266,6 +282,7 @@ def build_gray_scott(regime="spirals", noise=0.05):
     info = {"results": res, "sweep": sweep, "regime": regime, "noise": noise, "truth": (truth or {}).get("rhs"),
             "params": (truth or {}).get("params"), "regimes": {k: list(v) for k, v in REGIMES.items()},
             "has_video": has_video, "tools": _tools(REPO / "runs/dataonly/gs_agent"),
+            "uq": _json(REPO / "runs/assess_gray_scott.json"),
             "agent_cost": (_json(REPO / "runs/dataonly/gs_agent/result.json") or {}).get("cost_usd")}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)

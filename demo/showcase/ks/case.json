@@ -213,6 +213,175 @@
    }
   ]
  },
+ "uq": {
+  "verdict": {
+   "status": "CONFIDENT",
+   "headline": "We are confident this is your equation.",
+   "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. To validate it independently, the most demanding test would be: single Fourier mode k=6 (wavelength L/6), data amplitude."
+  },
+  "terms": [
+   {
+    "var": "u",
+    "term": "u_xx",
+    "coef": -1.18367,
+    "submitted_coef": -1.1836,
+    "ci90": [
+     -1.186,
+     -1.181
+    ],
+    "rel_uncertainty": 0.00204,
+    "significant": true,
+    "dBIC_if_removed": 1110.0
+   },
+   {
+    "var": "u",
+    "term": "u_xxxx",
+    "coef": -1.99788,
+    "submitted_coef": -1.9978,
+    "ci90": [
+     -2.002,
+     -1.994
+    ],
+    "rel_uncertainty": 0.00191,
+    "significant": true,
+    "dBIC_if_removed": 1110.0
+   },
+   {
+    "var": "u",
+    "term": "u*u_x",
+    "coef": -0.568703,
+    "submitted_coef": -0.5687,
+    "ci90": [
+     -0.5696,
+     -0.5676
+    ],
+    "rel_uncertainty": 0.00174,
+    "significant": true,
+    "dBIC_if_removed": 1140.0
+   }
+  ],
+  "missing": [
+   {
+    "var": "u",
+    "term": "u_xxx",
+    "dBIC_if_added": 3.52,
+    "error_reduction": 0.00991
+   },
+   {
+    "var": "u",
+    "term": "u*u*u_x",
+    "dBIC_if_added": 3.57,
+    "error_reduction": 0.00958
+   },
+   {
+    "var": "u",
+    "term": "u_x",
+    "dBIC_if_added": 3.72,
+    "error_reduction": 0.00855
+   },
+   {
+    "var": "u",
+    "term": "u*u*u_xxx",
+    "dBIC_if_added": 4.59,
+    "error_reduction": 0.0028
+   }
+  ],
+  "validation": {
+   "deriv_nrmse": 227.08090488167252,
+   "rollout_valid_time": 6.2857142857142865,
+   "rollout_horizon": 6.2857142857142865,
+   "rollout_blew_up": false
+  },
+  "experiments": [
+   {
+    "score": 0.0162,
+    "max_snr": 0.195,
+    "models_blow_up": [],
+    "most_separated": [
+     "submitted",
+     "symbolic"
+    ],
+    "description": "single Fourier mode k=6 (wavelength L/6), data amplitude",
+    "gain_vs_existing_data": null,
+    "informs_coefficients": [
+     {
+      "coefficient": "u_xx in du/dt",
+      "info_gain_vs_existing": 33.2
+     },
+     {
+      "coefficient": "u_xxxx in du/dt",
+      "info_gain_vs_existing": 10.2
+     },
+     {
+      "coefficient": "u*u_x in du/dt",
+      "info_gain_vs_existing": 5.42
+     }
+    ]
+   },
+   {
+    "score": 0.0036,
+    "max_snr": 0.137,
+    "models_blow_up": [],
+    "most_separated": [
+     "submitted",
+     "symbolic"
+    ],
+    "description": "localised pulse (width 5% of domain), 1.5x data amplitude",
+    "gain_vs_existing_data": null,
+    "informs_coefficients": [
+     {
+      "coefficient": "u_xx in du/dt",
+      "info_gain_vs_existing": 1.08
+     },
+     {
+      "coefficient": "u*u_x in du/dt",
+      "info_gain_vs_existing": 0.761
+     },
+     {
+      "coefficient": "u_xxxx in du/dt",
+      "info_gain_vs_existing": 0.686
+     }
+    ]
+   },
+   {
+    "score": 0.00113,
+    "max_snr": 0.066,
+    "models_blow_up": [],
+    "most_separated": [
+     "submitted",
+     "symbolic"
+    ],
+    "description": "single Fourier mode k=3 (wavelength L/3), data amplitude",
+    "gain_vs_existing_data": null,
+    "informs_coefficients": [
+     {
+      "coefficient": "u_xx in du/dt",
+      "info_gain_vs_existing": 0.942
+     },
+     {
+      "coefficient": "u_xxxx in du/dt",
+      "info_gain_vs_existing": 0.738
+     },
+     {
+      "coefficient": "u*u_x in du/dt",
+      "info_gain_vs_existing": 0.683
+     }
+    ]
+   }
+  ],
+  "data_advice": [
+   "Only 1 trajectory(ies): independent runs from different initial conditions are the cheapest way to separate competing models."
+  ],
+  "confidence": {
+   "level": "high",
+   "points": 3,
+   "reasons": [
+    "all terms significantly non-zero (bootstrap 90% CIs exclude 0)",
+    "no single added term is supported by the data",
+    "held-out rollout stays within 30% error for 100% of the horizon"
+   ]
+  }
+ },
  "cost_usd": 0.627,
  "wall_s": 249.9,
  "tools": [

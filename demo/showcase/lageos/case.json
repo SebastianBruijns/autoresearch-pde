@@ -216,5 +216,113 @@
   "2017-12-03",
   "2017-12-17",
   "2017-12-31"
- ]
+ ],
+ "uq": {
+  "terms": [
+   {
+    "var": "u4..u6",
+    "term": "central pull (1/r\u00b2)",
+    "coef": 0.006022945673365612,
+    "ci90": [
+     0.006022945366181626,
+     0.006022945980549597
+    ],
+    "rel_uncertainty": 5.100228404994002e-08,
+    "significant": true,
+    "dBIC_if_removed": 179564.32964278784
+   },
+   {
+    "var": "u4..u6",
+    "term": "equatorial bulge (J\u2082)",
+    "coef": 1.338535922678333e-06,
+    "ci90": [
+     1.3383044668192256e-06,
+     1.3387673785374405e-06
+    ],
+    "rel_uncertainty": 0.00017291718151601866,
+    "significant": true,
+    "dBIC_if_removed": 67992.38068787851
+   }
+  ],
+  "missing": [
+   {
+    "var": "\u00b7",
+    "term": "inverse-square pull  \u2212u/r\u00b3",
+    "dBIC_if_added": 8.881715215160511,
+    "error_reduction": 8.409016594157492e-09
+   },
+   {
+    "var": "\u00b7",
+    "term": "drag-like  \u2212v",
+    "dBIC_if_added": 7.800220270873979,
+    "error_reduction": 7.510940373967046e-05
+   },
+   {
+    "var": "\u00b7",
+    "term": "extra radial 1/r\u2074",
+    "dBIC_if_added": 5.101373255049111,
+    "error_reduction": 0.0002624976976953741
+   }
+  ],
+  "validation": {
+   "rollout_valid_time": 22670.587668823224,
+   "rollout_horizon": 22670.587668823224,
+   "rollout_blew_up": false,
+   "criterion": "position error < 1% of radius",
+   "max_rel_error": 0.00625744938777651
+  },
+  "experiments": [
+   {
+    "description": "second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 0\u00b0",
+    "informs_coefficients": [
+     {
+      "coefficient": "equatorial bulge (J\u2082)",
+      "info_gain_vs_existing": 13.14498896208837
+     },
+     {
+      "coefficient": "central pull (1/r\u00b2)",
+      "info_gain_vs_existing": 1.6498354455533384
+     }
+    ],
+    "score": 13.14498896208837
+   },
+   {
+    "description": "second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 45\u00b0",
+    "informs_coefficients": [
+     {
+      "coefficient": "equatorial bulge (J\u2082)",
+      "info_gain_vs_existing": 5.538500270315294
+     },
+     {
+      "coefficient": "central pull (1/r\u00b2)",
+      "info_gain_vs_existing": 1.6463283177197494
+     }
+    ],
+    "score": 5.538500270315294
+   },
+   {
+    "description": "second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 90\u00b0",
+    "informs_coefficients": [
+     {
+      "coefficient": "central pull (1/r\u00b2)",
+      "info_gain_vs_existing": 1.6428263573010158
+     },
+     {
+      "coefficient": "equatorial bulge (J\u2082)",
+      "info_gain_vs_existing": 0.8050150944392358
+     }
+    ],
+    "score": 1.6428263573010158
+   }
+  ],
+  "data_advice": [
+   "Only one satellite, at one height and one inclination: the bulge term is seen from a single geometry, so it cannot be told apart from similar higher-order terms.",
+   "The \u00b1 ranges are statistical only: the agent noted a slow drift its law does not explain (other forces), so the true bulge value sits ~0.03% away, just outside the 90% range."
+  ],
+  "verdict": {
+   "status": "CONFIDENT",
+   "headline": "We are confident this is your equation.",
+   "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. To validate it independently, the most demanding test would be: second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 0\u00b0."
+  }
+ }
 }
