@@ -11,7 +11,7 @@ VERDICT = {  # status -> (colour, label)
     "CONFIDENT IN PREDICTIONS": ("#0891b2", "✓ CONFIDENT IN PREDICTIONS"),
     "COLLECT MORE DATA": ("#d97706", "◐ COLLECT MORE DATA"),
     "INCONCLUSIVE": ("#dc2626", "? INCONCLUSIVE"),
-    "VALIDATED": ("#16a34a", "✓ VALIDATED OUT OF SAMPLE"),
+    "VALIDATED": ("#16a34a", "✓ FORECASTS UNSEEN DATA"),
     "PENDING": ("#64748b", "… RESULTS PENDING"),
     "NOT RECOVERED": ("#dc2626", "✗ NOT RECOVERED"),
     "RESULT": ("#475569", "RESULT"),
@@ -19,9 +19,27 @@ VERDICT = {  # status -> (colour, label)
 
 CSS = """
 <style>
-.block-container {padding-top: 1.6rem; padding-bottom: 2rem; max-width: 1380px;}
+.block-container {padding-top: 3.2rem; padding-bottom: 2rem; max-width: 1380px;}
 h1, h2, h3 {letter-spacing: -0.01em;}
 .q {font-size: 1.45rem; font-weight: 750; line-height: 1.25; margin: 0 0 .7rem 0;}
+.hero-title {font-size: 2.6rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; margin: .2rem 0 .3rem 0;}
+.hero-sub {font-size: 1.15rem; opacity: .72; margin: 0 0 1.2rem 0;}
+.sec {display:flex; align-items:baseline; gap:.6rem; margin: 2.0rem 0 .7rem 0; padding-top: .9rem;
+      border-top: 1px solid rgba(128,128,128,.25);}
+.sec-n {font-size: 1.0rem; font-weight: 800; color: #fff; background: #6366f1; border-radius: 999px;
+        width: 1.7rem; height: 1.7rem; display:inline-flex; align-items:center; justify-content:center; flex: none;}
+.sec-t {font-size: 1.5rem; font-weight: 750; letter-spacing: -0.01em;}
+.sec-s {font-size: .95rem; opacity: .65;}
+.lbl {font-size: 1.02rem; font-weight: 700; margin: .2rem 0 .3rem 0;}
+.verdict-big {border-radius: 14px; padding: 16px 18px; color: #fff; font-weight: 800; font-size: 1.45rem;
+              line-height: 1.2;}
+.check {display:flex; gap:.6rem; align-items:flex-start; margin: .55rem 0;}
+.check .ic {font-size: 1.25rem; line-height: 1.2;}
+.check .t {font-weight: 700; font-size: 1.0rem;}
+.check .d {font-size: .85rem; opacity: .7;}
+.next {border-radius: 14px; padding: 14px 16px; border: 1px solid rgba(99,102,241,.45); background: rgba(99,102,241,.08);}
+.next .h {font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; opacity: .7; margin-bottom: .3rem;}
+.next .w {font-size: 1.12rem; font-weight: 750; line-height: 1.3;}
 .vchip {display:inline-block; padding: 5px 14px; border-radius: 999px; color: #fff; font-weight: 800;
         font-size: .86rem; letter-spacing: .03em; margin-bottom: .25rem;}
 .chips {display:flex; flex-wrap: wrap; gap: 6px; margin-top: .35rem;}
@@ -41,6 +59,20 @@ div[data-testid="stMetricValue"] {font-size: 1.6rem;}
 
 def inject_css():
     st.html(CSS)
+
+
+def header(title, sub):
+    st.markdown(f"<div class='hero-title'>{html.escape(title)}</div><div class='hero-sub'>{html.escape(sub)}</div>",
+                unsafe_allow_html=True)
+
+
+def section(n, title, sub=None):
+    st.markdown(f"<div class='sec'><span class='sec-n'>{n}</span><span class='sec-t'>{html.escape(title)}</span>"
+                + (f"<span class='sec-s'>{html.escape(sub)}</span>" if sub else "") + "</div>", unsafe_allow_html=True)
+
+
+def label(text):
+    st.markdown(f"<div class='lbl'>{html.escape(text)}</div>", unsafe_allow_html=True)
 
 
 def question(text):
@@ -203,7 +235,7 @@ def _checks(a):
 def _decades(vals):
     v = [x for x in vals if x and x > 0] or [1.0]
     lo, hi = int(np.floor(np.log10(min(v)))), int(np.ceil(np.log10(max(v))))
-    step = max(1, (hi - lo) // 4)
+    step = max(1, -(-(hi - lo) // 3))
     return [10.0 ** e for e in range(lo, hi + 1, step)]
 
 
@@ -214,19 +246,19 @@ def confidence_panel(a, key, names=None):
     names = names or {}
     v = (a.get("verdict") or {})
     color, label, sub = PLAIN_VERDICT.get(v.get("status"), PLAIN_VERDICT["INCONCLUSIVE"])
-    st.markdown("#### How sure are we, and what next?")
     c1, c2, c3 = st.columns([1.05, 1, 1], gap="large")
     with c1:
-        st.markdown(f"<div style='background:{color};color:white;border-radius:10px;padding:12px 14px;"
-                    f"font-weight:700;font-size:1.15rem'>{html.escape(label)}</div>"
-                    f"<div class='small' style='margin:6px 0 10px'>{html.escape(sub)}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='verdict-big' style='background:{color}'>{html.escape(label)}</div>"
+                    f"<div class='small' style='margin:8px 0 6px'>{html.escape(sub)}</div>", unsafe_allow_html=True)
         for name, ok, detail in _checks(a):
-            st.markdown(f"<div style='margin:4px 0'>{'✅' if ok else '⚠️'} <b>{html.escape(name)}</b><br>"
-                        f"<span class='small'>{html.escape(detail)}</span></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='check'><span class='ic'>{'✅' if ok else '⚠️'}</span><div>"
+                        f"<div class='t'>{html.escape(name)}</div><div class='d'>{html.escape(detail)}</div></div></div>",
+                        unsafe_allow_html=True)
     with c2:
         terms = a.get("terms") or []
         if terms:
-            lab = [f"{names.get(t['term'], t['term'])}  (d{t['var']}/dt)" for t in terms]
+            lab = [names.get(t['term'], t['term']) + (f"  (d{t['var']}/dt)" if t.get('var') and '.' not in t['var']
+                                                       and t['var'] != '·' else "") for t in terms]
             pct = [100 * float(t.get("rel_uncertainty") or 0) for t in terms]
             col = ["#16a34a" if (t.get("significant") and p < 10) else "#d97706" if t.get("significant") else "#dc2626"
                    for t, p in zip(terms, pct)]
@@ -234,25 +266,25 @@ def confidence_panel(a, key, names=None):
                                    text=[f"±{p:.2g}%" for p in pct], textposition="outside",
                                    hovertemplate="%{y}: ±%{x:.3g}%<extra></extra>"))
             fig.update_layout(height=60 + 34 * len(terms), margin=dict(l=10, r=40, t=30, b=10),
-                              title=dict(text="How precisely each coefficient is known (90%)", font=dict(size=13)),
+                              title=dict(text="How precisely each number is known (± at 90%)", font=dict(size=15)),
                               xaxis=dict(type="log", title=None, tickvals=_decades(pct), ticktext=[f"{v:g}%" for v in _decades(pct)],
-                                         range=[np.log10(_decades(pct)[0]), np.log10(_decades(pct)[-1]) + 0.3]),
+                                         range=[np.log10(_decades(pct)[0]), np.log10(_decades(pct)[-1]) + 0.3],
+                                         tickangle=0),
                               yaxis=dict(autorange="reversed"),
                               showlegend=False)
             st.plotly_chart(fig, key=f"conf_{key}", config={"displayModeBar": False})
     with c3:
         ex = (a.get("experiments") or [])
-        st.markdown("<div class='small'><b>Most useful next measurement</b></div>", unsafe_allow_html=True)
         if ex:
             e = ex[0]
             what = e.get("description") or ("start at (" + ", ".join(f"{x:.3g}" for x in e.get("initial_condition", [])) + ")")
-            gains = e.get("informs_coefficients") or []
-            pins = "".join(f"<li>{html.escape(names.get(g['coefficient'].split(' in ')[0], g['coefficient']))}: "
-                           f"{g['info_gain_vs_existing']:.3g}× more information than repeating existing runs</li>"
-                           for g in gains[:2] if g.get("info_gain_vs_existing"))
-            st.markdown(f"<div style='border:1px solid rgba(128,128,128,.35);border-radius:10px;padding:10px 12px'>"
-                        f"📍 <b>{html.escape(str(what))}</b>"
-                        + (f"<ul style='margin:6px 0 0 0;padding-left:18px' class='small'>{pins}</ul>" if pins else "")
+            gains = [g for g in (e.get("informs_coefficients") or []) if g.get("info_gain_vs_existing")]
+            g0 = gains[0] if gains else None
+            why = (f"{g0['info_gain_vs_existing']:.2g}× more informative about "
+                   f"{names.get(g0['coefficient'].split(' in ')[0], g0['coefficient'])} than more of the same data"
+                   if g0 else "")
+            st.markdown(f"<div class='next'><div class='h'>📍 Measure next</div><div class='w'>{html.escape(str(what))}</div>"
+                        + (f"<div class='small' style='margin-top:.4rem'>{html.escape(why)}</div>" if why else "")
                         + "</div>", unsafe_allow_html=True)
         for adv in (a.get("data_advice") or [])[:1]:
             st.markdown(f"<div class='small' style='margin-top:8px'>💡 {html.escape(adv)}</div>", unsafe_allow_html=True)

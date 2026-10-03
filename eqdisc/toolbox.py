@@ -272,6 +272,13 @@ def validate(meta, data, rhs, max_rollout_steps=6000, window=9, lowpass_frac=0.3
     red = tuple(range(1, roll.ndim))
     with np.errstate(all="ignore"):
         e_t = np.sqrt(np.mean((roll - ref) ** 2, axis=red)) / (np.sqrt(np.mean(ref ** 2, axis=red)) + 1e-12)
+    # integrators NaN-pad on blow-up AND on running out of their time budget; only the first is a model failure
+    timed_out = meta["kind"] != "ode" and time.time() - t0 >= 29.0 and not np.all(np.isfinite(e_t))
+    if timed_out:
+        fin = np.isfinite(e_t)
+        k = int(np.argmin(fin)) if not fin.all() else len(e_t)
+        e_t, roll, ref = e_t[:max(k, 1)], roll[:max(k, 1)], ref[:max(k, 1)]
+    out["rollout_timed_out"] = bool(timed_out)
     e_t = np.where(np.isfinite(e_t), e_t, np.inf)
     bad = np.where(e_t > 0.3)[0]
     horizon = len(e_t)

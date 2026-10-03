@@ -146,20 +146,19 @@ def page_lageos():
     n = lageos_numbers(info)
     ag = info.get("agent") or {}
     pe_ag = ag.get("position_error_km") or {}
-    ui.question("Given only a year of a real satellite's numbers, can the agent find its law of motion and forecast "
-                "the next month?")
+    ui.header("🛰️ A real satellite", "LAGEOS-1: one year of hourly positions in → its law of motion out → a month of forecast")
+    ui.section(1, "What it found", "and how its forecast compares")
     left, right = st.columns([1.15, 1], gap="large")
     with left:
         hero_video("lageos")
-        st.caption("LAGEOS-1, real hourly positions: measured track vs forecasts over the first 3 unseen days.")
+        st.caption("First 3 unseen days. Right: each forecast seen from the real satellite.")
     with right:
         if pe_ag:
             ok = pe_ag["30d"] < min(n["N"], n["K"])
-            ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED", "data-only agent, unseen month")
+            ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED")
             ui.equations(lageos_latex(lageos_agent_rhs(ag)), small=True)
-            st.caption("Its law, constants refitted on 2017 (r² = u1² + u2² + u3²). The agent was not told that "
-                       "u1–u3 are position and u4–u6 velocity, and the units are random, so neither the gravity "
-                       "constant nor Earth's radius equals 1.")
+            st.caption("The law it found from six unnamed columns in random units (r² = u1² + u2² + u3²): "
+                       "Newton's gravity plus Earth's equatorial bulge.")
             ui.tiles([
                 {"label": "Agent: 30-day error", "value": km(pe_ag["30d"]), "delta": f"1 day: {km(pe_ag['1d'])}",
                  "help": "Position error after 30 days of forecasting from the last training state."},
@@ -179,18 +178,20 @@ def page_lageos():
     errs = {m: a[f"err{i}"] for i, m in enumerate(info["models"])}
     if "err_agent" in a:
         errs["agent"] = a["err_agent"]
+    ui.section(2, "The data, and the month it never saw")
     c1, c2 = st.columns([1, 1.15], gap="large")
     with c1:
-        st.markdown("**What the agent was given**: one year of hourly measurements (2017)")
+        ui.label("The data it was given: 2017, hourly")
         if "train_orbits" in a:
             show(viz.lageos_training(a["train_orbits"], info["train_dates"]), "lageos_train")
             st.caption("Real LAGEOS-1 positions, one orbit every two weeks (hourly samples, drawn smooth). Press ▶: "
                        "the orbit plane turns about Earth's axis over the year. The agent saw only six unnamed columns.")
     with c2:
-        st.markdown("**Forecast error over the unseen month**")
+        ui.label("Forecast error over the unseen month")
         show(viz.lageos_errors(a["days"], errs), "lageos_err")
     st.markdown(LEGEND_ORBIT, unsafe_allow_html=True)
     if info.get("uq"):
+        ui.section(3, "How sure are we, and what next?")
         ui.confidence_panel(info["uq"], "lageos")
     with st.expander("Details & caveats"):
         pe = info["results"]["position_error_km"]
@@ -239,19 +240,23 @@ def page_orbit():
     pe = r["position_error_km"]
     ag = info.get("agent") or {}
     pa = pe.get("data-only agent")
-    ui.question("A satellite around a planet with a huge equatorial bulge: from 3 days of noisy positions, can the "
-                "agent find the law and forecast the next 3 days?")
+    ui.header("🌍 A planet with a huge bulge", "Synthetic satellite: 3 noisy days in → law → next 3 days. An honest failure.")
+    ui.section(1, "What it found", "and how its forecast compares")
     left, right = st.columns([1.15, 1], gap="large")
     with left:
         hero_video("orbit")
-        st.caption("Synthetic data (orbit_discover workshop), bulge 500× Earth's (J₂ = 0.5). First unseen day shown.")
+        st.caption("First unseen day. Bulge 500× Earth's. Right: each forecast seen from the real satellite.")
     with right:
         if pa:
             ok = pa["24h"] < min(pe["neural step model (MLP)"]["24h"], pe["Kepler"]["24h"])
-            ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED", "data-only agent, unseen 3 days")
-            ui.equations(lageos_latex(lageos_agent_rhs(ag)), small=True)
-            st.caption("Its law with constants refitted on the 3 training days (r² = u1² + u2² + u3²); random units, "
-                       "unnamed columns, 1% noise, no context.")
+            ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED")
+            if ok:
+                ui.equations(lageos_latex(lageos_agent_rhs(ag)), small=True)
+            else:
+                n_c = len((ag.get("refit") or {}).get("refit_constants") or [])
+                st.markdown(f"<div style='font-size:1.15rem;margin:.6rem 0'>It found: <b>acceleration = position × "
+                            f"(a polynomial in distances and speeds)</b>, with {n_c} constants.<br>"
+                            "Missing: <b>Newton's 1/r² pull</b> and the bulge term.</div>", unsafe_allow_html=True)
             ui.tiles([
                 {"label": "eqdisc: error after 1 day", "value": km(pa["24h"]), "delta": f"after 3 days: {km(pa['72h'])}"},
                 {"label": "Neural network", "value": km(pe["neural step model (MLP)"]["24h"]), "delta": "after 1 day"},
@@ -268,33 +273,38 @@ def page_orbit():
                         "afterwards, on the training data only) catch it: they flag a missing inverse-square pull and "
                         "a failed hold-out forecast, and say <i>not established</i>.</div>",
                         unsafe_allow_html=True)
+    ui.section(2, "The data, and what it needed to find")
     c1, c2 = st.columns(2, gap="large")
     with c1:
-        st.markdown("**What the agent was given**: 3 days of noisy positions (and velocities)")
+        ui.label("The data it was given: 3 noisy days")
         show(viz.orbit_animation(a["t_train"], a["U_train"]), "orbit_anim")
         st.caption("Press ▶ to fly the first orbits. The faint tangle is all 3 training days: the orbit never closes on "
                    "itself, because the bulge keeps turning it.")
     with c2:
         if "kj_t" in a:
-            st.markdown("**Why the bulge matters**: same start, two laws, ~6 orbits")
+            ui.label("Why the bulge matters: same start, two laws")
             show(viz.orbit_kepler_vs_j2(a["kj_t"], a["kj_disc"], a["kj_kep"]), "orbit_kj")
             st.caption("Round-Earth gravity (orange) repeats one ellipse in a fixed plane. The true law (blue) swings the "
                        "plane around the polar axis, as the data do. This is what the agent needed to find.")
     if "raan_disc" in a:
-        st.markdown("**The tell-tale drift**, measured over all 6 days vs the forecasts of the unseen half")
+        ui.label("The tell-tale drift: measured vs forecast")
         show(viz.orbit_elements(a["el_hrs"], a["raan_data"], a["argp_data"], a["hrs"], a["raan_disc"], a["argp_disc"],
                                 a["raan_kep"], a["argp_kep"]), "orbit_el")
     errs = {m: a[f"err{i}"] for i, m in enumerate(info["models"])}
     errs = {("agent" if m == "data-only agent" else m): v for m, v in errs.items()}
-    st.markdown("**Forecast error over the unseen 3 days**")
+    ui.label("Forecast error over the unseen 3 days")
     show(viz.lageos_errors((a["hrs"] - a["hrs"][0]) / 24, errs, xlabel="days into the unseen second half"), "orbit_err")
     st.markdown(LEGEND_ORBIT.replace("Earth's equatorial bulge", "the planet's equatorial bulge").replace(
         "fitted by us; shown for reference only", "here the exact law that generated the data"), unsafe_allow_html=True)
     if info.get("uq") and not info["uq"].get("error"):
+        ui.section(3, "How sure are we, and what next?")
         ui.confidence_panel(info["uq"], "orbit")
     with st.expander("Details & caveats"):
         st.dataframe(pd.DataFrame({PLAIN_ROW.get(k, k): v for k, v in pe.items()}).T.map(lambda v: f"{v:,.3g}"),
                      width="content")
+        if ag.get("refit_rhs"):
+            st.markdown("**The agent's law (refitted constants, blinded units)**")
+            ui.equations(lageos_latex(lageos_agent_rhs(ag)), small=True)
         if ag.get("rationale"):
             st.markdown("**The agent's own reasoning (from its submission)**")
             st.markdown("> " + ag["rationale"][:1500].replace("\n", " "))
@@ -339,7 +349,8 @@ def page_ks():
         rows.append({"term": c["term"], "truth": tv, "refit": c["refit"], "90% CI": c["ci90"],
                      "inside": tv is not None and c["ci90"][0] <= tv <= c["ci90"][1]})
     n_in = sum(x["inside"] for x in rows)
-    ui.question("Can it forecast chaos it has never seen, from noisy data, with coefficients no textbook has?")
+    ui.header("🔥 Chaos", "A blinded chaotic PDE with 2% noise: how long can the found equation forecast?")
+    ui.section(1, "What it found", "and how long the forecast stays useful")
     left, right = st.columns([1.15, 1], gap="large")
     with left:
         hero_video("ks")
@@ -348,7 +359,7 @@ def page_ks():
                    "lines mark when it stops being useful. Chaos defeats every forecast eventually.")
     with right:
         v = info.get("verdict") or ag.get("verdict") or {}
-        ui.verdict_chip(v.get("status"), "agent's own verdict")
+        ui.verdict_chip(v.get("status"))
         ui.equations(ui.rhs_latex(ag["refit"] if isinstance(ag["refit"], dict) else {"u": ag["refit"]}, pde=True, digits=5), small=True)
         st.caption("hidden truth: " + ", ".join(f"{x['truth']:.4g} {x['term'].replace('*', '·')}" for x in rows
                                                  if x["truth"] is not None))
@@ -364,8 +375,10 @@ def page_ks():
         ])
         tool_chips(info.get("tools"))
     errs = {lab: a[f"err{i}"] for i, lab in enumerate(info["labels"]) if i > 0}
+    ui.section(2, "Forecast error", "measured in Lyapunov times: how fast chaos destroys any forecast")
     show(viz.ks_errors(a["t_lyap"], errs), "ks_err")
     if info.get("uq"):
+        ui.section(3, "How sure are we, and what next?")
         ui.confidence_panel(info["uq"], "ks", names={"u_xx": "u_xx (anti-diffusion)", "u_xxxx": "u_xxxx (hyper-diffusion)",
                                                        "u*u_x": "u·u_x (steepening)"})
     with st.expander("Details & caveats"):
@@ -399,7 +412,8 @@ def page_gs():
     res = info.get("results")
     vr = (res or {}).get("vrmse") or {}
     agent = (res or {}).get("agent")
-    ui.question("Can it forecast reaction–diffusion patterns from two noisy movies, against neural surrogates?")
+    ui.header("🌀 Patterns", "Gray–Scott reaction–diffusion (The Well): two noisy movies in → equation → forecast a new run")
+    ui.section(1, "What it found", "and where each forecast goes wrong")
     left, right = st.columns([1.15, 1], gap="large")
     with left:
         if info.get("has_video") and hero_video("gray_scott"):
@@ -409,7 +423,7 @@ def page_gs():
             st.caption("Press ▶. Forecast video appears when the out-of-sample run finishes.")
     with right:
         if agent:
-            ui.verdict_chip("VALIDATED", "held-out trajectory")
+            ui.verdict_chip("VALIDATED")
             ui.equations(ui.rhs_latex(agent["refit"], pde=True, digits=3), small=True)
         else:
             ui.verdict_chip("PENDING", "data-only agent run in progress · true law shown")
@@ -436,8 +450,10 @@ def page_gs():
             ui.chips(["2 noisy training movies", "forecast held-out trajectory", "VRMSE as in The Well",
                       "FNO on same data"], title="protocol")
     if vr:
+        ui.section(2, "Forecast error", "lower is better; dashed lines: published neural surrogates")
         show(viz.gs_vrmse(vr), "gs_vrmse")
     if info.get("uq") and not info["uq"].get("error"):
+        ui.section(3, "How sure are we, and what next?")
         ui.confidence_panel(info["uq"], "gs", names={"A_xx": "diffusion of A (x)", "A_yy": "diffusion of A (y)",
                                                       "B_xx": "diffusion of B (x)", "B_yy": "diffusion of B (y)",
                                                       "A*B**2": "reaction A·B²", "A": "decay of A", "B": "decay of B",
