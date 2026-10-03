@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+datasets/
+runs/
+memory/
+outputs/            # PySR hall-of-fame files
+.ipynb_checkpoints/
+.DS_Store

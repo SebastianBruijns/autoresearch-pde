@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eqdisc"
+version = "0.1.0"
+description = "Autoresearch for governing equations: give it data, get the ODE/PDE, how it was found, its confidence, and what to measure next."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "sympy>=1.12",
+  "matplotlib>=3.8",
+  "pandas>=2.0",
+  "pysindy>=2.0",
+  "anthropic>=1.11",
+]
+
+[project.optional-dependencies]
+pysr = ["pysr>=1.0"]                 # symbolic regression tool (installs a Julia backend on first use)
+hdf5 = ["h5py"]                      # .h5 / MATLAB v7.3 ingestion
+notebooks = ["jupyter", "nbformat", "ipykernel"]
+all = ["pysr>=1.0", "h5py", "jupyter", "nbformat", "ipykernel"]
+
+[project.scripts]
+eqdisc-discover = "eqdisc.discover:main"
+eqdisc-agent = "eqdisc.agent:main"
+eqdisc-ingest = "eqdisc.ingest:main"
+eqdisc-datagen = "eqdisc.datagen:main"
+eqdisc-evaluate = "eqdisc.evaluate:main"
+eqdisc-baseline = "eqdisc.baselines:main"
+eqdisc-evolve = "eqdisc.evolve:main"
+eqdisc-blind = "eqdisc.blind:main"
+eqdisc-benchmark = "eqdisc.benchmark:main"
+
+[tool.setuptools.packages.find]
+include = ["eqdisc*"]
+
+[tool.setuptools.package-data]
+eqdisc = ["playbook.md", "skills/*.md"]
