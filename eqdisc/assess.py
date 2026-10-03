@@ -20,6 +20,9 @@ the spread of predictions relative to the measurement noise (a cheap Bayesian-OE
 """
 import itertools
 import json
+import multiprocessing
+import os
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import sympy as sp
@@ -56,10 +59,57 @@ def _layout(meta):
     return solvers.pde_layout(meta) if hasattr(solvers, "pde_layout") else meta
 
 
-def _simulate(meta, rhs, U0, t):
+def _simulate(meta, rhs, U0, t, cap_mult=1.0):
     if meta["kind"] == "ode":
-        return solvers.integrate_ode(meta["variables"], rhs, U0, t, max_seconds=5.0)
-    return solvers.integrate_pde_general(meta["variables"], rhs, _layout(meta), U0, t, max_seconds=20)
+        return solvers.integrate_ode(meta["variables"], rhs, U0, t, max_seconds=5.0 * cap_mult)
+    return solvers.integrate_pde_general(meta["variables"], rhs, _layout(meta), U0, t, max_seconds=20 * cap_mult)
+
+
+# PDE simulations are independent and each can take seconds, so batches of them run in worker processes.
+# EQDISC_WORKERS sets the pool size (1 = serial). Workers are single-threaded and started with 'spawn', because the
+# pipeline runs agent branches in threads and forking a threaded process is unsafe.
+_THREAD_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+# a single-threaded worker is slower per simulation than the multi-threaded serial path, so its wall-clock cap is
+# longer; otherwise simulations that finish serially would time out (NaN, counted as blow-ups) in parallel
+_WORKER_CAP_MULT = 4.0
+_POOL = None
+
+
+def _pool():
+    global _POOL
+    n = int(os.environ.get("EQDISC_WORKERS", max(1, min(16, (os.cpu_count() or 2) - 2))))
+    if n <= 1:
+        return None
+    if _POOL is None:
+        old = {k: os.environ.get(k) for k in _THREAD_VARS}
+        os.environ.update({k: "1" for k in _THREAD_VARS})
+        try:
+            _POOL = ProcessPoolExecutor(n, mp_context=multiprocessing.get_context("spawn"))
+            list(_POOL.map(abs, range(n)))          # start the workers while the single-thread env is set
+        except Exception:  # noqa: BLE001  (e.g. a script without a __main__ guard): run serially
+            _POOL = False
+        finally:
+            for k, v in old.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+    return _POOL or None
+
+
+def _sim_job(job):
+    return _simulate(*job)
+
+
+def _simulate_many(meta, jobs):
+    """[(rhs, U0, t), ...] -> list of simulations, in order. Parallel for PDEs; ODEs are cheap and stay serial."""
+    pool = _pool() if meta["kind"] != "ode" and len(jobs) > 1 else None
+    if pool is not None:
+        try:
+            return list(pool.map(_sim_job, [(meta, rhs, U0, t, _WORKER_CAP_MULT) for rhs, U0, t in jobs]))
+        except Exception:  # noqa: BLE001  (e.g. a broken pool): fall back to serial
+            pass
+    return [_simulate(meta, rhs, U0, t) for rhs, U0, t in jobs]
 
 
 def _noise_std(meta, data):
@@ -137,8 +187,7 @@ def _pde_candidates(meta, data, seed=0):
 def _coef_effects(meta, coefs, U0, tt, noise):
     """Sensitivity of the predicted trajectory to each coefficient (perturbed by its CI half-width), in
     noise units summed over the trajectory: a Fisher-information proxy per coefficient."""
-    base = _simulate(meta, _rhs_with(coefs), U0, tt)
-    eff = {}
+    keys, rhss = [], [_rhs_with(coefs)]
     for v, terms in coefs.items():
         for term, c in terms.items():
             if not c.get("ci90"):
@@ -146,11 +195,15 @@ def _coef_effects(meta, coefs, U0, tt, noise):
             hw = (c["ci90"][1] - c["ci90"][0]) / 2
             pert = {vv: {t_: dict(cc) for t_, cc in tm.items()} for vv, tm in coefs.items()}
             pert[v][term]["fit"] = c["fit"] + hw
-            Y = _simulate(meta, _rhs_with(pert), U0, tt)
-            dev = (Y - base)
-            dev = dev.reshape(len(tt), -1, dev.shape[-1]).mean(1) / noise
-            val = float(np.nansum(np.minimum(dev ** 2, 100.0)))
-            eff[f"{term} in d{v}/dt"] = val if np.isfinite(val) else 0.0
+            keys.append((v, term))
+            rhss.append(_rhs_with(pert))
+    base, *sims = _simulate_many(meta, [(r, U0, tt) for r in rhss])
+    eff = {}
+    for (v, term), Y in zip(keys, sims):
+        dev = (Y - base)
+        dev = dev.reshape(len(tt), -1, dev.shape[-1]).mean(1) / noise
+        val = float(np.nansum(np.minimum(dev ** 2, 100.0)))
+        eff[f"{term} in d{v}/dt"] = val if np.isfinite(val) else 0.0
     return eff
 
 
@@ -181,12 +234,10 @@ def design_experiments(meta, data, models, horizon_frac=1.0, top=5, seed=0, coef
         cands = _pde_candidates(meta, data, seed=seed)
         tt = t[: max(3, int(len(t) * min(horizon_frac, 0.4)))]
     scored = []
+    U0s = [np.asarray(c.get("initial_condition", c.get("U0")), float) for c in cands]
+    allsims = iter(_simulate_many(meta, [(rhs, U0, tt) for U0 in U0s for rhs in models.values()]))
     for c in cands:
-        U0 = np.asarray(c.get("initial_condition", c.get("U0")), float)
-        sims = []
-        for name, rhs in models.items():
-            Y = _simulate(meta, rhs, U0, tt)
-            sims.append((name, Y))
+        sims = [(name, next(allsims)) for name in models]
         good = [(n_, Y) for n_, Y in sims if np.all(np.isfinite(Y))]
         blown = [n_ for n_, Y in sims if not np.all(np.isfinite(Y))]
         if len(good) < 2:
@@ -238,8 +289,7 @@ def sensitivity(meta, data, coefs, base_rhs, t_frac=1.0):
     t = data["t"][: max(3, int(len(data["t"]) * (t_frac if meta["kind"] == "ode" else 0.3)))]
     U0 = U[-1, 0]
     noise = _noise_std(meta, data)
-    Y0 = _simulate(meta, base_rhs, U0, t)
-    out = []
+    items, rhss = [], [base_rhs]
     for v, terms in coefs.items():
         for term, c in terms.items():
             if not c.get("ci90"):
@@ -247,12 +297,16 @@ def sensitivity(meta, data, coefs, base_rhs, t_frac=1.0):
             hw = (c["ci90"][1] - c["ci90"][0]) / 2
             pert = {vv: {tt: dict(cc) for tt, cc in tm.items()} for vv, tm in coefs.items()}
             pert[v][term]["fit"] = c["fit"] + hw
-            Y1 = _simulate(meta, _rhs_with(pert), U0, t)
-            dev = np.abs(Y1 - Y0)
-            red = tuple(range(1, dev.ndim - 1))
-            dev = (dev.mean(axis=red) if red else dev) / noise
-            out.append({"var": v, "term": term, "coef": _r(c["fit"]), "ci90_halfwidth": _r(hw),
-                        "max_effect_in_noise_units": _r(float(np.nanmax(dev)) if np.isfinite(dev).any() else 1e9)})
+            items.append((v, term, c, hw))
+            rhss.append(_rhs_with(pert))
+    Y0, *sims = _simulate_many(meta, [(r, U0, t) for r in rhss])
+    out = []
+    for (v, term, c, hw), Y1 in zip(items, sims):
+        dev = np.abs(Y1 - Y0)
+        red = tuple(range(1, dev.ndim - 1))
+        dev = (dev.mean(axis=red) if red else dev) / noise
+        out.append({"var": v, "term": term, "coef": _r(c["fit"]), "ci90_halfwidth": _r(hw),
+                    "max_effect_in_noise_units": _r(float(np.nanmax(dev)) if np.isfinite(dev).any() else 1e9)})
     out.sort(key=lambda r: -(r["max_effect_in_noise_units"] or 0))
     return out
 
@@ -261,7 +315,7 @@ def predictability(meta, data, models):
     """Time until the plausible models' rollouts spread beyond 3x noise from the last held-out IC."""
     U, t = data["U"], data["t"]
     noise = _noise_std(meta, data)
-    sims = [_simulate(meta, r, U[-1, 0], t) for r in models.values()]
+    sims = _simulate_many(meta, [(r, U[-1, 0], t) for r in models.values()])
     sims = [s for s in sims if np.all(np.isfinite(s))]
     if len(sims) < 2:
         return None
