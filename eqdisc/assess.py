@@ -542,7 +542,7 @@ def grade(res):
     tiny = [m for m in res["missing_term_evidence"] if (m["dBIC_if_added"] or 0) < -10 and m not in strong_add]
     if tiny:
         reasons.append("extra terms that are statistically detectable but do not improve predictions (<2% error "
-                       "reduction or <10% rollout gain; typically differentiation bias): " + ", ".join(m["term"] for m in tiny[:3]))
+                       "reduction or <10% rollout gain; typically numerical/differentiation bias): " + ", ".join(m["term"] for m in tiny[:3]))
     if strong_add:
         reasons.append("data favour adding: " + ", ".join(f"{m['term']} to d{m['var']}/dt (dBIC {m['dBIC_if_added']})" for m in strong_add[:3]))
         score -= 2

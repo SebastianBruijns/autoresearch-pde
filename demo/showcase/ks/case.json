@@ -1,0 +1,346 @@
+{
+ "title": "Real Kuramoto\u2013Sivashinsky data",
+ "kind": "dynamics",
+ "discovery": {
+  "verdict": {
+   "status": "CONFIDENT",
+   "headline": "We are confident this is your equation.",
+   "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. Predictions are reliable for about 35.2 time units from a new state. To validate it independently, the most demanding test would be: localised pulse (width 5% of domain), 1.5x data amplitude."
+  },
+  "final_model": {
+   "u": "-u*u_x - u_xx - u_xxxx"
+  },
+  "story": {
+   "headline": "The dataset is a single 1-D periodic chaotic field u(x,t) on a domain of length about 100.5, and the recovered law is the Kuramoto\u2013Sivashinsky equation, u_t = \u2212u\u00b7u_x \u2212 u_xx \u2212 u_xxxx: nonlinear advection plus long-wave anti-diffusion plus short-wave hyperdiffusion, all with unit coefficients.",
+   "key_steps": [
+    {
+     "observation": "The spatial mean of u is zero to machine precision (\u2248\u22124e-17) and stays constant. The data are periodic, smooth and nearly noise-free.",
+     "decision": "Exclude the constant, u and u\u00b2 terms from the library. This favours right-hand sides written as spatial derivatives of a flux, which automatically keep the mean fixed.",
+     "outcome": "The search focused on derivative terms up to 4th order and quadratic nonlinearities."
+    },
+    {
+     "observation": "Strong-form SINDy picked the same three terms (u_xx, u_xxxx, u\u00b7u_x) with coefficients within 1% of \u22121. This held across differentiation methods: Savitzky\u2013Golay with a low-pass filter gave \u22121.0007, \u22121.0007, \u22121.0001, and plain finite differences gave about \u22120.992.",
+     "decision": "Treat the three-term model with unit coefficients as the incumbent. Treat the tiny extra terms that appear without filtering (e.g. \u22120.002\u00b7u\u00b7u_xxx) as differentiation noise.",
+     "outcome": "Submitted u_t = \u2212u\u00b7u_x \u2212 u_xx \u2212 u_xxxx. Dropping any of the three terms raised the strong-form BIC by about 26,000, so all three are needed."
+    },
+    {
+     "observation": "Weak-form SINDy disagreed. With u excluded, it dropped u_xx and returned shrunken coefficients (\u22120.20\u00b7u_xxxx, \u22120.38\u00b7u\u00b7u_x). With the full library, it returned a spurious \u22120.99\u00b7u term and an inflated \u22121.46\u00b7u_xx term.",
+     "decision": "Interpret this as a weak-form artefact rather than physics. On a field dominated by a narrow band of wavenumbers, a u term and a u_xx term are nearly interchangeable (both look like a constant times u in Fourier space), so the weak form can trade one for the other.",
+     "outcome": "Kept the incumbent model. The statistical assessment below is built on this weak-form fit, so it inherits the inconsistency."
+    },
+    {
+     "observation": "A model comparison by cross-validated derivative error slightly preferred adding \u22120.005\u00b7u\u00b7u_xxx. However, a direct spectral time-stepping test of the incumbent, started from data snapshots, matched the data with relative errors of about 1e-13 to 1e-7 over several steps.",
+     "decision": "Rejected the extra terms as fitting noise in the derivative estimates.",
+     "outcome": "The red-team attack on the incumbent failed, and the model was resubmitted unchanged."
+    }
+   ],
+   "physical_interpretation": "\u2212u_xx is negative (anti-)diffusion: it destabilises long wavelengths and injects energy into the system. \u2212u_xxxx is hyperdiffusion: it damps short wavelengths. Together they select an intrinsic length scale of about 2\u03c0\u221a2. \u2212u\u00b7u_x is Burgers-type nonlinear advection, written in conservative form as \u2212(u\u00b2/2)_x; it moves energy from unstable to damped scales, sustains spatiotemporal chaos, and conserves the spatial mean. This is the standard model for flame-front instabilities, thin-film flow and phase turbulence.",
+   "caveats": [
+    "The automated assessment reports low confidence. It says u_xx is not significant, strongly favours adding a u term (dBIC \u22121860), and lists five equally good models. All of this comes from the weak-form fit. That fit returned coefficients shrunk by a factor of 3\u20135 and confuses u with u_xx, so it contradicts both the strong-form fits and the direct spectral time-stepping check. Before trusting these flags, inspect the weak-form normalisation and test-function scaling.",
+    "The toolkit's rollout valid time is only 1.2 time units (3 samples), and its predictability horizon is 0.8. The system is chaotic, so long-horizon pointwise agreement is not expected. Still, this short horizon is hard to reconcile with the ~1e-7 one-step errors from the custom spectral solver; the toolkit's integrator or its differentiation may be the limiting factor.",
+    "Only one trajectory is available. The u \u2194 u_xx degeneracy, and any small higher-order correction such as u\u00b7u_xxx at about 0.5%, cannot be fully ruled out from this single run.",
+    "The data appear to be clean simulation output (this is the PySINDy tutorial KS dataset). Robustness to measurement noise has therefore not been tested."
+   ],
+   "recommendation": "Use u_t = \u2212u\u00b7u_x \u2212 u_xx \u2212 u_xxxx: it is the canonical Kuramoto\u2013Sivashinsky equation and is recovered consistently by strong-form regression. If the remaining ambiguity matters, simulate or collect a second run from the same initial profile at about 3\u00d7 amplitude, plus a single-mode (k=6) start. These would separate the u\u00b7u_x and u_xx coefficients and settle the u-versus-u_xx degeneracy raised by the weak-form analysis."
+  },
+  "insights": [
+   {
+    "step": "Read the data",
+    "finding": "PDE dataset 'real_ks': variables ['u'], U shape [1, 251, 1024, 1] (n_traj, nt, nx, n_fields), dt=0.4, boundary=periodic, grid={'x': {'n': 1024, 'L': 100.531, 'dx': 0.0981748, 'x0': 0.0981748}}. 6 assumptions (0 not high-confidence), 0 warnings.",
+    "why_it_matters": "No data-quality warnings."
+   },
+   {
+    "step": "Diagnosed the data",
+    "finding": "noise about 0.2% of signal; adequate sampling",
+    "why_it_matters": "Low noise: derivative-based regression is reliable."
+   },
+   {
+    "step": "Repaired the model",
+    "finding": "add u*u_xxx in du/dt (\u0394BIC -243)",
+    "why_it_matters": "A strongly supported single-term edit: the earlier model was near-correct."
+   },
+   {
+    "step": "Compared candidate models",
+    "finding": "Lowest CV derivative error: plus_uuxxx (0.0738, 4 terms). Significantly worse: incumbent (+1.6%, z=4.1, dBIC=312), plus_u2uxx (+1.3%, z=4.3, dBIC=244), weak4 (+1.5%, z=4.9, dBIC=247). Prefer plus_uuxxx. Rollout valid frac 1.00 (best 1.00). Its error is 27.6x the noise floor (0.00268): systematic err",
+    "why_it_matters": ""
+   },
+   {
+    "step": "Assessed the final model",
+    "finding": "LOW confidence: 1 term(s) not significantly non-zero: u_xx in du/dt; data favour adding: u to du/dt (dBIC -1860.0), u*u*u_xxx to du/dt (dBIC -14.9); 5 structurally different models fit equally well: ['submitted', 'u*u_xxx in du/dt', 'u*u*u_xx in du/dt', 'u*u*u_xxxx in du/dt', 'u_xx in du/dt']",
+    "why_it_matters": ""
+   }
+  ],
+  "assessment": {
+   "terms": [
+    {
+     "var": "u",
+     "term": "u_xx",
+     "coef": -1.001,
+     "submitted_coef": -1.0,
+     "ci90": [
+      -1.005,
+      -0.9999
+     ],
+     "rel_uncertainty": 0.002581,
+     "significant": true,
+     "dBIC_if_removed": 26000.0
+    },
+    {
+     "var": "u",
+     "term": "u_xxxx",
+     "coef": -1.002,
+     "submitted_coef": -1.0,
+     "ci90": [
+      -1.006,
+      -1.0
+     ],
+     "rel_uncertainty": 0.002759,
+     "significant": true,
+     "dBIC_if_removed": 26800.0
+    },
+    {
+     "var": "u",
+     "term": "u*u_x",
+     "coef": -0.996,
+     "submitted_coef": -1.0,
+     "ci90": [
+      -0.9992,
+      -0.9944
+     ],
+     "rel_uncertainty": 0.002394,
+     "significant": true,
+     "dBIC_if_removed": 27200.0
+    }
+   ],
+   "missing_term_evidence": [
+    {
+     "var": "u",
+     "term": "u*u_xxx",
+     "dBIC_if_added": -243.0,
+     "error_reduction": 0.0465,
+     "rollout_improvement": 0.00166
+    },
+    {
+     "var": "u",
+     "term": "u*u*u_xx",
+     "dBIC_if_added": -70.0,
+     "error_reduction": 0.0233,
+     "rollout_improvement": -0.00275
+    },
+    {
+     "var": "u",
+     "term": "u",
+     "dBIC_if_added": -35.1,
+     "error_reduction": 0.0,
+     "rollout_improvement": -5.23
+    },
+    {
+     "var": "u",
+     "term": "u*u",
+     "dBIC_if_added": 7.3,
+     "error_reduction": 0.0
+    }
+   ],
+   "model_ambiguity": null,
+   "noise_floor": {
+    "floor": 0.0026764731074988297
+   },
+   "validation": {
+    "deriv_nrmse": 0.07837354812076125,
+    "rollout_valid_time": 1.2000000000000002,
+    "rollout_horizon": 1.2000000000000002,
+    "rollout_blew_up": false
+   },
+   "predictability": {
+    "horizon": 35.2,
+    "horizon_is_full_data_span": false,
+    "meaning": "the plausible models agree (within 3x noise) up to this time from the held-out initial state"
+   },
+   "experiments": {
+    "ranked": [
+     {
+      "score": 46.6,
+      "max_snr": 50.7,
+      "models_blow_up": [],
+      "most_separated": null,
+      "description": "localised pulse (width 5% of domain), 1.5x data amplitude",
+      "gain_vs_existing_data": null,
+      "informs_coefficients": [
+       {
+        "coefficient": "u*u_x in du/dt",
+        "info_gain_vs_existing": 2.26
+       },
+       {
+        "coefficient": "u_xx in du/dt",
+        "info_gain_vs_existing": 2.12
+       },
+       {
+        "coefficient": "u_xxxx in du/dt",
+        "info_gain_vs_existing": 1.93
+       }
+      ]
+     },
+     {
+      "score": 29.9,
+      "max_snr": 16.7,
+      "models_blow_up": [],
+      "most_separated": null,
+      "description": "single Fourier mode k=3 (wavelength L/3), data amplitude",
+      "gain_vs_existing_data": null,
+      "informs_coefficients": [
+       {
+        "coefficient": "u*u_x in du/dt",
+        "info_gain_vs_existing": 5.46
+       },
+       {
+        "coefficient": "u_xx in du/dt",
+        "info_gain_vs_existing": 5.41
+       },
+       {
+        "coefficient": "u_xxxx in du/dt",
+        "info_gain_vs_existing": 2.9
+       }
+      ]
+     },
+     {
+      "score": 10.1,
+      "max_snr": 13.0,
+      "models_blow_up": [],
+      "most_separated": null,
+      "description": "same initial profile as the last trajectory, amplitude x0.5",
+      "gain_vs_existing_data": null,
+      "informs_coefficients": [
+       {
+        "coefficient": "u_xxxx in du/dt",
+        "info_gain_vs_existing": 0.794
+       },
+       {
+        "coefficient": "u_xx in du/dt",
+        "info_gain_vs_existing": 0.497
+       },
+       {
+        "coefficient": "u*u_x in du/dt",
+        "info_gain_vs_existing": 0.484
+       }
+      ]
+     },
+     {
+      "score": 6.48,
+      "max_snr": 3.56,
+      "models_blow_up": [],
+      "most_separated": null,
+      "description": "single Fourier mode k=6 (wavelength L/6), data amplitude",
+      "gain_vs_existing_data": null,
+      "informs_coefficients": [
+       {
+        "coefficient": "u_xxxx in du/dt",
+        "info_gain_vs_existing": 526.0
+       },
+       {
+        "coefficient": "u_xx in du/dt",
+        "info_gain_vs_existing": 358.0
+       },
+       {
+        "coefficient": "u*u_x in du/dt",
+        "info_gain_vs_existing": 43.2
+       }
+      ]
+     },
+     {
+      "score": 4.17,
+      "max_snr": 6.49,
+      "models_blow_up": [],
+      "most_separated": null,
+      "description": "same initial profile as the last trajectory, amplitude x3.0",
+      "gain_vs_existing_data": null,
+      "informs_coefficients": [
+       {
+        "coefficient": "u_xx in du/dt",
+        "info_gain_vs_existing": 2.7
+       },
+       {
+        "coefficient": "u*u_x in du/dt",
+        "info_gain_vs_existing": 2.61
+       },
+       {
+        "coefficient": "u_xxxx in du/dt",
+        "info_gain_vs_existing": 2.36
+       }
+      ]
+     }
+    ],
+    "existing_data_discrimination": null,
+    "n_models": 5,
+    "note": "score = mean over the predicted trajectory of (spread of plausible models / noise)^2, capped at 100 (10 sigma); >1 means a measurement here would discriminate between them. informs_coefficients = how many times more information about each coefficient than re-measuring an existing initial condition"
+   },
+   "data_advice": [
+    "Only 1 trajectory(ies): independent runs from different initial conditions are the cheapest way to separate competing models."
+   ],
+   "confidence": {
+    "level": "high",
+    "points": 3,
+    "reasons": [
+     "all terms significantly non-zero (bootstrap 90% CIs exclude 0)",
+     "extra terms that are statistically detectable but do not improve predictions (<2% error reduction or <10% rollout gain; typically differentiation bias): u*u_xxx, u*u*u_xx, u",
+     "no single added term is supported by the data",
+     "held-out rollout stays within 30% error for 100% of the horizon"
+    ]
+   },
+   "questions_for_human": [
+    "The data favour adding u*u_xxx to du/dt (dBIC -243.0). Is there a mechanism for it, or could it be an artefact (sensor drift, forcing, unmodelled coupling)?",
+    "The data favour adding u*u*u_xx to du/dt (dBIC -70.0). Is there a mechanism for it, or could it be an artefact (sensor drift, forcing, unmodelled coupling)?",
+    "The data favour adding u to du/dt (dBIC -35.1). Is there a mechanism for it, or could it be an artefact (sensor drift, forcing, unmodelled coupling)?",
+    "Can you run an experiment starting from localised pulse (width 5% of domain), 1.5x data amplitude? It is predicted to be the most informative (score 46.6), mainly about u*u_x in du/dt, u_xx in du/dt."
+   ],
+   "statistics_basis": "strong form (smoothed derivatives)"
+  },
+  "branches": {
+   "structure-first": {
+    "model": {
+     "u": "-u*u_x - u_xx - u_xxxx"
+    },
+    "rationale": "The spatial mean stays constant, which points to an equation in conservative (flux) form. Strong-form SINDy on this nearly noise-free data, with a SavGol window of 5, low-pass 0.5 and a library going up to u_xxxx with no source terms, gave the same three terms at every threshold from 0.01 to 0.3: u*u_x, u_xx and u_xxxx, each with coefficient -1.000 \u00b1 0.001. This is the Kuramoto\u2013Sivashinsky equation. Rounded to unit coefficients, its rollout error on the held-out data is about 1e-4. Weak SINDy failed here, probably because its test functions were too narrow in time for the coarse dt.",
+    "cost_usd": 0.247
+   },
+   "symbolic": {
+    "model": {
+     "u": "-u*u_x - u_xx - u_xxxx"
+    },
+    "rationale": "Kuramoto\u2013Sivashinsky equation. The spatial mean is conserved, so the right-hand side is in flux form. Strong-form SINDy (savgol, window 5) on the near-noise-free data recovers -1.002 u_xx - 1.002 u_xxxx - 1.000 u u_x as a stable 3-term plateau over thresholds 0.03 to 0.3. Extra terms only lower the error a little and have coefficients below 0.003. With all coefficients set to exactly 1, the model gives rollout NRMSE 1.2e-4 and deriv NRMSE 0.078 on held-out data, as good as or better than the fitted 4-term version. This matches the flame-front / thin-film prior.",
+    "cost_usd": 0.181
+   },
+   "sparse-regression": {
+    "model": {
+     "u": "-u*u_x - u_xx - u_xxxx"
+    },
+    "rationale": "Spatial mean conserved -> flux form. Strong-form SINDy with finite differences (data nearly noise-free, ~0.2%) gives a clear 3-term elbow: u_t = -0.991(u u_x + u_xx + u_xxxx); the uniform ~1% shrinkage is the bias of time differencing at dt=0.4. Unit coefficients (the Kuramoto\u2013Sivashinsky equation, as the flame-front prior suggests) give a lower rollout error (1.2e-4 vs 3.2e-4) and the same derivative error. Extra terms only add coefficients around 1e-4 with no gain.",
+    "cost_usd": 0.243
+   }
+  },
+  "winner_branch": "structure-first",
+  "tournament": {
+   "winner": "structure-first",
+   "verdict": "Lowest CV derivative error: structure-first (0.075, 3 terms). Indistinguishable from it: symbolic (+0.0%, z=0.0), sparse-regression (+0.0%, z=0.0). Prefer structure-first. Rollout valid frac 1.00 (best 1.00). Its error is 28.0x the noise floor (0.00268): systematic error remains (missing/wrong terms, or differentiation bias / correlated noise).",
+   "ranking": [
+    "structure-first",
+    "symbolic",
+    "sparse-regression"
+   ]
+  },
+  "adversary": {
+   "rationale": "Red-team attack failed; submitting the incumbent Kuramoto\u2013Sivashinsky equation unchanged. Attempts: (1) weak SINDy (deg 3, max_deriv 4) picked -0.99u -1.46u_xx, which is an artifact of temporal test functions at the coarse dt=0.4; it validates badly (deriv_nrmse 3.5, rollout valid 0.4). (2) Strong-form SINDy and repair suggested tiny extra terms (u*u_xxx coef 0.005, u^2*u_xx, u) that lower CV derivative error by ~1.6%; but the derivative error (~7%) is dominated by finite-difference bias at dt=0.4, so these terms compensate differentiation bias. (3) Decisive derivative-free test: ETDRK4 spectral integration of each model from data snapshots at t-index 0, 100, 200 for 40 steps (16 time units, chaotic regime). Incumbent reproduces the data to relative error 1e-8 to 2e-7; the u*u_xxx challenger drifts to 1e-2 to 5e-2. The incumbent with unit coefficients is the exact generator; the 'u_xx not significant' flag and the added terms are artifacts of differentiating coarse time samples.",
+   "cost_usd": 0.596
+  },
+  "cost_usd": 1.349,
+  "wall_s": 451.0
+ },
+ "truth": {
+  "u": "-u*u_x - u_xx - u_xxxx"
+ },
+ "truth_note": "textbook KS (PySINDy tutorial data)",
+ "names": [
+  "u"
+ ],
+ "pde": true,
+ "source": "KS_data.mat (PySINDy tutorial), 1024 x 251 grid"
+}

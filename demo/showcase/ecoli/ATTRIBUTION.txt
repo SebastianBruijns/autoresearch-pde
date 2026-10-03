@@ -1,0 +1,4 @@
+train.csv / test_id.csv / test_ood.csv: E. coli growth (bactgrow) problem from the LLM-SR repository,
+https://github.com/deep-symbolic-mathematics/LLM-SR (MIT License).
+Shojaee, Meidani, Gupta, Barati Farimani, Reddy. LLM-SR: Scientific Equation Discovery via Programming with
+Large Language Models. ICLR 2025 (arXiv:2404.18400).

@@ -549,7 +549,7 @@ def _tool_result_content(out_s, images):
 
 def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", max_tools=25, experiments=0,
               out_dir=None, verbose=True, client=None, critic=True, learn=False, use_memory=True, report=True,
-              judge_llm=True, human=None, context=None, final_assessment=True, use_skills=True):
+              judge_llm=True, human=None, context=None, final_assessment=True, use_skills=True, on_event=None, tag=""):
     """Run one discovery session. Returns {"submitted", "hidden_eval", "usage", "out_dir", ...}.
     `dataset` is a dataset directory, or a raw data file (npz/mat/csv/h5...) that is ingested first."""
     client = client or make_client()
@@ -590,6 +590,7 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
     messages = [{"role": "user", "content": intro + f"Experiment budget: {experiments if sess.truth else 0}. "
                  "Discover the governing equations."}]
     say = (lambda *a: print(*a, flush=True)) if verbose else (lambda *a: None)
+    emit = (lambda ev: on_event({**ev, "branch": tag})) if on_event else (lambda ev: None)
     n_tools, t0 = 0, time.time()
 
     while sess.submitted is None:
@@ -603,6 +604,7 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
         for b in resp.content:
             if b.type == "text" and b.text.strip():
                 say(f"  [agent] {b.text.strip()[:400]}")
+                emit({"type": "note", "text": b.text.strip()[:600]})
                 sess.log.append({"type": "text", "text": b.text})
         if resp.stop_reason == "refusal":
             say("  [agent] request declined; stopping")
@@ -633,6 +635,10 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
                             "content": _tool_result_content(out_s + note, images),
                             **({"is_error": True} if "error" in out else {})})
             v = out.get("validation_original", out.get("validation", out if u.name == "validate" else {}))
+            emit({"type": "tool", "n": n_tools, "name": u.name, "input": json.dumps(u.input, default=str)[:300],
+                  "rhs": (out.get("rhs_original") or out.get("rhs")) if isinstance(out, dict) else None,
+                  "valid_time": v.get("rollout_valid_time")
+                  if isinstance(v, dict) else None, "error": out.get("error") if isinstance(out, dict) else None})
             say(f"  [tool {n_tools:02d}] {u.name}({json.dumps(u.input)[:160]}) {time.time() - ts:.1f}s "
                 f"-> {json.dumps(v.get('rhs', ''))[:160]} deriv={v.get('deriv_nrmse', '-')} "
                 f"valid_t={v.get('rollout_valid_time', '-')}")

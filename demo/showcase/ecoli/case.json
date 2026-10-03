@@ -1,0 +1,62 @@
+{
+ "title": "E. coli growth (LLM-SR benchmark)",
+ "kind": "static",
+ "names": [
+  "b",
+  "s",
+  "temp",
+  "pH"
+ ],
+ "target": "db",
+ "expr": "0.5*b*s/(1+s)/(1+((temp-35)/3.76)**4)*exp(-abs(pH-7))*sin(3.141592653589793*(pH-2)/10)**2",
+ "candidates": [
+  {
+   "expr": "0.5*b*s/(1+s)/(1+((temp-35)/3.76)**4)*exp(-abs(pH-7))*sin(3.141592653589793*(pH-2)/10)**2",
+   "rationale": "Monod growth mu*B*S/(K+S) with mu=0.5, K=1; temperature factor is a Hill-type peak centred at 35 \u00b0C (n=4, width 3.76); pH factor is exp(-|pH-7|)*sin^2(pi(pH-2)/10), which goes to zero at pH 2 and 12. Validation NMSE is about 1.9e-5, which appears to be the noise floor.",
+   "val_nmse": 1.906e-05,
+   "train_nmse": 1.679e-05,
+   "val_r2": 1.0,
+   "complexity": 22
+  },
+  {
+   "expr": "0.4875*b*s/(1.0029+s)/(1+Abs((temp-35.0023)/3.7617)**4.0153)*exp(-Abs((pH-6.9999)/0.9305)**1.1421)",
+   "rationale": "Multiplicative structure: growth proportional to b, Monod saturation in s, a flat-topped peak in temperature at 35 (1/(1+|x/w|^4)), and a stretched-exponential pH peak at 7. Validation NMSE about 1.6e-4.",
+   "val_nmse": 0.0001599,
+   "train_nmse": 0.0001784,
+   "val_r2": 0.9998,
+   "complexity": 20
+  }
+ ],
+ "cost_usd": 2.649,
+ "wall_s": 444,
+ "test_id": 1.669320187986617e-05,
+ "test_ood": 1.9213452729018825e-05,
+ "latex": "\\frac{dB}{dt} = 0.5\\,\\frac{B\\,S}{1+S}\\cdot\\frac{1}{1+\\left(\\frac{T-35}{3.76}\\right)^{4}}\\cdot e^{-|\\mathrm{pH}-7|}\\,\\sin^{2}\\!\\left(\\frac{\\pi(\\mathrm{pH}-2)}{10}\\right)",
+ "comparison": [
+  {
+   "method": "eqdisc agent (ours)",
+   "ID": 1.669320187986617e-05,
+   "OOD": 1.9213452729018825e-05
+  },
+  {
+   "method": "LLM-SR (Mixtral)",
+   "ID": 0.0026,
+   "OOD": 0.0037
+  },
+  {
+   "method": "LLM-SR (GPT-3.5)",
+   "ID": 0.0214,
+   "OOD": 0.0264
+  },
+  {
+   "method": "PySR",
+   "ID": 0.0376,
+   "OOD": 1.0141
+  },
+  {
+   "method": "uDSR",
+   "ID": 0.3322,
+   "OOD": 5.4584
+  }
+ ]
+}

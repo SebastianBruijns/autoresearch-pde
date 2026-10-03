@@ -1,0 +1,574 @@
+{
+ "title": "Satellite orbit with J2",
+ "kind": "dynamics",
+ "discovery": {
+  "verdict": {
+   "status": "CONFIDENT",
+   "headline": "We are confident this is your equation: no term is in doubt and no feasible experiment is more informative than the data you already have.",
+   "recommendation": "Use it. Predictions agree across plausible models for about 7.59 time units."
+  },
+  "final_model": {
+   "x": "vx",
+   "y": "vy",
+   "z": "vz",
+   "vx": "-x/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(1-5*z**2/(x**2+y**2+z**2)))",
+   "vy": "-y/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(1-5*z**2/(x**2+y**2+z**2)))",
+   "vz": "-z/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(3-5*z**2/(x**2+y**2+z**2)))"
+  },
+  "story": {
+   "headline": "The data are a single 3-D trajectory of a test particle orbiting an oblate central body, and the discovered equation is Newtonian point-mass gravity (\u03bc = 1) plus the axisymmetric J2 oblateness correction: a = \u2212r/|r|\u00b3 \u00b7 [1 + 0.75/|r|\u00b2 \u00b7 (1 \u2212 5z\u00b2/|r|\u00b2)] in x and y, with (3 \u2212 5z\u00b2/|r|\u00b2) in z.",
+   "key_steps": [
+    {
+     "observation": "The data hold one trajectory with six state variables (x, y, z, vx, vy, vz) and 4321 samples. Positions equal the integrals of the velocities. The radius stays bounded between about 1.1 and 2.5.",
+     "decision": "Treat the system as second-order mechanics under a central-type force: dx/dt = v, and model only the accelerations.",
+     "outcome": "The kinematic equations x' = vx, y' = vy, z' = vz were confirmed. Each has a coefficient of 1.000 \u00b1 0.0005."
+    },
+    {
+     "observation": "A pure Kepler (inverse-square) force left a large derivative error (NRMSE \u2248 0.23). The leftover acceleration was anisotropic, with weaker residuals in z than in x and y.",
+     "decision": "Regress the accelerations onto a library of multipole-style terms (q/r\u00b3, q/r\u2075, q z\u00b2/r\u2077, q z/r\u2077, \u2026).",
+     "outcome": "The q/r\u00b3 coefficient came out at \u2248 \u22121.00. A very strong q z\u00b2/r\u2077 term appeared (t \u2248 129), together with a q/r\u2075 term. This is the signature of the J2 (quadrupole) term of an oblate body."
+    },
+    {
+     "observation": "The J2 skeleton fitted cleanly (\u03bc \u2248 0.995, k \u2248 0.743).",
+     "decision": "Test richer alternatives: adding J4, adding J3, and adding a rotating-frame term.",
+     "outcome": "None helped. J4 gave a coefficient of \u22120.005, and RMS changed only from 0.01599 to 0.01583, with similar results on a held-out split. The model was kept at \u03bc + J2 only."
+    },
+    {
+     "observation": "Derivative-based estimates are slightly attenuated by the Savitzky\u2013Golay smoothing.",
+     "decision": "Fit \u03bc and k by trajectory shooting, integrating the ODE and matching the observed states directly, with the initial state also fitted.",
+     "outcome": "\u03bc = 1.00004 \u00b1 0.0002 and k = 0.75008 \u00b1 0.0001, with residual/std \u2248 0.010. These were rounded to \u03bc = 1 and k = 0.75 (i.e. (3/2)\u00b7J2\u00b7R\u00b2 = 0.75, so J2\u00b7R\u00b2 = 0.5)."
+    },
+    {
+     "observation": "The final model's derivative error is at the estimated noise floor (ratio 1.02). Symbolic and structure-first searches converged on the same structure.",
+     "decision": "Submit the J2 model.",
+     "outcome": "All 12 terms are highly significant (\u0394BIC on removal: 1860\u20136060). No added candidate term is convincingly supported."
+    }
+   ],
+   "physical_interpretation": "The \u2212r/|r|\u00b3 term is Newtonian gravity of the central mass, with GM normalised to 1. The 0.75/|r|\u00b2 bracket term is the J2 quadrupole perturbation from the body's equatorial bulge, with strength (3/2)\u00b7J2\u00b7R\u00b2 = 0.75. Its z\u00b2-dependence pulls the orbit toward the equatorial plane and makes it non-Keplerian, so the orbital plane precesses about the z-axis and the periapsis rotates. The different constant in the z-equation (3 instead of 1) is exactly the gradient of the J2 potential \u2212(\u03bc J2 R\u00b2/2r\u00b3)(3z\u00b2/r\u00b2 \u2212 1), so the force is conservative.",
+   "caveats": [
+    "Only one trajectory was available, covering radii \u2248 1.1\u20132.5. Higher harmonics (J3, J4) that matter mostly at small radius are constrained only within this range.",
+    "Derivative-based bootstrap CIs on the J2 coefficients (e.g. \u22120.731 [\u22120.740, \u22120.722] vs submitted \u22120.75) technically exclude the submitted values. This is consistent with smoothing bias. The trajectory-shooting fit (0.7501 \u00b1 0.0001) is the more trustworthy estimate.",
+    "Long-horizon pointwise prediction is limited. The held-out rollout stays within 30% error for only a small fraction of the horizon, and the inter-model predictability horizon is \u2248 7.6 time units, roughly half an orbit. Tiny errors in \u03bc or k accumulate as orbital phase drift, even though the orbit shape is reproduced well.",
+    "A borderline vx \u221d vy\u00b3 term (\u0394BIC \u22123.2) was flagged. It is velocity-dependent, asymmetric, and has no physical basis in gravitational dynamics, so it is most likely a noise artifact.",
+    "Assessment confidence is rated medium. The main reason is single-trajectory coverage, not fit quality."
+   ],
+   "recommendation": "Use the \u03bc = 1, J2 (k = 0.75) model. It fits to the noise floor and is the physically expected form. To firmly rule out J3/J4 or a non-inertial frame, record 2\u20133 additional orbits from different initial conditions. These should include lower periapsis (r < 1.1), where higher harmonics grow fastest, and different inclinations. The suggested initial condition [3.21, 0.25, \u22121.74, \u22121.21, 0.04, 0.33] is predicted to be the most informative."
+  },
+  "insights": [
+   {
+    "step": "Diagnosed the data",
+    "finding": "noise about 1.3% of signal; adequate sampling",
+    "why_it_matters": "Noise above ~1% means derivative-based fits are biased, so weak-form methods were preferred."
+   },
+   {
+    "step": "Compared candidate models",
+    "finding": "Lowest CV derivative error: J2_0.5 (0.0571, 12 terms). Indistinguishable from it: J2_0.4966 (+0.0%, z=0.0). Significantly worse: kepler (+400.2%, z=14.4, dBIC=6587). Prefer J2_0.5. Rollout valid frac 0.39 (best 0.39). Its error is AT the estimated noise floor (0.0558, ratio 1.02): the model is about",
+    "why_it_matters": ""
+   },
+   {
+    "step": "Assessed the final model",
+    "finding": "MEDIUM confidence: all terms significantly non-zero (bootstrap 90% CIs exclude 0); no single added term is supported by the data; residual error is at the noise floor (x1.02)",
+    "why_it_matters": ""
+   }
+  ],
+  "assessment": {
+   "terms": [
+    {
+     "var": "x",
+     "term": "vx",
+     "coef": 0.9998,
+     "submitted_coef": 1.0,
+     "ci90": [
+      0.9992,
+      1.0
+     ],
+     "rel_uncertainty": 0.0006442,
+     "significant": true,
+     "dBIC_if_removed": 5870.0
+    },
+    {
+     "var": "y",
+     "term": "vy",
+     "coef": 1.0,
+     "submitted_coef": 1.0,
+     "ci90": [
+      0.9997,
+      1.001
+     ],
+     "rel_uncertainty": 0.0004724,
+     "significant": true,
+     "dBIC_if_removed": 5840.0
+    },
+    {
+     "var": "z",
+     "term": "vz",
+     "coef": 0.9999,
+     "submitted_coef": 1.0,
+     "ci90": [
+      0.9995,
+      1.0
+     ],
+     "rel_uncertainty": 0.0004507,
+     "significant": true,
+     "dBIC_if_removed": 6060.0
+    },
+    {
+     "var": "vx",
+     "term": "x/(x**2 + y**2 + z**2)**1.5",
+     "coef": -1.003,
+     "submitted_coef": -1.0,
+     "ci90": [
+      -1.005,
+      -1.001
+     ],
+     "rel_uncertainty": 0.002073,
+     "significant": true,
+     "dBIC_if_removed": 4210.0
+    },
+    {
+     "var": "vx",
+     "term": "x/(x**2 + y**2 + z**2)**2.5",
+     "coef": -0.7309,
+     "submitted_coef": -0.75,
+     "ci90": [
+      -0.7397,
+      -0.7221
+     ],
+     "rel_uncertainty": 0.01199,
+     "significant": true,
+     "dBIC_if_removed": 1860.0
+    },
+    {
+     "var": "vx",
+     "term": "x*z**2/(x**2 + y**2 + z**2)**3.5",
+     "coef": 3.723,
+     "submitted_coef": 3.75,
+     "ci90": [
+      3.709,
+      3.74
+     ],
+     "rel_uncertainty": 0.00414,
+     "significant": true,
+     "dBIC_if_removed": 5020.0
+    },
+    {
+     "var": "vy",
+     "term": "y/(x**2 + y**2 + z**2)**1.5",
+     "coef": -1.002,
+     "submitted_coef": -1.0,
+     "ci90": [
+      -1.005,
+      -0.9999
+     ],
+     "rel_uncertainty": 0.002692,
+     "significant": true,
+     "dBIC_if_removed": 4220.0
+    },
+    {
+     "var": "vy",
+     "term": "y/(x**2 + y**2 + z**2)**2.5",
+     "coef": -0.7332,
+     "submitted_coef": -0.75,
+     "ci90": [
+      -0.7392,
+      -0.7218
+     ],
+     "rel_uncertainty": 0.01191,
+     "significant": true,
+     "dBIC_if_removed": 1890.0
+    },
+    {
+     "var": "vy",
+     "term": "y*z**2/(x**2 + y**2 + z**2)**3.5",
+     "coef": 3.719,
+     "submitted_coef": 3.75,
+     "ci90": [
+      3.705,
+      3.732
+     ],
+     "rel_uncertainty": 0.003677,
+     "significant": true,
+     "dBIC_if_removed": 5100.0
+    },
+    {
+     "var": "vz",
+     "term": "z/(x**2 + y**2 + z**2)**1.5",
+     "coef": -1.003,
+     "submitted_coef": -1.0,
+     "ci90": [
+      -1.005,
+      -1.001
+     ],
+     "rel_uncertainty": 0.001596,
+     "significant": true,
+     "dBIC_if_removed": 4350.0
+    },
+    {
+     "var": "vz",
+     "term": "z**3/(x**2 + y**2 + z**2)**3.5",
+     "coef": 3.7,
+     "submitted_coef": 3.75,
+     "ci90": [
+      3.683,
+      3.718
+     ],
+     "rel_uncertainty": 0.004811,
+     "significant": true,
+     "dBIC_if_removed": 4370.0
+    },
+    {
+     "var": "vz",
+     "term": "z/(x**2 + y**2 + z**2)**2.5",
+     "coef": -2.209,
+     "submitted_coef": -2.25,
+     "ci90": [
+      -2.222,
+      -2.195
+     ],
+     "rel_uncertainty": 0.006036,
+     "significant": true,
+     "dBIC_if_removed": 3600.0
+    }
+   ],
+   "missing_term_evidence": [
+    {
+     "var": "vx",
+     "term": "vy*vy*vy",
+     "dBIC_if_added": -3.21,
+     "error_reduction": 0.0
+    },
+    {
+     "var": "vx",
+     "term": "x*vy*vy",
+     "dBIC_if_added": 1.15,
+     "error_reduction": 0.0
+    },
+    {
+     "var": "vy",
+     "term": "y*vz*vz",
+     "dBIC_if_added": 2.01,
+     "error_reduction": 0.0
+    },
+    {
+     "var": "vz",
+     "term": "z*vz*vz",
+     "dBIC_if_added": 3.25,
+     "error_reduction": 0.0455
+    }
+   ],
+   "model_ambiguity": {
+    "verdict": "Lowest CV derivative error: submitted (0.0571, 12 terms). Indistinguishable from it: symbolic (+0.0%, z=0.0). Prefer submitted. Rollout valid frac 0.39 (best 0.39). Its error is AT the estimated noise floor (0.0558, ratio 1.02): the model is about as good as these data allow.",
+    "indistinguishable": [
+     "submitted"
+    ],
+    "same_structure_as_submitted": [
+     "symbolic"
+    ],
+    "ranking": [
+     "submitted",
+     "symbolic"
+    ]
+   },
+   "noise_floor": {
+    "error_to_floor_ratio": 1.024,
+    "floor": 0.05579
+   },
+   "validation": {
+    "deriv_nrmse": 0.061994603969459404,
+    "rollout_valid_time": 13.8322354301,
+    "rollout_horizon": 642.5296457862,
+    "rollout_blew_up": false
+   },
+   "predictability": {
+    "horizon": 7.59,
+    "horizon_is_full_data_span": false,
+    "meaning": "the plausible models agree (within 3x noise) up to this time from the held-out initial state"
+   },
+   "experiments": {
+    "ranked": [
+     {
+      "score": 55.4,
+      "max_snr": 1150.0,
+      "models_blow_up": [],
+      "most_separated": [
+       "submitted",
+       "symbolic"
+      ],
+      "initial_condition": [
+       3.213576051362722,
+       0.2461959076907263,
+       -1.7383973269675264,
+       -1.2090688660024944,
+       0.038052613988738715,
+       0.32514308802689307
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 0.581,
+      "informs_coefficients": [
+       {
+        "coefficient": "vx in dx/dt",
+        "info_gain_vs_existing": 3.8
+       },
+       {
+        "coefficient": "vz in dz/dt",
+        "info_gain_vs_existing": 1.32
+       },
+       {
+        "coefficient": "y/(x**2 + y**2 + z**2)**2.5 in dvy/dt",
+        "info_gain_vs_existing": 0.682
+       }
+      ]
+     },
+     {
+      "score": 47.5,
+      "max_snr": 180.0,
+      "models_blow_up": [],
+      "most_separated": [
+       "submitted",
+       "symbolic"
+      ],
+      "initial_condition": [
+       -1.4137593346196917,
+       -3.129228980686639,
+       -1.6356173055108871,
+       1.3811129311992134,
+       1.4830843793997166,
+       1.3869232519993964
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 0.498,
+      "informs_coefficients": [
+       {
+        "coefficient": "vy in dy/dt",
+        "info_gain_vs_existing": 2.05
+       },
+       {
+        "coefficient": "vx in dx/dt",
+        "info_gain_vs_existing": 1.99
+       },
+       {
+        "coefficient": "vz in dz/dt",
+        "info_gain_vs_existing": 1.47
+       }
+      ]
+     },
+     {
+      "score": 44.7,
+      "max_snr": 165.0,
+      "models_blow_up": [],
+      "most_separated": [
+       "submitted",
+       "symbolic"
+      ],
+      "initial_condition": [
+       -0.5749631652904252,
+       -0.46513926133901107,
+       -1.2861076513217635,
+       1.2264424302256247,
+       -1.219516145943471,
+       1.2947744869074151
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 0.47,
+      "informs_coefficients": [
+       {
+        "coefficient": "vx in dx/dt",
+        "info_gain_vs_existing": 1.52
+       },
+       {
+        "coefficient": "vy in dy/dt",
+        "info_gain_vs_existing": 0.969
+       },
+       {
+        "coefficient": "vz in dz/dt",
+        "info_gain_vs_existing": 0.527
+       }
+      ]
+     },
+     {
+      "score": 43.7,
+      "max_snr": 173.0,
+      "models_blow_up": [],
+      "most_separated": [
+       "submitted",
+       "symbolic"
+      ],
+      "initial_condition": [
+       -2.4487185700489373,
+       1.7359515654951991,
+       0.6737490112238902,
+       0.86628235299481,
+       -0.5374155385167334,
+       -1.1397803405923725
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 0.458,
+      "informs_coefficients": [
+       {
+        "coefficient": "vx in dx/dt",
+        "info_gain_vs_existing": 1.18
+       },
+       {
+        "coefficient": "vz in dz/dt",
+        "info_gain_vs_existing": 0.462
+       },
+       {
+        "coefficient": "z/(x**2 + y**2 + z**2)**2.5 in dvz/dt",
+        "info_gain_vs_existing": 0.453
+       }
+      ]
+     },
+     {
+      "score": 41.2,
+      "max_snr": 91.8,
+      "models_blow_up": [],
+      "most_separated": [
+       "submitted",
+       "symbolic"
+      ],
+      "initial_condition": [
+       1.5713771870381743,
+       0.08432724337887265,
+       -2.002515674403406,
+       -0.21257374847936106,
+       1.1023081697018118,
+       1.0097373976476929
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 0.432,
+      "informs_coefficients": [
+       {
+        "coefficient": "vy in dy/dt",
+        "info_gain_vs_existing": 1.06
+       },
+       {
+        "coefficient": "vx in dx/dt",
+        "info_gain_vs_existing": 0.345
+       },
+       {
+        "coefficient": "y/(x**2 + y**2 + z**2)**1.5 in dvy/dt",
+        "info_gain_vs_existing": 0.304
+       }
+      ]
+     }
+    ],
+    "existing_data_discrimination": 95.3,
+    "n_models": 14,
+    "note": "score = mean over the predicted trajectory of (spread of plausible models / noise)^2, capped at 100 (10 sigma); >1 means a measurement here would discriminate between them. informs_coefficients = how many times more information about each coefficient than re-measuring an existing initial condition"
+   },
+   "data_advice": [
+    "Only 1 trajectory(ies): independent runs from different initial conditions are the cheapest way to separate competing models."
+   ],
+   "confidence": {
+    "level": "medium",
+    "points": 2,
+    "reasons": [
+     "all terms significantly non-zero (bootstrap 90% CIs exclude 0)",
+     "no single added term is supported by the data",
+     "residual error is at the noise floor (x1.02)",
+     "held-out rollout stays within 30% error for 2% of the horizon"
+    ]
+   },
+   "questions_for_human": [
+    "Is a vy*vy*vy effect in dvx/dt physically plausible? The data are borderline (dBIC -3.21).",
+    "Is a x*vy*vy effect in dvx/dt physically plausible? The data are borderline (dBIC 1.15).",
+    "Is any combination of the variables conserved by design (mass, energy, population)? That constraint would remove ambiguity.",
+    "Can you run an experiment starting from [3.213576051362722, 0.2461959076907263, -1.7383973269675264, -1.2090688660024944, 0.038052613988738715, 0.32514308802689307]? It is predicted to be the most informative (score 55.4), mainly about vx in dx/dt, vz in dz/dt."
+   ],
+   "statistics_basis": "strong form (smoothed derivatives)"
+  },
+  "branches": {
+   "sparse-regression": {
+    "model": {
+     "x": "vx",
+     "y": "vy",
+     "z": "vz",
+     "vx": "-x/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(1-5*z**2/(x**2+y**2+z**2)))",
+     "vy": "-y/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(1-5*z**2/(x**2+y**2+z**2)))",
+     "vz": "-z/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(3-5*z**2/(x**2+y**2+z**2)))"
+    },
+    "rationale": "Kepler gravity (mu=1) plus a J2 zonal-harmonic (oblateness) perturbation with 1.5*J2 = 0.75, so J2 = 0.5 in these units. This is much larger than Earth's real J2, so the 'Earth' here is strongly oblate. How I got there: a linear regression of the residual acceleration (after removing Kepler) gave exactly the J2 pattern: about -0.73 x/r^5 + 3.7 x z^2/r^7 for vx, and -2.16 z/r^5 + 3.64 z^3/r^7 for vz (the ratios match J2). Drag, rotating-frame (Coriolis) and J3 terms came out at zero. I then fitted the initial state plus mu and k to the whole trajectory (about 40 orbits, 642 time units) by direct integration. Result: mu = 1.00004 \u00b1 0.0002 and k = 0.75008 \u00b1 0.00012. The residuals are white and about 1% of each variable's spread (std) for every variable, in both the first and last quarter, which is the measurement-noise level. Rounded values mu = 1 and k = 0.75 are used. The internal rollout valid time (about 14) is limited by noise in the single starting state, not by the model.",
+    "cost_usd": 1.488
+   },
+   "symbolic": {
+    "model": {
+     "x": "vx",
+     "y": "vy",
+     "z": "vz",
+     "vx": "-x/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(1 - 5*z**2/(x**2+y**2+z**2)))",
+     "vy": "-y/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(1 - 5*z**2/(x**2+y**2+z**2)))",
+     "vz": "-z/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(3 - 5*z**2/(x**2+y**2+z**2)))"
+    },
+    "rationale": "Kepler gravity plus an axisymmetric J2 (oblateness) perturbation: a = -mu r/r^3 [1 + (3/2)J2/r^2 (1 - 5z^2/r^2)] for x,y and [1 + (3/2)J2/r^2 (3 - 5z^2/r^2)] for z. A free 5-parameter derivative fit recovered the exact J2 ratios 1:5:3:5 (0.741, 3.738, 2.234, 3.734) with mu=1.0016. Multiple-shooting fit over the full 6-day trajectory (fitted initial state, mu, J, linear drag k) gave mu=0.99998, 1.5*J2=0.74997 (J2=0.5), drag\u22480, position RMS 0.0087, which is at the 1% noise level over the full horizon. After J2 the derivative residual is white. The short public rollout valid time (~14) comes from starting at a noisy initial state: a 1% velocity error changes the orbital period, so the phase drifts. With a denoised initial state the model tracks all 6 days.",
+    "cost_usd": 1.258
+   },
+   "structure-first": {
+    "model": {
+     "x": "vx",
+     "y": "vy",
+     "z": "vz",
+     "vx": "-x/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(1-5*z**2/(x**2+y**2+z**2)))",
+     "vy": "-y/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(1-5*z**2/(x**2+y**2+z**2)))",
+     "vz": "-z/(x**2+y**2+z**2)**1.5*(1 + 0.75/(x**2+y**2+z**2)*(3-5*z**2/(x**2+y**2+z**2)))"
+    },
+    "rationale": "Kepler gravity (mu=1) plus a J2 zonal (oblateness) perturbation with J2 = 0.5, so the 1.5*J2 factor is 0.75. Evidence: (1) After subtracting Kepler, the remaining acceleration is about 50% of the total, and the J2 basis function explains it down to the noise floor (CV deriv nrmse 0.057, floor 0.056). Coriolis/centrifugal, drag (v, v|v|), constant forces, J3-J6 and a mu correction all came out negligible. (2) The energy integral 0.5v^2 - mu/r + J2*P2(z/r)/r^3 is conserved with no secular trend when J2=0.50 and mu=1.00, so there is no dissipative force. (3) L_z is conserved (axisymmetry). (4) The rollout reproduces the slow nodal-precession envelope in z/vz over the whole 640-time-unit span. The residuals are white.",
+    "cost_usd": 1.358
+   }
+  },
+  "winner_branch": "sparse-regression",
+  "tournament": {
+   "winner": "sparse-regression",
+   "verdict": "Lowest CV derivative error: sparse-regression (0.0571, 12 terms). Indistinguishable from it: symbolic (+0.0%, z=0.0), structure-first (+0.0%, z=0.0). Prefer sparse-regression. Rollout valid frac 0.39 (best 0.39). Its error is AT the estimated noise floor (0.0558, ratio 1.02): the model is about as good as these data allow.",
+   "ranking": [
+    "sparse-regression",
+    "symbolic",
+    "structure-first"
+   ]
+  },
+  "adversary": {
+   "rationale": "Red-team attempt failed, so I am submitting the incumbent unchanged. The model is Kepler gravity plus a J2-type oblateness term with coefficient 1.5*J2 = 0.75.\n\n1. Derivative residuals: I took Savitzky-Golay derivatives (window 9) and removed the Kepler and J2 parts. The leftover acceleration is about 0.01 per component, which is the level expected from 1% noise. Fitting the J2 coefficient freely gives 0.744. I regressed the leftover on J3 and J4 zonal terms, linear drag (-k v), quadratic drag (-k|v|v), a constant and linear terms in x and v. None of them explained any meaningful part of it.\n\n2. Orbit fitting, a much more sensitive test: I fitted the initial state and parameters by integrating the model over windows of the data and comparing with the measured states.\n   - Over three windows of 1400 steps each, the fitted values were J2-coefficient = 0.7500, 0.7498 and 0.7501. Drag came out at 0 and the J3 coefficient was at most 5e-5.\n   - Residual RMS in those windows matches a noise estimate taken from second differences: about 0.0105 in position and 0.0037 in velocity, roughly 1% of the signal.\n   - Over 300-step windows the residuals are white (lag-1 autocorrelation about 0).\n\nThe incumbent is therefore at the noise floor and no extra perturbing term is supported. Its poor fixed-start rollout comes from phase drift: small errors in the starting state grow along the orbit. It does not point to a missing term.\n\nLimitations: on one longer 2200-step fit the residual was slightly higher (0.0123 in position) and mildly correlated in time. I think this is because the starting-state fit was capped at 30 optimiser steps and probably did not converge, but I did not confirm it. I also never ran the toolbox's held-out comparison (validate or compare_models), so this rests on my own Python checks.",
+   "cost_usd": 0.879
+  },
+  "cost_usd": 5.082,
+  "wall_s": 560.4
+ },
+ "truth": {
+  "x": "vx",
+  "y": "vy",
+  "z": "vz",
+  "vx": "-x/sqrt(x**2 + y**2 + z**2)**3 - 0.75*x/sqrt(x**2 + y**2 + z**2)**5*(1 - 5*z**2/sqrt(x**2 + y**2 + z**2)**2)",
+  "vy": "-y/sqrt(x**2 + y**2 + z**2)**3 - 0.75*y/sqrt(x**2 + y**2 + z**2)**5*(1 - 5*z**2/sqrt(x**2 + y**2 + z**2)**2)",
+  "vz": "-z/sqrt(x**2 + y**2 + z**2)**3 - 0.75*z/sqrt(x**2 + y**2 + z**2)**5*(3 - 5*z**2/sqrt(x**2 + y**2 + z**2)**2)"
+ },
+ "names": [
+  "x",
+  "y",
+  "z",
+  "vx",
+  "vy",
+  "vz"
+ ],
+ "units": "lengths in Earth radii Re, time in sqrt(Re^3/mu) (= 806.8 s); velocities in Re/that time",
+ "source": "orbit_discover/data/Challenge1.csv (satellite orbit, 6 days, 30 s cadence), subsampled x4",
+ "latex": [
+  "\\dot{\\mathbf r} = \\mathbf v",
+  "\\dot{v}_{q} = -\\frac{q}{r^{3}}\\left[1 + \\frac{0.75}{r^{2}}\\left(1 - \\frac{5z^{2}}{r^{2}}\\right)\\right], \\quad q \\in \\{x, y\\}",
+  "\\dot{v}_{z} = -\\frac{z}{r^{3}}\\left[1 + \\frac{0.75}{r^{2}}\\left(3 - \\frac{5z^{2}}{r^{2}}\\right)\\right]"
+ ],
+ "truth_latex": [
+  "\\dot{v}_{q} = -\\frac{q}{r^{3}}\\left[1 + \\frac{\\tfrac32 J_2}{r^{2}}\\left(1 - \\frac{5z^{2}}{r^{2}}\\right)\\right]",
+  "\\dot{v}_{z} = -\\frac{z}{r^{3}}\\left[1 + \\frac{\\tfrac32 J_2}{r^{2}}\\left(3 - \\frac{5z^{2}}{r^{2}}\\right)\\right]",
+  "J_2 = 0.5 \\;\\Rightarrow\\; \\tfrac32 J_2 = 0.75"
+ ],
+ "raan_rate_deg_per_unit": {
+  "data": 3.1203299573900316,
+  "disc": 3.1159817569113595,
+  "kep": 0.0
+ },
+ "argp_rate_deg_per_unit": {
+  "data": 12.811788708589484,
+  "disc": 12.811774573614688,
+  "kep": 1.6173979540510689e-09
+ },
+ "time_unit_s": 806.8
+}

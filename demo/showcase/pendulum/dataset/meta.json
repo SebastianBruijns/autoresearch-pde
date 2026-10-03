@@ -1,0 +1,22 @@
+{
+  "name": "pendulum_n0.05red_dt1_s0",
+  "kind": "ode",
+  "variables": [
+    "theta",
+    "omega"
+  ],
+  "dt": 0.02,
+  "n_traj": 4,
+  "shape": [
+    4,
+    751,
+    2
+  ],
+  "shape_doc": "(n_traj, nt, n_vars)",
+  "system": "pendulum",
+  "allowed_symbols": [
+    "theta",
+    "omega",
+    "t"
+  ]
+}

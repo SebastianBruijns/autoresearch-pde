@@ -81,6 +81,35 @@ res["verdict"], res["final_model"], res["assessment"]["experiments"]["ranked"][:
 
 ---
 
+## Demo app
+```bash
+pip install -e ".[demo]"
+streamlit run demo/app.py                 # Showcase gallery + "Run on your data" (upload a CSV)
+EQDISC_DEMO_FAKE=1 streamlit run demo/app.py   # rehearsal mode: live tab replays results, no API calls
+```
+The Showcase covers six cases:
+- a satellite orbit, where J2 oblateness makes the orbit plane precess, rendered in 3-D;
+- real Kuramoto–Sivashinsky data;
+- Gray–Scott patterns from The Well;
+- a noisy pendulum with its "measure here next" recommendation;
+- previously unseen oscillators;
+- E. coli growth.
+
+See `demo/README.md` for the 5-minute talk track.
+
+## Static laws y = f(x) (symbolic regression mode)
+`eqdisc.sr.solve(task)` runs parallel Claude sessions with these tools:
+- data probes: power laws, separability, single-variable shapes, two-variable combinations;
+- skeleton fitting by variable projection;
+- PySR;
+- sparse fits;
+- a code interpreter;
+- `assess`: per-term evidence, terms the data favour adding, the noise floor, rival structures, and input regions where
+  plausible models disagree.
+
+The selected law is chosen on validation data and comes with a verdict, like the dynamics mode. Benchmarks:
+`python -m eqdisc.sr_bench llmsr|srsd ...` and `python -m eqdisc.sr_variants make|run` (fresh, unpublished problems).
+
 ## How it works
 
 ```mermaid

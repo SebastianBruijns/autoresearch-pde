@@ -81,7 +81,7 @@ def tournament(meta, data, candidates):
 
 
 def discover(path, n_branches=3, adversary=True, human=None, context=None, model="claude-opus-5-5", effort="high",
-             max_tools=20, out_dir=None, workers=3, verbose=True):
+             max_tools=20, out_dir=None, workers=3, verbose=True, on_event=None):
     t0 = time.time()
     client = make_client()
     path = Path(path)
@@ -95,7 +95,12 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
     out = Path(out_dir or f"runs/discover_{path.name}_{time.strftime('%Y%m%d-%H%M%S')}")
     out.mkdir(parents=True, exist_ok=True)
     meta, data = load(path)
-    say = (lambda *a: print(*a, flush=True)) if verbose else (lambda *a: None)
+    _print = (lambda *a: print(*a, flush=True)) if verbose else (lambda *a: None)
+
+    def say(*a):
+        _print(*a)
+        if on_event:
+            on_event({"type": "stage", "text": " ".join(map(str, a)).strip()})
 
     say(f"[1/6] intuition pre-analysis on {meta['name']}")
     intu = intuit(meta, data)
@@ -110,7 +115,7 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
         try:
             r = run_agent(path, model=model, effort=effort, max_tools=max_tools, client=client, verbose=False,
                           out_dir=out / f"branch_{name}", context=base_ctx + "\n\n" + STRATEGIES[name],
-                          final_assessment=False, report=True, human=None)
+                          final_assessment=False, report=True, human=None, on_event=on_event, tag=name)
             say(f"      branch {name}: {json.dumps((r.get('submitted') or {}).get('rhs'))[:150]}  (${r['cost_usd']:.2f})")
             return name, r
         except Exception as e:  # noqa: BLE001
@@ -134,7 +139,8 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
                                   others=json.dumps({k: v for k, v in cands.items() if k != incumbent}))
         try:
             ra = run_agent(path, model=model, effort=effort, max_tools=max_tools, client=client, verbose=False,
-                           out_dir=out / "adversary", context=base_ctx + "\n\n" + prompt, final_assessment=False, report=True)
+                           out_dir=out / "adversary", context=base_ctx + "\n\n" + prompt, final_assessment=False, report=True,
+                           on_event=on_event, tag="adversary")
             chal = (ra.get("submitted") or {}).get("rhs")
             adv = {"run": ra, "challenger": chal, "rationale": (ra.get("submitted") or {}).get("rationale", "")}
             if chal and chal != cands[incumbent]:
