@@ -114,13 +114,15 @@ TOOLS = [
      "as identities, and a PCA dimension estimate. include_log adds log of positive variables; custom_terms "
      "adds e.g. 'cos(theta)'.",
      "input_schema": _obj({"poly_degree": _int, "include_log": _bool, "custom_terms": _strs, "tol": _num})},
-    {"name": "transform", "description": "ODE only. Define new coordinates z = phi(x, t) and make them ACTIVE: all "
+    {"name": "transform", "description": "Define new coordinates z = phi(x, t) and make them ACTIVE: all "
      "fitting tools then work in z, and results include rhs_original/validation_original (mapped back exactly "
      "by the chain rule). inverse must give EVERY original variable in terms of z (and t); this allows dimension "
      "reduction, e.g. forward {S:'S', I:'I'}, inverse {S:'S', I:'I', R:'1 - S - I'}. If dim(z)==dim(x) the inverse "
      "can be omitted and is solved symbolically. Examples: polar {r:'sqrt(x**2+y**2)', theta:'atan2(y,x)'}; "
      "log coordinates for positive multiplicative dynamics; energy-angle; rescaling/nondimensionalising; "
-     "rotating frames. Angles are unwrapped in time.",
+     "rotating frames. Angles are unwrapped in time. PDE data: pointwise field transforms z = phi(u) of the field "
+     "values only (same number of fields; spatial derivatives follow by the chain rule), e.g. {s:'log(u)', v:'v'} for "
+     "a positive field observed through exp or with multiplicative noise; derivatives are then s_x, s_xx, ...",
      "input_schema": _obj({"name": _str, "forward": _rhs, "inverse": _rhs}, ["name", "forward"])},
     {"name": "set_coordinates", "description": "Switch the active coordinate system ('original' or a name "
      "defined with transform).", "input_schema": _obj({"name": _str}, ["name"])},
@@ -273,12 +275,22 @@ class Session:
         self.data["t"] = self.data["t"][:nt]
         return {"ok": True, "n_traj_now": int(self.data["U"].shape[0]), "nt": int(nt)}
 
+    def validate_original(self, rhs_original, rhs_active=None):
+        """Validation of a model that was mapped back from the active coordinates. For a PDE field transform the
+        map is a pointwise bijection, so the dynamics are the same; validating in the transformed fields avoids
+        derivatives of e.g. exp-observed noisy fields, which make the original-field check meaningless."""
+        m, d, c = self.view()
+        if c is not None and c.get("kind") == "pde" and rhs_active is not None:
+            return {**tb.validate(m, d, rhs_active),
+                    "basis": f"transformed fields ({self.active}); equivalent dynamics by a pointwise bijection"}
+        return tb.validate(self.meta, self.data, rhs_original)
+
     def _augment(self, out):
         _, _, c = self.view()
         if c is not None and isinstance(out, dict) and "rhs" in out:
             out["coordinates"] = self.active
             out["rhs_original"] = co.map_back(out["rhs"], c)
-            out["validation_original"] = tb.validate(self.meta, self.data, out["rhs_original"])
+            out["validation_original"] = self.validate_original(out["rhs_original"], out["rhs"])
         return out
 
     # -- the lab: only used to *generate new observations*, never exposed directly
@@ -399,7 +411,7 @@ class Session:
             rhs, mapped = self.to_original(args["rhs"])
             if mapped:
                 return {"active_coordinates": tb.validate(m, d, args["rhs"]), "rhs_original": rhs,
-                        "validation_original": tb.validate(self.meta, self.data, rhs)}
+                        "validation_original": self.validate_original(rhs, args["rhs"])}
             return tb.validate(self.meta, self.data, rhs)
         if name == "request_experiment":
             return self.request_experiment(**args)
@@ -576,8 +588,6 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
         tools = [t for t in tools if t["name"] != "ask_human"]
     if not use_skills:
         tools = [t for t in tools if t["name"] != "load_skill"]
-    if sess.meta["kind"] != "ode":
-        tools = [t for t in tools if t["name"] not in ("transform", "set_coordinates")]
     # the dataset name can reveal the system (e.g. blind_strogatz_glider_...), which would defeat blinding
     meta_public = {k: v for k, v in sess.meta.items() if k not in ("system", "name")}
     intro = f"Dataset metadata:\n{json.dumps(meta_public, indent=2)}\n"
