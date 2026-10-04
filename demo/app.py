@@ -21,7 +21,7 @@ for p in (str(REPO), str(DEMO)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon="🧭", layout="wide",
+st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon=":material/function:", layout="wide",
                    initial_sidebar_state="collapsed")
 
 import live  # noqa: E402
@@ -758,14 +758,14 @@ digraph G { rankdir=LR; bgcolor="transparent"; node [shape=box, style="rounded,f
 
 # ============================================================================= main
 # ============================================================================= presentation pages (v3)
-CM_FONT = "Computer Modern Serif, Latin Modern Roman, CMU Serif, Georgia, serif"
+CHART_FONT = "Inter, sans-serif"
 
 
 def _bigfont(fig, h=None):
-    """One font (LaTeX Computer Modern) and one size for every chart text: ticks, axis titles, legend."""
-    fig.update_layout(font=dict(size=16, family=CM_FONT), legend=dict(font=dict(size=16, family=CM_FONT)))
-    fig.update_xaxes(title_font=dict(size=16), tickfont=dict(size=16))
-    fig.update_yaxes(title_font=dict(size=16), tickfont=dict(size=16))
+    """One font (the app's Inter) and one size for every chart text: ticks, axis titles, legend."""
+    fig.update_layout(font=dict(size=15, family=CHART_FONT), legend=dict(font=dict(size=15, family=CHART_FONT)))
+    fig.update_xaxes(title_font=dict(size=15), tickfont=dict(size=15))
+    fig.update_yaxes(title_font=dict(size=15), tickfont=dict(size=15))
     if h:
         fig.update_layout(height=h)
     return fig
@@ -821,19 +821,19 @@ def v3_satellite():
         f = ui.precision_fig(uq, {"central pull (1/r²)": "gravity", "equatorial bulge (J₂)": "bulge (J₂)"})
         if f:
             show(_bigfont(f), "sat_prec")
-    with st.expander("🧠 How it got there"):
+    with st.expander("How it got there", icon=":material/psychology:"):
         _reasoning(info.get("rationale"), ag.get("tools"))
-    with st.expander("🔭 What the equation means"):
+    with st.expander("What the equation means", icon=":material/function:"):
         st.markdown(
             "- **1/r² term:** Newton's gravity, the pull toward Earth's centre.\n"
             "- **Bulge term (J₂):** Earth is fatter at the equator; this extra pull makes the orbit's plane slowly turn "
             f"(measured ≈ {lageos_numbers(info)['node']['data']:.3f}°/day).\n"
             "- The agent inferred both from unnamed numbers in random units: it was never told this is a satellite.")
-    with st.expander("✅ The checks behind the verdict"):
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq))
         for adv in uq.get("data_advice") or []:
             st.caption(adv)
-    with st.expander("🔒 Benchmark details"):
+    with st.expander("Benchmark details", icon=":material/lock:"):
         st.markdown(LEGEND_ORBIT, unsafe_allow_html=True)
         n = lageos_numbers(info)
         lageos_details(info, n, ag, ag.get("position_error_km") or {})
@@ -865,9 +865,9 @@ def v3_bulge():
         if "kj_t" in a:
             ui.fig_title("What it missed", locked=True)
             show(_bigfont(viz.orbit_kepler_vs_j2(a["kj_t"], a["kj_disc"], a["kj_kep"]), 470), "bb_kj")
-    with st.expander("🧠 How it got there"):
+    with st.expander("How it got there", icon=":material/psychology:"):
         _reasoning(ag.get("rationale"), ag.get("tools"))
-    with st.expander("🔭 What went wrong"):
+    with st.expander("What went wrong", icon=":material/function:"):
         st.markdown(
             "- It found that velocity is the rate of change of position, and that the motion is symmetric about one axis.\n"
             "- It then fitted a smooth polynomial instead of Newton's 1/r² gravity plus a bulge term.\n"
@@ -875,12 +875,12 @@ def v3_bulge():
             "hold-out forecast fails at once. So it says *don't trust this law* and where to measure next.\n"
             "- The ‘missing term’ check tries a short generic menu (a 1/r² pull, drag, an extra radial power) for any "
             "position-and-velocity data; it was not chosen knowing the answer.")
-    with st.expander("✅ The checks behind the verdict"):
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq))
         f = ui.precision_fig(uq)
         if f:
             show(_bigfont(f), "bb_prec")
-    with st.expander("🔒 Benchmark details"):
+    with st.expander("Benchmark details", icon=":material/lock:"):
         if "raan_disc" in a:
             st.markdown("**The tell-tale drift: measured vs forecast**")
             show(viz.orbit_elements(a["el_hrs"], a["raan_data"], a["argp_data"], a["hrs"], a["raan_disc"], a["argp_disc"],
@@ -922,20 +922,20 @@ def v3_chaos():
         f = ui.precision_fig(uq, names)
         if f:
             show(_bigfont(f), "ks_prec3")
-    with st.expander("🧠 How it got there"):
+    with st.expander("How it got there", icon=":material/psychology:"):
         story = info.get("story") or {}
         tool_chips(info.get("tools"), title="tools it used")
         for s_ in story.get("key_steps") or []:
             st.markdown(f"- **{s_.get('observation', '')}** → {s_.get('decision', '')}")
-    with st.expander("🔭 What the equation means"):
+    with st.expander("What the equation means", icon=":material/function:"):
         st.markdown(
             "- **u_xx with a minus sign (anti-diffusion):** pumps energy into long waves (the instability).\n"
             "- **u_xxxx (hyper-diffusion):** kills short waves, so cells of a preferred size form.\n"
             "- **u·u_x (steepening):** moves energy between scales; together these make cellular chaos.\n"
             "- This is the Kuramoto–Sivashinsky equation, but rescaled: its numbers appear in no textbook.")
-    with st.expander("✅ The checks behind the verdict"):
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq))
-    with st.expander("🔒 Benchmark details"):
+    with st.expander("Benchmark details", icon=":material/lock:"):
         ks_details(info, r, rows)
 
 
@@ -965,24 +965,24 @@ def v3_reaction():
         f = ui.precision_fig(uq, names)
         if f:
             show(_bigfont(f), "gs_prec3")
-    with st.expander("🧠 How it got there"):
+    with st.expander("How it got there", icon=":material/psychology:"):
         _reasoning(info.get("rationale"), info.get("tools"))
-    with st.expander("🔭 What the equations mean"):
+    with st.expander("What the equations mean", icon=":material/function:"):
         st.markdown(
             "- **Feed and decay:** chemical A is supplied, B is removed.\n"
             "- **A·B² reaction:** B converts A into more B (autocatalysis), the engine of the patterns.\n"
             "- **Diffusion:** A spreads faster than B; that mismatch is what makes spots and spirals (a Turing mechanism).")
-    with st.expander("✅ The checks behind the verdict"):
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq))
-        st.caption("🔒 Its equations turn out to be the true ones. The checks could not know that: with two noisy runs, "
+        st.caption("Hidden truth: its equations turn out to be the true ones. The checks could not know that: with two noisy runs, "
                    "close rival versions fit equally well, so ‘collect more data’ is the right call.")
-    with st.expander("🔒 Benchmark details"):
+    with st.expander("Benchmark details", icon=":material/lock:"):
         gs_details(info, agent, vr)
 
 
 def v3_home():
-    st.markdown("<div class='home-t'>Equation Discovery AutoScientist</div>"
-                "<div class='home-s'>Data in → the equation, how sure it is, and where to measure next</div>",
+    st.markdown("<div class='home-e'>eqdisc</div><div class='home-t'>Equation Discovery AutoScientist</div>"
+                "<div class='home-s'>Data in. Out come the equation, how sure it is, and where to measure next.</div>",
                 unsafe_allow_html=True)
     cards = [("lageos", "Satellite", V3_PAGES["sat"]), ("orbit", "Big Bulge Orbit", V3_PAGES["bulge"]),
              ("ks", "Blind Chaos (KS)", V3_PAGES["chaos"]), ("gray_scott", "Reaction-Diffusion (Chemistry)", V3_PAGES["rd"])]
@@ -993,14 +993,15 @@ def v3_home():
             if th.exists():
                 st.image(str(th), width="stretch")
             st.markdown(f"<div class='cardn'>{html.escape(name)}</div>", unsafe_allow_html=True)
-            st.page_link(page, label="Open →", width="stretch")
+            st.page_link(page, label="Open case", icon=":material/arrow_forward:")
     st.write("")
     _, mid, _ = st.columns([1, 1.2, 1])
     with mid:
-        if st.button("⬆  Try it on your own data", type="primary", width="stretch"):
+        if st.button("Try it on your own data", type="primary", icon=":material/upload:", width="stretch"):
             st.switch_page(V3_PAGES["yours"])
     with st.expander("How we keep it honest"):
-        st.markdown(f"{PROTOCOL}\n\n🔒 marks anything that uses the hidden future or the true law: eqdisc never sees it.")
+        st.markdown(f"{PROTOCOL}\n\n‘Hidden truth’ marks anything that uses the hidden future or the true law: "
+                    "eqdisc never sees it.")
 
 
 def _slim(a, verdict=None):
@@ -1038,7 +1039,7 @@ def _yourdata_result(job):
             ui.equations(ui.rhs_latex(res.get("final_model") or {}, pde=kind == "pde"), small=True)
             ui.next_box(uq)
         story = res.get("story") or {}
-        with st.expander("🧠 How it got there"):
+        with st.expander("How it got there", icon=":material/psychology:"):
             tool_chips([e["name"] for e in job.events if e.get("type") == "tool"], title="tools it used")
             if story.get("headline"):
                 st.markdown(story["headline"])
@@ -1063,16 +1064,16 @@ def _yourdata_result(job):
             ui.fig_title("The law it found")
             ui.equations([f"{ui.expr_latex(target, [target])} = {ui.expr_latex(expr, names)}"], small=True)
             ui.next_box(uq)
-        with st.expander("🧠 How it got there"):
+        with st.expander("How it got there", icon=":material/psychology:"):
             tool_chips([e["name"] for e in job.events if e.get("type") == "tool"], title="tools it used")
             if (res.get("verdict") or {}).get("recommendation"):
                 st.markdown(res["verdict"]["recommendation"])
-    with st.expander("✅ The checks behind the verdict"):
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq) or "No checks available.")
         f = ui.precision_fig(uq)
         if f:
             show(_bigfont(f), "yd_prec")
-    with st.expander("⬇️ Downloads"):
+    with st.expander("Downloads", icon=":material/download:"):
         rp = Path(res["report"]) if res.get("report") else None
         if rp and rp.exists():
             st.download_button("Full report (HTML)", rp.read_bytes(), rp.name, "text/html")
@@ -1178,12 +1179,13 @@ def main():
     ui.inject_css3()
     env_fake = os.environ.get("EQDISC_DEMO_FAKE", "") not in ("", "0", "false")
     V3_PAGES.update({
-        "home": st.Page(v3_home, title="Home", default=True),
-        "sat": st.Page(v3_satellite, title="Satellite", url_path="satellite"),
-        "bulge": st.Page(v3_bulge, title="Big Bulge Orbit", url_path="big-bulge-orbit"),
-        "chaos": st.Page(v3_chaos, title="Blind Chaos (KS)", url_path="blind-chaos"),
-        "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", url_path="reaction-diffusion"),
-        "yours": st.Page(v3_yourdata, title="Your Data", url_path="your-data"),
+        "home": st.Page(v3_home, title="Home", icon=":material/home:", default=True),
+        "sat": st.Page(v3_satellite, title="Satellite", icon=":material/satellite_alt:", url_path="satellite"),
+        "bulge": st.Page(v3_bulge, title="Big Bulge Orbit", icon=":material/public:", url_path="big-bulge-orbit"),
+        "chaos": st.Page(v3_chaos, title="Blind Chaos (KS)", icon=":material/cyclone:", url_path="blind-chaos"),
+        "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", icon=":material/texture:",
+                      url_path="reaction-diffusion"),
+        "yours": st.Page(v3_yourdata, title="Your Data", icon=":material/upload_file:", url_path="your-data"),
     })
     nav = st.navigation(list(V3_PAGES.values()), position="top")
     nav.run()
