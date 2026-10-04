@@ -324,7 +324,122 @@ def build_rehearsal():
     (d / "ecoli.json").write_text(json.dumps({"expr": r.get("expr")}, indent=1))
 
 
-CASES = {"lageos": build_lageos, "orbit": build_orbit, "ks": build_ks, "gray_scott": build_gray_scott, "rehearsal": build_rehearsal}
+# ----------------------------------------------------------------------------- E. Lorenz robustness (in vs out of sample)
+LORENZ_CONDS = {"clean": "Clean", "spikes": "Spikes", "forcing": "Outside kicks", "sensor": "Lost sensor"}
+FNO_W = 8          # time-window length, chosen on held-out training windows (8 / 16 / 32 tried on the clean case)
+
+
+def _lorenz_fno(cond, cache):
+    """Train the windowed FNO on the training runs as given, roll it out from the first FNO_W states of every run."""
+    from eqdisc.fno import rollout_fno_window, train_fno_window
+    p = cache / f"fno_{cond}.npz"
+    if p.exists():
+        return dict(np.load(p))
+    d = REPO / f"datasets/robust2/lorenz_{cond}"
+    U, T = np.load(d / "data.npz")["U"], np.load(d / "hidden/test.npz")["U"]
+    import torch
+    torch.set_num_threads(2)
+    m = train_fno_window(U, W=FNO_W, epochs=400, max_minutes=10)
+    out = {"in": rollout_fno_window(m, U[0], U.shape[1]),
+           "oos": np.stack([rollout_fno_window(m, X, len(X)) for X in T]),
+           "info": np.array(json.dumps({k: float(v) for k, v in m.info.items()}))}
+    np.savez(p, **out)
+    return out
+
+
+def _lyapunov(rhs, names, x0, dt, n=20000, eps=1e-8):
+    """Largest Lyapunov exponent (two nearby trajectories, renormalised every step)."""
+    from scipy.integrate import solve_ivp
+    from eqdisc import solvers
+    f = solvers.make_ode_rhs(names, rhs)
+    g = lambda tt, y: np.asarray(f(np.asarray(y)[None], np.array([tt]))[0], float)
+    x = solve_ivp(g, (0, 200 * dt), x0, rtol=1e-9, atol=1e-11).y[:, -1]
+    y = x + eps / np.sqrt(len(x))
+    s = 0.0
+    for _ in range(n // 10):
+        x = solve_ivp(g, (0, 10 * dt), x, rtol=1e-9, atol=1e-11).y[:, -1]
+        y = solve_ivp(g, (0, 10 * dt), y, rtol=1e-9, atol=1e-11).y[:, -1]
+        dd = np.linalg.norm(y - x)
+        s += np.log(dd / eps)
+        y = x + (y - x) * eps / dd
+    return s / (n * dt)
+
+
+def build_lorenz():
+    import importlib.util
+    from concurrent.futures import ProcessPoolExecutor
+    from eqdisc.oos import ode_video
+    src = (REPO / "scripts/lorenz_tutorial_plots.py").read_text().split("\nfor cond in")[0]
+    sim_ns = {}
+    exec(compile(src, "lorenz_tutorial_plots", "exec"), sim_ns)
+    simulate = sim_ns["simulate"]
+    R = {r["case"]: r for r in json.load(open(REPO / "runs/robust2/results.json"))}
+    cache = REPO / "runs/lorenz_showcase"
+    cache.mkdir(parents=True, exist_ok=True)
+    with ProcessPoolExecutor(4) as ex:
+        fno = dict(zip(LORENZ_CONDS, ex.map(_lorenz_fno, LORENZ_CONDS, [cache] * 4)))
+    d = _fresh("lorenz")
+    from eqdisc import insights
+    truth = json.load(open(REPO / "datasets/robust2/lorenz_clean/hidden/truth.json"))["rhs"]
+    D0 = np.load(REPO / "datasets/robust2/lorenz_clean/data.npz")
+    t = D0["t"] - D0["t"][0]
+    lam = _lyapunov(truth, ["x", "y", "z"], D0["U"][0, 0], float(t[1] - t[0]))
+    tl = t * lam
+    arrays, info = {"t_lyap": _f32(tl)}, {"lyapunov": lam, "fno_window": FNO_W, "conditions": {}}
+
+    def err(Y, X, sd):
+        e = np.sqrt(np.mean(((Y - X) / sd) ** 2, axis=1))
+        return np.where(np.isfinite(e), e, np.inf)
+
+    def vt(e, thr=0.5):
+        bad = np.nonzero(e > thr)[0]
+        return float(tl[bad[0]] if len(bad) else tl[-1])
+    for cond, label in LORENZ_CONDS.items():
+        ds = REPO / f"datasets/robust2/lorenz_{cond}"
+        names = json.load(open(ds / "meta.json"))["variables"]
+        U, T = np.load(ds / "data.npz")["U"], np.load(ds / "hidden/test.npz")["U"]
+        sd = T.reshape(-1, T.shape[-1]).std(0)
+        r = R[f"lorenz_{cond}"]
+        laws = {"Discovered law": r["agent"]["rhs"], "SINDy": r["baseline"]["rhs"]}
+        rows = {}
+        for k, law in laws.items():
+            rows[k] = {"in": simulate(names, law, U[0, 0], t), "oos": np.stack([simulate(names, law, X[0], t) for X in T])}
+        rows["FNO"] = {"in": fno[cond]["in"], "oos": fno[cond]["oos"]}
+        c = {"label": label, "names": names, "laws": laws, "valid_in": {}, "valid_oos": {}, "valid_oos_runs": {}}
+        arrays[f"{cond}_X_in"] = _f32(U[0])
+        arrays[f"{cond}_X_oos"] = _f32(T[0])
+        from scipy.signal import medfilt          # in sample: score against a de-spiked copy (isolated glitches are not forecast errors)
+        X_in = np.stack([medfilt(U[0][:, i], 5) for i in range(U.shape[-1])], 1)
+        for k, rr in rows.items():
+            e_in = np.minimum(err(rr["in"], X_in, sd), 5.0)
+            e_oos = [np.minimum(err(Y, X, sd), 5.0) for Y, X in zip(rr["oos"], T)]
+            key = {"Discovered law": "law", "SINDy": "sindy", "FNO": "fno"}[k]
+            arrays[f"{cond}_err_in_{key}"] = _f32(e_in)
+            arrays[f"{cond}_err_oos_{key}"] = _f32(np.mean(e_oos, 0))
+            arrays[f"{cond}_Y_in_{key}"] = _f32(np.nan_to_num(rr["in"], nan=np.nan))
+            arrays[f"{cond}_Y_oos_{key}"] = _f32(rr["oos"][0])
+            c["valid_in"][k] = vt(e_in)
+            c["valid_oos_runs"][k] = [vt(e) for e in e_oos]
+            c["valid_oos"][k] = float(np.mean(c["valid_oos_runs"][k]))
+        res = _json(REPO / f"runs/robust2/lorenz_{cond}/result.json") or {}
+        a = res.get("assessment")
+        c["uq"] = _uq_slim(a) if a else None
+        c["cost_usd"] = r["agent"].get("cost_usd")
+        c["vf_err"] = r["agent"].get("vf_err")
+        c["tools"] = _tools(REPO / f"runs/robust2/lorenz_{cond}")
+        c["rationale"] = (res.get("submitted") or {}).get("rationale")
+        c["fno_info"] = json.loads(str(fno[cond]["info"]))
+        info["conditions"][cond] = c
+        valid = {k: (v[0] if v[0] < tl[-1] else None) for k, v in c["valid_oos_runs"].items()}
+        valid = {k: valid[k] for k in ("Discovered law", "FNO")}
+        ode_video(str(d / f"video_{cond}.mp4"), tl, T[0], {k: rows[k]["oos"][0] for k in ("Discovered law", "FNO")},
+                  names, valid=valid, xlabel="Lyapunov times", title="New starting point (never seen)")
+    _thumb(d / "video_clean.mp4", d / "thumb.jpg", at=6.0)
+    (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
+    np.savez_compressed(d / "arrays.npz", **arrays)
+
+
+CASES = {"lageos": build_lageos, "orbit": build_orbit, "ks": build_ks, "gray_scott": build_gray_scott, "lorenz": build_lorenz, "rehearsal": build_rehearsal}
 
 
 # ----------------------------------------------------------------------------- clean card thumbnails (no text)

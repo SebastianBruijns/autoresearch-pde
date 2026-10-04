@@ -117,3 +117,78 @@ def rollout_fno(model, U0, n_steps):
             x = model(x)
             out.append(np.transpose(x.cpu().numpy(), inv)[0] * sd + mu)
     return np.array(out)
+
+
+# ----------------------------------------------------------------------------- ODEs: FNO over a time window
+def train_fno_window(U, W=16, epochs=400, modes=8, width=48, layers=4, lr=2e-3, batch=256, seed=0, val_frac=0.2,
+                     max_minutes=5, verbose=False):
+    """ODE data (no spatial grid): the FNO's 1-D domain is a window of W time steps. It maps the last W states to
+    the next W (Li et al.'s time-window variant). U: (n_traj, nt, n_vars), as given (noise, spikes, gaps-free).
+    The last val_frac of every trajectory is held out; the checkpoint with the lowest held-out loss is kept."""
+    import copy
+    import time
+    torch, _ = _torch()
+    dev = "cpu"                                         # tiny model: CPU avoids the MPS FFT round-trips
+    torch.manual_seed(seed)
+    nf = U.shape[-1]
+    mu, sd = U.reshape(-1, nf).mean(0), U.reshape(-1, nf).std(0) + 1e-12
+    Z = (U - mu) / sd
+
+    def pairs(seq):
+        n = len(seq) - 2 * W + 1
+        if n <= 0:
+            return np.zeros((0, nf, W)), np.zeros((0, nf, W))
+        X = np.stack([seq[i:i + W].T for i in range(n)])
+        return X, np.stack([seq[i + W:i + 2 * W].T for i in range(n)])
+    k = int(Z.shape[1] * (1 - val_frac))
+    tr = [pairs(Z[j, :k]) for j in range(Z.shape[0])]
+    va = [pairs(Z[j, k - W:]) for j in range(Z.shape[0])]
+    t_ = lambda a: torch.tensor(np.concatenate(a), dtype=torch.float32, device=dev)
+    Xt, Yt = t_([p[0] for p in tr]), t_([p[1] for p in tr])
+    Xv, Yv = t_([p[0] for p in va]), t_([p[1] for p in va])
+    model = make_fno(1, nf, min(modes, W // 2 + 1), width, layers).to(dev)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
+    best, best_state, t0 = np.inf, None, time.time()
+    for ep in range(epochs):
+        model.train()
+        idx = torch.randperm(len(Xt))
+        for b in range(0, len(Xt), batch):
+            i = idx[b:b + batch]
+            loss = torch.mean((model(Xt[i]) - Yt[i]) ** 2)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+        sched.step()
+        model.eval()
+        with torch.no_grad():
+            v = float(torch.mean((model(Xv) - Yv) ** 2))
+        if v < best:
+            best, best_state = v, copy.deepcopy(model.state_dict())
+        if verbose and ep % 25 == 0:
+            print(f"  fno-window epoch {ep} val {v:.3e}", flush=True)
+        if time.time() - t0 > max_minutes * 60:
+            break
+    model.load_state_dict(best_state)
+    model.eval()
+    model.norm = (mu, sd, W)
+    model.info = {"epochs": ep + 1, "val_loss": best, "n_train_windows": len(Xt), "minutes": (time.time() - t0) / 60}
+    return model
+
+
+def rollout_fno_window(model, U_start, n_total):
+    """U_start: the first W states (n_vars last). Returns (n_total, n_vars): U_start, then chained window forecasts."""
+    torch, _ = _torch()
+    mu, sd, W = model.norm
+    z = ((np.asarray(U_start[:W]) - mu) / sd).T[None]
+    out = [np.asarray(U_start[:W])]
+    x = torch.tensor(z, dtype=torch.float32)
+    with torch.no_grad():
+        while sum(len(o) for o in out) < n_total:
+            x = model(x)
+            if not torch.isfinite(x).all():
+                out.append(np.full((W, len(mu)), np.nan))
+                x = torch.nan_to_num(x)
+                continue
+            out.append(x[0].numpy().T * sd + mu)
+    return np.concatenate(out)[:n_total]

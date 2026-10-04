@@ -980,13 +980,108 @@ def v3_reaction():
         gs_details(info, agent, vr)
 
 
+LORENZ_WHAT = {
+    "clean": "Four noisy runs (2% noise), nothing else wrong.",
+    "spikes": "The same runs with sensor glitches: 0.5% of the samples replaced by large spikes.",
+    "forcing": "The same runs, but the system was kicked from outside a few times (short pushes nobody recorded).",
+    "sensor": "The third variable was never measured: only two of the three columns exist.",
+}
+
+
+def v3_lorenz():
+    info, a = load_case("lorenz")
+    if not info:
+        return missing("lorenz")
+    conds = info["conditions"]
+    ui.page_title("Lorenz: In and Out of Sample",
+                  "A chaotic system · 4 short noisy runs · rescaled units · law vs a neural operator (FNO)")
+    labels = {c["label"]: k for k, c in conds.items()}
+    pick = st.segmented_control("What was wrong with the training data", list(labels), default="Clean",
+                                key="lorenz_cond") or "Clean"
+    cond = labels[pick]
+    c = conds[cond]
+    st.markdown(f"<div class='law'>{html.escape(LORENZ_WHAT[cond])}</div>", unsafe_allow_html=True)
+    uq = c.get("uq") or {}
+    tl = a["t_lyap"]
+    left, right = st.columns([1.35, 1], gap="large")
+    with left:
+        ui.fig_title("Forecast from a new starting point", locked=True)
+        p = SHOW / "lorenz" / f"video_{cond}.mp4"
+        if p.exists():
+            st.video(str(p), loop=True, autoplay=True, muted=True)
+    with right:
+        if uq:
+            ui.fig_title("The verdict")
+            ui.verdict_box(uq)
+        ui.fig_title("The law it found")
+        ui.equations(ui.rhs_latex(c["laws"]["Discovered law"], digits=3), small=True)
+        if cond == "sensor":
+            st.caption("Only the first equation is checkable: the second is its stand-in for the missing variable.")
+        if uq:
+            ui.next_box(uq)
+    keys = {"Discovered law": "law", "FNO": "fno", "SINDy": "sindy"}
+    c1, c2 = st.columns(2, gap="large")
+    with c1:
+        ui.fig_title("In sample: a training run")
+        show(_bigfont(viz.ode_errors(tl, {k: a[f"{cond}_err_in_{v}"] for k, v in keys.items()}), 400), f"lz_in_{cond}")
+    with c2:
+        ui.fig_title("Out of sample: new starting points", locked=True)
+        show(_bigfont(viz.ode_errors(tl, {k: a[f"{cond}_err_oos_{v}"] for k, v in keys.items()}), 400), f"lz_oos_{cond}")
+    ui.fig_title("How long each stays on track", locked=True)
+    show(_bigfont(viz.ode_valid_bars(c["valid_in"], c["valid_oos"], float(tl[-1])), 400), f"lz_bars_{cond}")
+    with st.expander("📈 The trajectories (in sample and out of sample)"):
+        names = c["names"]
+        for tag, lab in (("in", "In sample: training run 1 (as given, with its noise)"),
+                         ("oos", "Out of sample: new starting point 1 (clean)")):
+            st.markdown(f"**{lab}**")
+            show(_bigfont(viz.ode_series(tl, a[f"{cond}_X_{tag}"], {k: a[f"{cond}_Y_{tag}_{v}"] for k, v in keys.items()},
+                                         names)), f"lz_ser_{tag}_{cond}")
+    with st.expander("🧠 How it got there"):
+        _reasoning(c.get("rationale"), c.get("tools"))
+    with st.expander("🔭 What this shows"):
+        st.markdown(
+            "- **Clean data:** the law and the FNO both track a training run well; on new starting points the law "
+            "lasts longer (about 2.3 vs 1.8 Lyapunov times). Plain SINDy also finds the law here.\n"
+            "- **Spikes:** SINDy fits the glitches and gets a wrong law; the FNO learns the glitches too. The agent "
+            "recovers the right law, which tracks new runs more than twice as long as either.\n"
+            "- **Outside kicks:** all three degrade; the law is still the most accurate.\n"
+            "- **Lost sensor:** the law's first equation is right, but its stand-in for the missing variable cannot "
+            "forecast; the FNO does better on the two measured columns. The agent's verdict (inconclusive) says so.\n"
+            "- Lorenz is chaotic: tiny errors grow about 2.7× every Lyapunov time, so every forecast is lost "
+            "eventually. What matters is how long it lasts.")
+    if uq:
+        with st.expander("✅ The checks behind the verdict"):
+            st.markdown(ui.checks_md(uq))
+    with st.expander("🔒 Benchmark details"):
+        fi = c.get("fno_info") or {}
+        rows = [{"method": k, "in sample": round(c["valid_in"][k], 2),
+                 "out of sample (run 1, run 2)": ", ".join(f"{x:.2f}" for x in c["valid_oos_runs"][k]),
+                 "out of sample (mean)": round(c["valid_oos"][k], 2)} for k in c["valid_in"]]
+        st.markdown("**Lyapunov times before the error passes 0.5** (end of record: "
+                    f"{float(tl[-1]):.1f})")
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        st.markdown(
+            f"- **Same data for everyone:** the FNO, SINDy and the agent all trained on the same 4 runs, as given "
+            f"(noise, spikes, kicks, missing column).\n"
+            f"- **FNO:** Fourier layers over a window of {info['fno_window']} time steps; it maps the last "
+            f"{info['fno_window']} states to the next {info['fno_window']} and is chained to forecast. Window chosen on "
+            f"held-out training windows; best checkpoint by held-out loss ({int(fi.get('epochs', 0))} epochs, "
+            f"{fi.get('minutes', 0):.0f} min on a laptop CPU).\n"
+            f"- **Head start:** the FNO is given the first {info['fno_window']} true states of each run; the laws only "
+            f"the first one.\n"
+            "- **Error:** RMS over the variables of |forecast − data| / spread of that variable. Out-of-sample runs are "
+            "clean; in sample is scored against the training run with isolated spikes median-filtered out.\n"
+            f"- **Agent cost:** ${c.get('cost_usd') or 0:.2f}.")
+
+
 def v3_home():
     st.markdown("<div class='home-t'>Equation Discovery AutoScientist</div>"
                 "<div class='home-s'>Data in → the equation, how sure it is, and where to measure next</div>",
                 unsafe_allow_html=True)
     cards = [("lageos", "Satellite", V3_PAGES["sat"]), ("orbit", "Big Bulge Orbit", V3_PAGES["bulge"]),
-             ("ks", "Blind Chaos (KS)", V3_PAGES["chaos"]), ("gray_scott", "Reaction-Diffusion (Chemistry)", V3_PAGES["rd"])]
-    cols = st.columns(4, gap="large")
+             ("ks", "Blind Chaos (KS)", V3_PAGES["chaos"]), ("gray_scott", "Reaction-Diffusion (Chemistry)", V3_PAGES["rd"]),
+             ("lorenz", "Lorenz (In vs Out of Sample)", V3_PAGES["lorenz"])]
+    cols = st.columns(len(cards), gap="medium")
     for c, (case, name, page) in zip(cols, cards):
         with c, st.container(border=True):
             th = SHOW / case / "thumb.jpg"
@@ -1183,6 +1278,7 @@ def main():
         "bulge": st.Page(v3_bulge, title="Big Bulge Orbit", url_path="big-bulge-orbit"),
         "chaos": st.Page(v3_chaos, title="Blind Chaos (KS)", url_path="blind-chaos"),
         "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", url_path="reaction-diffusion"),
+        "lorenz": st.Page(v3_lorenz, title="Lorenz (In vs Out of Sample)", url_path="lorenz"),
         "yours": st.Page(v3_yourdata, title="Your Data", url_path="your-data"),
     })
     nav = st.navigation(list(V3_PAGES.values()), position="top")
