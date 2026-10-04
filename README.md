@@ -1,235 +1,177 @@
-# eqdisc: autoresearch for governing equations
+# eqdisc: an autoresearch lab for the laws of nature
 
-**Give it data. Get back the ODE/PDE, the key steps that led to it, how confident it is, and what to measure next.**
+**Give it raw measurements. It proposes equations, tests them, attacks them and revises them. It stops when the evidence settles on one law, or when it can tell you exactly which measurement would settle it.**
+
+|  | eqdisc | baseline |
+|---|---|---|
+| Blinded held-out systems recovered exactly, single agent ([protocol](docs/benchmark_v1.md)) | **10 / 12** | 1 / 12 (SINDy) |
+| LAGEOS-1 satellite, 30-day forecast from data alone ([details](docs/honest_oos.md)) | **12 km** | 3,170 km (neural net) |
+| Blinded chaotic KS, valid forecast horizon | **4.48 Lyapunov times** | 0.78 (FNO) |
+| Corrupted data sets that end confidently wrong (dev, [details](docs/evidence.md)) | **0 / 96** | n/a |
+
+The agent never sees the system's name, a description or meaningful variable names. It gets data only.
 
 ```bash
-eqdisc-discover my_measurements.csv --context "what the variables are, units, anything known"
+eqdisc-discover examples/data/KS_data.mat
 ```
-
 ```
-[1/6] intuition pre-analysis
+[1/7] evidence checks on the data
+      all data checks passed
+[2/7] intuition pre-analysis on KS_data
       [high]   the spatial mean of u is conserved: the right-hand side is a total derivative (flux form) ...
-[2/6] 3 parallel branches: ['structure-first', 'symbolic', 'sparse-regression']
-[3/6] tournament
-[4/6] adversary (red team) attacks the winner
-[5/6] assessment of the final model
-[6/6] write-up
+[3/7] 3 parallel branches: ['structure-first', 'symbolic', 'sparse-regression']
+[4/7] tournament
+[5/7] adversary (red team) attacks the winner
+[6/7] revise from the checks, then assess the final model
+[7/7] write-up
 
 CONFIDENT: We are confident this is your equation.        u_t = -1.00 u u_x - 1.00 u_xx - 1.00 u_xxxx
 report: runs/discover_KS_data/report.html  (cost $1.35, 451 s)
 ```
 
-The output is a self-contained HTML report:
-- **verdict**: *CONFIDENT*, *CONFIDENT IN PREDICTIONS*, *COLLECT MORE DATA (here)* or *INCONCLUSIVE*;
-- **the equation**;
-- **key steps**, e.g. "the dynamics are simpler in polar coordinates" or "the spatial mean is conserved, so the
-  equation is in flux form";
-- **per-term uncertainty**;
-- **ranked next experiments**, i.e. where plausible models disagree most relative to noise;
-- **questions for you**;
-- the full research trail.
-
 ---
 
-## Install
+## The research loop
+
+```mermaid
+flowchart LR
+  D[raw data] --> E[evidence checks<br/>gaps, glitches, sampling]
+  E --> I[intuition<br/>invariants, symmetries, dispersion]
+  I --> B1[agent: structure-first]
+  I --> B2[agent: sparse regression]
+  I --> B3[agent: symbolic]
+  B1 & B2 & B3 --> T[tournament<br/>CV error, BIC, rollouts]
+  T --> A[adversary<br/>must beat the incumbent]
+  A --> C[model checks<br/>same law on every slice?<br/>only noise left?]
+  C --> R[revise<br/>a failed check proposes a fix;<br/>it must win the tournament]
+  R --> V[verdict, uncertainty,<br/>next experiments, report]
+  V -. human in the loop .-> B1
+```
+
+- **Hypothesise.** A non-LLM pre-analysis reads the data's structure (conservation laws, symmetries, the dispersion relation, fixed points) and seeds three Claude agents. Each agent follows a different research strategy.
+- **Experiment.** The agents run real numerics through a shared toolbox ([docs/toolbox.md](docs/toolbox.md)): weak-form and ensemble SINDy, PySR, skeleton fits, forward-simulation fits, coordinate transforms, symmetry search, and their own analysis code and plots, run in a sandbox. The LLM never does the arithmetic.
+- **Select.** A statistical tournament picks the winner, not an LLM vote.
+- **Falsify.** A red-team agent attacks the winner, and a challenger is adopted only if it wins the same tournament.
+- **Diagnose and revise.** Deterministic checks ask two questions: does the law hold on every slice of the data, and is only noise left over? A failed check proposes a concrete fix, such as a forcing term, a source or a missing nonlinearity. The fix is kept only if it wins.
+- **Decide what to measure next.** All plausible models are simulated, and the report ranks the next experiments by how strongly they would separate those models.
+- **Learn.** `eqdisc-agent --learn` writes lessons that later sessions retrieve (`memory/lessons.jsonl`), and `eqdisc-evolve` evolves the agents' playbook or discovery program AlphaEvolve-style. Held-out sets are reported, never optimised.
+
+## What makes it different
+
+- **Competition, not consensus.** Parallel agents follow different strategies. A held-out statistical tournament decides between them, and an adversary has to win that same tournament to replace the incumbent.
+- **It knows when not to trust itself.** Model checks can veto a confident verdict, and the checks never call an LLM:
+  - coefficients must agree across runs, early vs late time, regions of space and amplitude;
+  - the residual must be indistinguishable from noise.
+- **Diagnosis drives revision.** "The residual follows time" becomes "add a forcing term at this frequency", and the system tests that fix. This closes the loop from falsify to revise.
+- **It says what to measure next.** Uncertainty-driven experiment design names the initial condition that best separates the surviving models, and the coefficient it would pin down.
+- **Built against self-deception.**
+  - Blinded benchmarks rename every variable and change every coefficient by ±25%, so they measure discovery rather than recall of textbook equations.
+  - Results are scored only on refitted coefficients.
+  - Earlier results that leaked domain information are publicly retracted ([honest_oos](docs/honest_oos.md)).
+
+## Results
+
+**Blinded held-out benchmark:** 12 systems never used for tuning, 2% noise, scored on unseen initial conditions ([full table](docs/benchmark_v1.md)).
+
+| method | exact recoveries |
+|---|---|
+| plain SINDy | 1 / 12 |
+| auto-configured SINDy (heuristics, no LLM) | 3 / 12 |
+| single Claude agent | **10 / 12** |
+| full pipeline (branches, tournament, adversary) | **3 / 3** (subset) |
+
+**Out of sample, data only** ([details and caveats](docs/honest_oos.md)):
+- **LAGEOS-1, a real satellite, in random units.** The agent inferred Kepler + J₂ from the numbers alone. 30-day forecast error: 12 km. A neural net trained on the same data: 3,170 km. Kepler alone: 9,037 km.
+- **Blinded Kuramoto–Sivashinsky.** Valid for 4.48 Lyapunov times; the true PDE gives 4.53 and an FNO 0.78. Weak SINDy alone matches the agent here.
+- **Gray–Scott (The Well, 5% noise).** Exact structure. VRMSE over steps 6–12 is 0.068, against 0.45 for an FNO on the same data.
+
+**Corrupted data** ([docs/evidence.md](docs/evidence.md)). 4 PDEs × 8 corruptions: outliers, gaps, censored tails, hidden forcing, hidden sources, run-to-run variation, extreme-value terms.
+- The no-LLM pipeline is never confidently wrong: 0 of 96 dev cases, with 64 recovered exactly.
+- The revise step turns hidden-forcing cases from 0/12 to 6/12 recovered, and hidden-source cases from 0/12 to 4/12.
+- These are calibration seeds. Held-out seeds are next.
+
+## See exactly what it did
+
+Every run writes `runs/discover_<data>_<time>/`:
+- **`report.html`** contains:
+  - the verdict (*CONFIDENT*, *CONFIDENT IN PREDICTIONS*, *COLLECT MORE DATA*, *INCONCLUSIVE*);
+  - the equation, the key steps, uncertainty for each term, data and model checks, revisions, ranked next experiments and questions for you.
+- **`ledger.jsonl`** is an append-only record of every finding, data repair, tournament, revision and verdict, each tagged with dataset and config hashes.
+- **`discovery.json`** and the agent transcripts hold the full research trail.
+
+**Demo app.** Run `pip install -e ".[demo]" && streamlit run demo/app.py`. It works straight after cloning, with no API key needed for the examples.
+- Worked cases: a real satellite, an honest failure the system flags itself, blind chaos (KS) and reaction–diffusion. Each shows the forecast, the verdict, the law found and where to measure next.
+- *Your Data*: upload a CSV and press *Discover*.
+- `EQDISC_DEMO_FAKE=1` replays a saved run at no cost.
+
+See `demo/README.md` for more.
+
+## Efficient by design
+
+- **Cost.** A full run takes $1–3 and 2–8 minutes. Each agent branch costs about $0.3–0.5. For a cheap pass, use `--branches 2 --no-adversary`.
+- **Cheap checks.** Every check, the grade and the verdict are deterministic numpy/scipy, with no tokens. They add about 1% to an assessment, and model checks are cached per model.
+- **No wasted calls.** Identical repeated tool calls are blocked. The critic is skipped when only 2 or fewer tool calls remain in the budget.
+
+## Run it
 
 ```bash
 git clone https://github.com/danieldeh/autoresearch-pde && cd autoresearch-pde
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[notebooks]"          # add ",pysr" for symbolic regression (installs Julia on first use)
+pip install -e ".[notebooks]"            # add ",pysr" for symbolic regression
+export ANTHROPIC_API_KEY=...             # or `ant auth login`, or a gitignored .env file
+python -m eqdisc.tests.smoke             # full pipeline with Claude stubbed out: no API calls
 ```
-
-**Claude API access** (the agents run on Claude). Use either of these:
-- `ant auth login` with the [Anthropic CLI](https://github.com/anthropics/anthropic-cli)
-  (`brew install anthropics/tap/ant`). No key to manage.
-- An API key from the Claude Console: `export ANTHROPIC_API_KEY=...`, or put `ANTHROPIC_API_KEY=...` in a `.env` file
-  at the repo root (it is gitignored).
-
-Check everything works without any API calls:
-```bash
-python -m eqdisc.tests.smoke
-```
-
-## Quick start
 
 ```bash
-eqdisc-discover examples/data/KS_data.mat                       # real Kuramoto–Sivashinsky data
-eqdisc-discover examples/data/kdv_data.mat --branches 2         # real KdV data
-eqdisc-discover my_data.csv --human --context "closed population; mass-action kinetics"   # you review the result
+eqdisc-discover examples/data/KS_data.mat                     # real Kuramoto–Sivashinsky data
+eqdisc-discover my_data.csv --human --context "..."           # review the result yourself
 ```
 
-**Input formats**: `.csv/.tsv/.txt`, `.mat` (v5; v7.3 with `h5py`), `.npz/.npy`, `.h5`, `.json`.
-- **Time series**: a time column, one column per state variable, and optionally a trajectory-id column.
-- **Spatio-temporal fields**: arrays with time, space and optional trajectory axes, plus coordinate vectors.
-- The ingester infers the layout and writes a **data card** of every assumption, with confidence levels and how to
-  override each one (`--hint`, via `eqdisc-ingest`).
+**Inputs.** `.csv/.tsv/.txt`, `.mat`, `.npz/.npy`, `.h5` and `.json`, holding either time series or spatio-temporal fields. The ingester infers the layout and writes a data card listing every assumption, with how to override it.
 
-**Cost**: about $0.3–0.5 per agent branch. A default run (3 branches plus the adversary) is typically $1–3 and
-2–8 minutes. Use `--branches 2 --no-adversary` for a cheaper pass, or `eqdisc-agent` for a single agent session.
-
-### Use from Claude Code
-This repo ships a Claude Code skill (`.claude/skills/discover-equations`). Open the repo in Claude Code and say
-*"discover the equations in data/foo.csv"*. It checks credentials, asks one question about domain context, runs the
-pipeline and reports the verdict, equation, key steps, confidence and next experiments.
-
-### Use from Python
+**From Python.**
 ```python
 from eqdisc.orchestrate import discover
-res = discover("my_data.csv", n_branches=3, context="...")
-res["verdict"], res["final_model"], res["assessment"]["experiments"]["ranked"][:3], res["report"]
+res = discover("my_data.csv")
+res["verdict"], res["final_model"], res["report"]
 ```
 
----
+**From Claude Code.** Open the repo and say *"discover the equations in data/foo.csv"*. This uses the shipped `discover-equations` skill.
 
-## Demo app ("Equation Discovery AutoScientist")
-A web app with four worked examples and an upload page. Everything it needs is in the repo (`demo/showcase/`), so it
-runs straight after cloning; it needs no API key unless you run discovery on your own data.
+## Reproduce and extend
 
 ```bash
-git clone https://github.com/danieldeh/autoresearch-pde && cd autoresearch-pde
-pip install -e ".[demo]"
-streamlit run demo/app.py
-```
-Then open http://localhost:8501. Tabs:
-- **Satellite** (real LAGEOS-1 data), **Big Bulge Orbit** (an honest failure the system flags itself),
-  **Blind Chaos (KS)**, **Reaction-Diffusion (Chemistry)**: each shows the forecast video, the verdict, the law found,
-  where to measure next, and (🔒) how it compared with the hidden truth.
-- **Your Data**: upload a CSV (or pick an example), optionally describe it, press *Discover*. This calls Claude with
-  your own key (`ANTHROPIC_API_KEY`, or `ant auth login`); a run takes a few minutes and about $0.5-3.
-
-No key, or rehearsing a talk? Start in rehearsal mode, where *Your Data* replays a saved run at no cost:
-```bash
-EQDISC_DEMO_FAKE=1 streamlit run demo/app.py
-```
-The page font loads from the web; offline it falls back to a standard serif. See `demo/README.md` for details.
-
-## Static laws y = f(x) (symbolic regression mode)
-`eqdisc.sr.solve(task)` runs parallel Claude sessions with these tools:
-- data probes: power laws, separability, single-variable shapes, two-variable combinations;
-- skeleton fitting by variable projection;
-- PySR;
-- sparse fits;
-- a code interpreter;
-- `assess`: per-term evidence, terms the data favour adding, the noise floor, rival structures, and input regions where
-  plausible models disagree.
-
-The selected law is chosen on validation data and comes with a verdict, like the dynamics mode. Benchmarks:
-`python -m eqdisc.sr_bench llmsr|srsd ...` and `python -m eqdisc.sr_variants make|run` (fresh, unpublished problems).
-
-## How it works
-
-```mermaid
-flowchart LR
-  D[data file] --> I[ingest + data card]
-  I --> P[intuition pre-analysis<br/>shapes, invariants, dispersion,<br/>symmetry, fixed points]
-  P --> B1[branch: structure-first]
-  P --> B2[branch: sparse regression]
-  P --> B3[branch: symbolic]
-  B1 & B2 & B3 --> T[tournament<br/>CV error, BIC, rollouts]
-  T --> A[adversary<br/>red team tries to break it]
-  A --> Q[assessment<br/>UQ, sensitivity, OED]
-  Q --> V[verdict + next experiments<br/>+ HTML report]
-  Q -. human in the loop .-> H((scientist))
-  H -. feedback / new data .-> B1
+eqdisc-datagen --suite default                             # 29 ODE/PDE systems with hidden test sets
+eqdisc-blind SYSTEM                                        # blinded variant: renamed variables, ±25% coefficients
+python -m eqdisc.benchmark                                 # SINDy vs auto vs agent vs full pipeline
+python -m eqdisc.corrupt --seeds 0 1 2                     # corrupted-data suite
+python -m eqdisc.bench_evidence --arm B --split dev        # score it (no LLM)
 ```
 
-**Agents.** Each branch is a Claude tool-use agent with a different strategy. All of them share one toolbox, and all
-of it works on public data only:
+Rule: tune on development systems only, and report held-out results separately.
 
-| tool | what it does |
-|---|---|
-| `intuit` | pre-analysis that guesses the basis, coordinates and method before fitting: single-variable dependence shapes (sin, saturating, cubic…), interaction tests, fixed points with linearisation, conservation, amplitude–period relations; for PDEs, the dispersion relation of Fourier modes, wave speed vs amplitude (nonlinear advection), flux form and parity |
-| `weak_sindy` | weak-form SINDy: the data are never differentiated, so it is robust to noise and coarse sampling |
-| `run_sindy`, `ensemble_sindy` | sparse regression with any library and hyperparameters; bagged inclusion probabilities |
-| `run_pysr` | symbolic regression with structure templates (`f(x) + g(y)`), parsimony constraints and rollout-based selection (runs in an isolated process) |
-| `fit_skeleton` | proposes a structure with free constants and fits them by variable projection (linear and nonlinear parameters separated) |
-| `find_invariants`, `transform` | conserved quantities and constraints; fitting in new coordinates (polar, log, reduced) with an exact chain-rule map back |
-| `detect_symmetries`, `equivariant_sindy` | continuous and discrete symmetries, and SINDy constrained to respect them |
-| `repair`, `compare_models`, `coefficient_uncertainty` | single-term remove/add search; cross-validated model ranking against the noise floor; bootstrap intervals |
-| `assess_model` | the full confidence report and experiment design |
-| `run_python`, `plot_data`, `plot_model` | the agent writes its own analysis code and *looks at* figures (returned to Claude as images) |
-| `ask_human`, `request_experiment` | human in the loop; simulator-backed experiments on benchmark data |
+To point it at a new problem class:
+- add a tool in `eqdisc/agent.py` (implementations live in `eqdisc/toolbox.py`);
+- add a research strategy in `orchestrate.STRATEGIES`;
+- add method guidance in `eqdisc/playbook.md`.
 
-Each submission is reviewed by a **critic** before it is accepted. Identical repeated calls are blocked.
+Static laws y = f(x) and the notebooks are covered in [docs/sr_mode.md](docs/sr_mode.md).
 
-**Confidence and next steps** (`eqdisc.assess`):
-- per-term evidence: bootstrap intervals, and ΔBIC for removing a term or adding another. On noisy, coarse or PDE data
-  this uses weak-form statistics, cross-checked against the strong form;
-- whether the remaining error is at the noise floor;
-- competing structures the data cannot rule out;
-- a candidate missing term counts only if it also improves held-out *predictions* (not just the derivative fit);
-- sensitivity of predictions to uncertain coefficients, and the predictability horizon;
-- state-space coverage;
-- **experiment design**: every plausible model is simulated from candidate initial conditions, the conditions are ranked
-  by how much the models disagree relative to the noise, and each recommendation says which coefficient it would
-  pin down.
+## Next
 
-## Notebooks (`notebooks/`, executed, with figures)
-1. **Benchmark & baselines**: systems, noise models, SINDy, the hidden-test scoreboard, weak SINDy on noisy PDEs.
-2. **Structure discovery**: conservation laws, invariants, polar/log/reduced coordinates, skeleton fits.
-3. **The agent**: live Claude sessions vs SINDy on hard systems (needs credentials).
-4. **Real data**: ingest → discover → uncertainty on the real KS and KdV files.
-5. **Confidence & next experiments**: right vs wrong models, and where to measure next.
-
-Rebuild with `python notebooks/build_notebooks.py [01 05 ...]`, then execute with Jupyter.
-
-## Benchmarking (and avoiding self-deception)
-- `eqdisc-datagen` generates 30+ ODE/PDE systems with a **hidden test set** of unseen initial conditions. It includes
-  periodic and non-periodic 1-D PDEs, 2-D reaction–diffusion, and the Strogatz/PMLB systems used by KeplerAgent.
-  Noise can be Gaussian, multiplicative, red (time-correlated) or outliers. Scoring uses vector-field error, rollout
-  error and parsimony.
-- `eqdisc-blind SYSTEM` makes **blinded variants**: variables renamed (x1, x2, … / q) and every coefficient changed by
-  a random ±25%. These measure discovery rather than recall of textbook equations (the main concern raised by
-  LLM-SRBench). Report development systems and blinded held-out systems separately; never tune on the held-out set.
-- `python -m eqdisc.benchmark` runs plain SINDy, a non-LLM auto-configured baseline, a single agent and the full
-  pipeline.
-- `eqdisc-evolve` evolves discovery programs or the agent's playbook with an AlphaEvolve-style loop.
-
-## Results so far
-
-**Honest out-of-sample, data-only results** cover LAGEOS-1, blinded KS, Gray–Scott and unpublished oscillators. Earlier results that leaked domain information to the agent are retracted. The protocol:
-- noisy training data only;
-- autoregressive forecasts of unseen windows;
-- refitted coefficients;
-- FNO or MLP baselines.
-
-Results and caveats: [`docs/honest_oos.md`](docs/honest_oos.md). This protocol supersedes the earlier in-sample numbers below.
-
-
-**Blinded held-out benchmark** (12 systems never used for tuning; variables renamed and coefficients perturbed;
-2% noise). The table counts models symbolically equivalent to the hidden truth:
-
-| method | held-out matches |
-|---|---|
-| plain SINDy (fixed defaults) | 1 / 12 |
-| auto-configured (heuristics, no LLM) | 3 / 12 |
-| single Claude agent (no skills, memory or context) | **10 / 12** |
-| full pipeline (branches, tournament, adversary) | **3 / 3** (subset) |
-
-Total cost $9.21. Full table, protocol and an honest account of the failures, including LLM recall of functional
-forms despite blinding: [`docs/benchmark_v1.md`](docs/benchmark_v1.md).
-
-**Real data** (no ground truth). On `examples/data/KS_data.mat` all three branches independently recover
-u_t = −u·u_x − u_xx − u_xxxx (coefficients −0.996 to −1.002), and the verdict is CONFIDENT. On the orbit
-`Challenge1.csv` (with domain context) it recovers two-body gravity plus J2 with J2 = 0.5, matching the data generator.
-
-## Related work
-LLM-SR / LLM-SRBench (Shojaee et al.), KeplerAgent (Yang et al. 2026), STRIDE (Su et al. 2026), AlphaEvolve
-(Georgiev, Gómez-Serrano, Tao, Wagner), weak-form SINDy (Messenger & Bortz), E-SINDy (Fasel et al.).
-eqdisc combines an agentic tool-user with:
-- weak-form and invariant/coordinate/symmetry discovery for noisy ODE and PDE data;
-- a tournament and an adversary;
-- uncertainty-driven experiment design;
-- a human in the loop;
-- an anti-recall benchmark protocol.
+- Ablations against Claude alone: Claude with a code sandbox vs eqdisc vs eqdisc with evidence checks, on held-out seeds.
+- Revision families that don't assume a shape: multi-frequency forcing, spline sources.
+- A partition test that decides whether a large coherent event is real dynamics or corrupt data.
+- Hidden variables and delay embeddings.
 
 ## Limitations
-- All relevant state variables must be measured; there is no hidden-variable or delay-embedding discovery yet.
-  External forcing or inputs are not modelled.
-- Coordinate transforms are for ODEs only. PDE support covers 1-D and 2-D grids, periodic or non-periodic, with one
-  boundary type for all sides.
-- Confidence thresholds are heuristics. Treat the verdict as a well-argued opinion with evidence, not a proof.
-- LLM priors can pull models toward textbook forms. The assessment checks every term against the data, and the
-  blinded benchmark measures the effect.
+
+- Every relevant state variable must be measured.
+- Forcing is proposed and tested only as a sinusoid in time or a single spatial mode.
+- Coordinate transforms are general for ODEs. For PDEs they are pointwise field transforms only, such as `log(u)`. PDEs are supported on 1-D and 2-D grids with one boundary type.
+- Thresholds are calibrated heuristics. Treat the verdict as an evidence-backed opinion, not a proof.
+- LLM priors pull toward textbook forms. The assessment checks every term against the data, and the blinded benchmark measures the residual effect.
+
+**Related work:** LLM-SR / LLM-SRBench, KeplerAgent, STRIDE, AlphaEvolve, weak-form SINDy (Messenger & Bortz), E-SINDy.
 
 MIT license. Example data: see `THIRD_PARTY_NOTICES.md`.
