@@ -22,6 +22,7 @@ import itertools
 import json
 import multiprocessing
 import os
+import threading
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -66,20 +67,27 @@ def _simulate(meta, rhs, U0, t, cap_mult=1.0):
 
 
 # PDE simulations are independent and each can take seconds, so batches of them run in worker processes.
-# EQDISC_WORKERS sets the pool size (1 = serial). Workers are single-threaded and started with 'spawn', because the
+# EQDISC_WORKERS sets the pool size; default 1 = serial (opt in with e.g. EQDISC_WORKERS=8). Workers are single-threaded and started with 'spawn', because the
 # pipeline runs agent branches in threads and forking a threaded process is unsafe.
 _THREAD_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 # a single-threaded worker is slower per simulation than the multi-threaded serial path, so its wall-clock cap is
 # longer; otherwise simulations that finish serially would time out (NaN, counted as blow-ups) in parallel
 _WORKER_CAP_MULT = 4.0
 _POOL = None
+_POOL_LOCK = threading.Lock()
 
 
 def _pool():
     global _POOL
-    n = int(os.environ.get("EQDISC_WORKERS", max(1, min(16, (os.cpu_count() or 2) - 2))))
+    n = int(os.environ.get("EQDISC_WORKERS", 1))
     if n <= 1:
         return None
+    with _POOL_LOCK:                    # agent branches run in threads: create the pool once
+        return _make_pool(n)
+
+
+def _make_pool(n):
+    global _POOL
     if _POOL is None:
         old = {k: os.environ.get(k) for k in _THREAD_VARS}
         os.environ.update({k: "1" for k in _THREAD_VARS})
@@ -530,7 +538,7 @@ def assess(meta, data, rhs, alternatives=None, n_coef_draws=12, seed=0, basis="a
         nf = uq.noise_floor(meta, data)
         res["noise_floor"] = {"floor": nf.get("deriv_nrmse_floor_mean")}
     val = tb.validate(meta, data, rhs)
-    res["validation"] = {k: val.get(k) for k in ("deriv_nrmse", "rollout_valid_time", "rollout_horizon", "rollout_blew_up")}
+    res["validation"] = {k: val.get(k) for k in ("deriv_nrmse", "rollout_valid_time", "rollout_horizon", "rollout_blew_up", "rollout_timed_out")}
     # 3. plausible model set: coefficient draws + structural alternatives
     models = {"submitted": rhs}
     for i in range(n_coef_draws if meta["kind"] == "ode" else 4):
@@ -596,7 +604,7 @@ def grade(res):
     tiny = [m for m in res["missing_term_evidence"] if (m["dBIC_if_added"] or 0) < -10 and m not in strong_add]
     if tiny:
         reasons.append("extra terms that are statistically detectable but do not improve predictions (<2% error "
-                       "reduction or <10% rollout gain; typically differentiation bias): " + ", ".join(m["term"] for m in tiny[:3]))
+                       "reduction or <10% rollout gain; typically numerical/differentiation bias): " + ", ".join(m["term"] for m in tiny[:3]))
     if strong_add:
         reasons.append("data favour adding: " + ", ".join(f"{m['term']} to d{m['var']}/dt (dBIC {m['dBIC_if_added']})" for m in strong_add[:3]))
         score -= 2

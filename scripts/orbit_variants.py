@@ -7,7 +7,7 @@ This rescales those datasets (data, hidden test set and truth) to:
 
 With lengths scaled by a and times by b, r' = a r and t' = b t, so dv'/dt' = (a / b^2) f(r' / a).
 
-    python -m eqdisc.orbit_data && python orbit_variants.py
+    python -m eqdisc.orbit_data && python scripts/orbit_variants.py
 """
 import json
 import shutil

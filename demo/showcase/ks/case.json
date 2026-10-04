@@ -1,0 +1,400 @@
+{
+ "results": {
+  "truth": {
+   "u": "-0.56875*u*u_x - 1.183*u_xx - 1.99927*u_xxxx"
+  },
+  "noise": 0.02,
+  "train_window": [
+   0,
+   56.57142857142858
+  ],
+  "test_window": [
+   56.57142857142858,
+   142.85714285714286
+  ],
+  "lyapunov_exponent": 0.08520034196187014,
+  "lyapunov_se": 0.009107150213562738,
+  "lyapunov_twin_crude": 0.09046508863346599,
+  "weak_sindy": {
+   "rhs": {
+    "u": "-1.1836*u_xx -1.9978*u_xxxx -0.56869*u*u_x"
+   }
+  },
+  "agent": {
+   "submitted": {
+    "u": "-0.5687*u*u_x - 1.1836*u_xx - 1.9978*u_xxxx"
+   },
+   "refit": {
+    "u": "(-1.18367)*(u_xx) + (-1.99788)*(u_xxxx) + (-0.568703)*(u*u_x)"
+   },
+   "coefficients": [
+    {
+     "var": "u",
+     "term": "u_xx",
+     "submitted": -1.1836,
+     "refit": -1.18367,
+     "ci90": [
+      -1.186,
+      -1.181
+     ]
+    },
+    {
+     "var": "u",
+     "term": "u_xxxx",
+     "submitted": -1.9978,
+     "refit": -1.99788,
+     "ci90": [
+      -2.002,
+      -1.994
+     ]
+    },
+    {
+     "var": "u",
+     "term": "u*u_x",
+     "submitted": -0.5687,
+     "refit": -0.568703,
+     "ci90": [
+      -0.5696,
+      -0.5676
+     ]
+    }
+   ],
+   "verdict": {
+    "status": "CONFIDENT",
+    "headline": "We are confident this is your equation.",
+    "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. To validate it independently, the most demanding test would be: single Fourier mode k=6 (wavelength L/6), data amplitude."
+   },
+   "cost_usd": 0.627,
+   "report": "runs/oos_ks_dataonly/discover/report.html"
+  },
+  "fno": {
+   "train_minutes": 3.1
+  },
+  "valid_time_lyapunov": {
+   "true PDE from noisy state": 4.53,
+   "weak SINDy (no LLM)": 4.48,
+   "eqdisc agent (refit)": 4.48,
+   "FNO (same noisy data)": 0.78
+  },
+  "valid_time": {
+   "true PDE from noisy state": 53.14,
+   "weak SINDy (no LLM)": 52.57,
+   "eqdisc agent (refit)": 52.57,
+   "FNO (same noisy data)": 9.14
+  }
+ },
+ "labels": [
+  "truth (clean future)",
+  "true PDE from noisy state",
+  "weak SINDy (no LLM)",
+  "eqdisc agent (refit)",
+  "FNO (same noisy data)"
+ ],
+ "story": {
+  "headline": "The data come from a one-dimensional field u(x,t) that develops a front which breaks up into spatiotemporal cellular chaos, and the discovered equation is a rescaled Kuramoto\u2013Sivashinsky equation: u_t = \u22120.569\u00b7u\u00b7u_x \u2212 1.184\u00b7u_xx \u2212 1.998\u00b7u_xxxx, combining nonlinear advection, a destabilising negative diffusion and stabilising fourth-order hyperdiffusion.",
+  "key_steps": [
+   {
+    "observation": "Diagnostics showed a single PDE trajectory (100 snapshots \u00d7 1024 grid points, t \u2208 [0, 56.6]) whose spatial mean stays constant.",
+    "decision": "Treat the dynamics as a conservation (flux-form) law and exclude source terms (1, u, u\u00b2) from the candidate library, allowing derivatives up to 4th order.",
+    "outcome": "This narrowed the search to transport, diffusion and dispersion-type terms."
+   },
+   {
+    "observation": "Weak-form SINDy, which avoids noisy pointwise high-order derivatives, returned three terms: u\u00b7u_x, u_xx and u_xxxx.",
+    "decision": "Check that this sparse model is stable under different settings: polynomial degree 1 vs 2, and 1500 test functions.",
+    "outcome": "Coefficients were reproduced to about 0.05% (\u22120.5687, \u22121.1838, \u22121.998), so the identification is robust."
+   },
+   {
+    "observation": "The plotted field shows a front dissolving into cellular chaos, the hallmark of the Kuramoto\u2013Sivashinsky equation.",
+    "decision": "Compare the discovered model with a near-identical variant using cross-validated derivative error.",
+    "outcome": "The two variants were statistically indistinguishable. The 3-term weak-SINDy model was preferred and submitted."
+   },
+   {
+    "observation": "A nonlinear skeleton refit (fit_skeleton) converged to coefficients 20\u20133000\u00d7 smaller, yet reported the same valid time (6.29).",
+    "decision": "Disregard the skeleton refit and keep the weak-form coefficients.",
+    "outcome": "Bootstrap analysis later confirmed the weak-form values with tight 90% CIs (relative uncertainty \u22480.2%)."
+   },
+   {
+    "observation": "Removing any term raises BIC by more than 1100. Adding any single extra term (u_xxx, u\u00b2u_x, u_x, u\u00b2u_xxx) raises BIC by about 3.5\u20134.6 and reduces error by less than 1%.",
+    "decision": "Accept the 3-term structure as final.",
+    "outcome": "The structure is well determined, rated high confidence."
+   }
+  ],
+  "physical_interpretation": "The \u2212u\u00b7u_x term is Burgers-type nonlinear self-advection, which transfers energy between scales and steepens gradients. The \u2212u_xx term is negative (anti-)diffusion that amplifies long-wavelength perturbations. The \u2212u_xxxx term is hyperdiffusion that damps short wavelengths. Their balance selects a preferred cell size: the fastest-growing wavenumber is k* = \u221a(1.184/(2\u00b71.998)) \u2248 0.54, with marginal wavenumber \u221a(1.184/1.998) \u2248 0.77. Together the three terms produce the chaotic cellular pattern typical of flame fronts, thin falling films or phase turbulence; the coefficients are simply a rescaling of the canonical KS form.",
+  "caveats": [
+   "All results come from a single trajectory. The coefficients are precise for this run, but generalisation to other initial conditions or amplitudes has not been tested.",
+   "Source terms (1, u, u\u00b2) were excluded a priori on the basis of mean conservation and were never re-tested as candidates in the missing-term analysis.",
+   "Rollout metrics conflict. The tool-reported valid time is only \u22486.3 time units (about 11% of the span), while the assessment reports held-out agreement for the full horizon. For a chaotic system, pointwise trajectory divergence is expected and is not by itself evidence of model error.",
+   "The skeleton refit returned wildly different coefficients with the same valid-time score. This suggests the valid-time metric is insensitive or the optimiser failed, so valid time should not be used to rank coefficient sets here.",
+   "Domain length and boundary conditions (presumably periodic) are not documented in the data card. Grid units for x and t are also unstated."
+  ],
+  "recommendation": "Use the model: it is a well-determined rescaled Kuramoto\u2013Sivashinsky equation with tight coefficient uncertainties. To confirm it beyond this single run, collect one independent trajectory starting from a single Fourier mode k=6 (wavelength L/6) at data amplitude. This is predicted to sharpen the u_xx and u_xxxx coefficients most (information gain \u224833\u00d7 and \u224810\u00d7 over existing data) by directly probing the linear growth/decay balance."
+ },
+ "verdict": {
+  "status": "CONFIDENT",
+  "headline": "We are confident this is your equation.",
+  "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. To validate it independently, the most demanding test would be: single Fourier mode k=6 (wavelength L/6), data amplitude."
+ },
+ "assessment": {
+  "terms": [
+   {
+    "var": "u",
+    "term": "u_xx",
+    "coef": -1.18367,
+    "submitted_coef": -1.1836,
+    "ci90": [
+     -1.186,
+     -1.181
+    ],
+    "rel_uncertainty": 0.00204,
+    "significant": true,
+    "dBIC_if_removed": 1110.0
+   },
+   {
+    "var": "u",
+    "term": "u_xxxx",
+    "coef": -1.99788,
+    "submitted_coef": -1.9978,
+    "ci90": [
+     -2.002,
+     -1.994
+    ],
+    "rel_uncertainty": 0.00191,
+    "significant": true,
+    "dBIC_if_removed": 1110.0
+   },
+   {
+    "var": "u",
+    "term": "u*u_x",
+    "coef": -0.568703,
+    "submitted_coef": -0.5687,
+    "ci90": [
+     -0.5696,
+     -0.5676
+    ],
+    "rel_uncertainty": 0.00174,
+    "significant": true,
+    "dBIC_if_removed": 1140.0
+   }
+  ],
+  "confidence": {
+   "level": "high",
+   "points": 3,
+   "reasons": [
+    "all terms significantly non-zero (bootstrap 90% CIs exclude 0)",
+    "no single added term is supported by the data",
+    "held-out rollout stays within 30% error for 100% of the horizon"
+   ]
+  },
+  "noise_floor": null,
+  "missing_term_evidence": [
+   {
+    "var": "u",
+    "term": "u_xxx",
+    "dBIC_if_added": 3.52,
+    "error_reduction": 0.00991
+   },
+   {
+    "var": "u",
+    "term": "u*u*u_x",
+    "dBIC_if_added": 3.57,
+    "error_reduction": 0.00958
+   },
+   {
+    "var": "u",
+    "term": "u_x",
+    "dBIC_if_added": 3.72,
+    "error_reduction": 0.00855
+   },
+   {
+    "var": "u",
+    "term": "u*u*u_xxx",
+    "dBIC_if_added": 4.59,
+    "error_reduction": 0.0028
+   }
+  ]
+ },
+ "uq": {
+  "verdict": {
+   "status": "CONFIDENT",
+   "headline": "We are confident this is your equation.",
+   "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. To validate it independently, the most demanding test would be: single Fourier mode k=6 (wavelength L/6), data amplitude."
+  },
+  "terms": [
+   {
+    "var": "u",
+    "term": "u_xx",
+    "coef": -1.18367,
+    "submitted_coef": -1.1836,
+    "ci90": [
+     -1.186,
+     -1.181
+    ],
+    "rel_uncertainty": 0.00204,
+    "significant": true,
+    "dBIC_if_removed": 1110.0
+   },
+   {
+    "var": "u",
+    "term": "u_xxxx",
+    "coef": -1.99788,
+    "submitted_coef": -1.9978,
+    "ci90": [
+     -2.002,
+     -1.994
+    ],
+    "rel_uncertainty": 0.00191,
+    "significant": true,
+    "dBIC_if_removed": 1110.0
+   },
+   {
+    "var": "u",
+    "term": "u*u_x",
+    "coef": -0.568703,
+    "submitted_coef": -0.5687,
+    "ci90": [
+     -0.5696,
+     -0.5676
+    ],
+    "rel_uncertainty": 0.00174,
+    "significant": true,
+    "dBIC_if_removed": 1140.0
+   }
+  ],
+  "missing": [
+   {
+    "var": "u",
+    "term": "u_xxx",
+    "dBIC_if_added": 3.52,
+    "error_reduction": 0.00991
+   },
+   {
+    "var": "u",
+    "term": "u*u*u_x",
+    "dBIC_if_added": 3.57,
+    "error_reduction": 0.00958
+   },
+   {
+    "var": "u",
+    "term": "u_x",
+    "dBIC_if_added": 3.72,
+    "error_reduction": 0.00855
+   },
+   {
+    "var": "u",
+    "term": "u*u*u_xxx",
+    "dBIC_if_added": 4.59,
+    "error_reduction": 0.0028
+   }
+  ],
+  "validation": {
+   "deriv_nrmse": 227.08090488167252,
+   "rollout_valid_time": 6.2857142857142865,
+   "rollout_horizon": 6.2857142857142865,
+   "rollout_blew_up": false
+  },
+  "experiments": [
+   {
+    "score": 0.0162,
+    "max_snr": 0.195,
+    "models_blow_up": [],
+    "most_separated": [
+     "submitted",
+     "symbolic"
+    ],
+    "description": "single Fourier mode k=6 (wavelength L/6), data amplitude",
+    "gain_vs_existing_data": null,
+    "informs_coefficients": [
+     {
+      "coefficient": "u_xx in du/dt",
+      "info_gain_vs_existing": 33.2
+     },
+     {
+      "coefficient": "u_xxxx in du/dt",
+      "info_gain_vs_existing": 10.2
+     },
+     {
+      "coefficient": "u*u_x in du/dt",
+      "info_gain_vs_existing": 5.42
+     }
+    ]
+   },
+   {
+    "score": 0.0036,
+    "max_snr": 0.137,
+    "models_blow_up": [],
+    "most_separated": [
+     "submitted",
+     "symbolic"
+    ],
+    "description": "localised pulse (width 5% of domain), 1.5x data amplitude",
+    "gain_vs_existing_data": null,
+    "informs_coefficients": [
+     {
+      "coefficient": "u_xx in du/dt",
+      "info_gain_vs_existing": 1.08
+     },
+     {
+      "coefficient": "u*u_x in du/dt",
+      "info_gain_vs_existing": 0.761
+     },
+     {
+      "coefficient": "u_xxxx in du/dt",
+      "info_gain_vs_existing": 0.686
+     }
+    ]
+   },
+   {
+    "score": 0.00113,
+    "max_snr": 0.066,
+    "models_blow_up": [],
+    "most_separated": [
+     "submitted",
+     "symbolic"
+    ],
+    "description": "single Fourier mode k=3 (wavelength L/3), data amplitude",
+    "gain_vs_existing_data": null,
+    "informs_coefficients": [
+     {
+      "coefficient": "u_xx in du/dt",
+      "info_gain_vs_existing": 0.942
+     },
+     {
+      "coefficient": "u_xxxx in du/dt",
+      "info_gain_vs_existing": 0.738
+     },
+     {
+      "coefficient": "u*u_x in du/dt",
+      "info_gain_vs_existing": 0.683
+     }
+    ]
+   }
+  ],
+  "data_advice": [
+   "Only 1 trajectory(ies): independent runs from different initial conditions are the cheapest way to separate competing models."
+  ],
+  "confidence": {
+   "level": "high",
+   "points": 3,
+   "reasons": [
+    "all terms significantly non-zero (bootstrap 90% CIs exclude 0)",
+    "no single added term is supported by the data",
+    "held-out rollout stays within 30% error for 100% of the horizon"
+   ]
+  }
+ },
+ "cost_usd": 0.627,
+ "wall_s": 249.9,
+ "tools": [
+  "diagnose",
+  "weak_sindy",
+  "submit",
+  "diagnose",
+  "plot_data",
+  "weak_sindy",
+  "compare_models",
+  "plot_model",
+  "fit_skeleton",
+  "weak_sindy",
+  "submit"
+ ]
+}

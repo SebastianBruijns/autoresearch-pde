@@ -8,6 +8,6 @@ dist/
 datasets/
 runs/
 memory/
-outputs/            # PySR hall-of-fame files
+outputs/
 .ipynb_checkpoints/
 .DS_Store

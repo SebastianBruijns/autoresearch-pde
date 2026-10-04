@@ -1,0 +1,329 @@
+{
+ "results": {
+  "train_window": [
+   "2017-01-01",
+   "2017-12-31"
+  ],
+  "Kepler": {
+   "params": {
+    "p0": 0.9998399427291711
+   },
+   "param_sigma": {
+    "p0": 3.6836442449251097e-06
+   },
+   "one_step_rel_err_heldout": 0.0005645993051917967
+  },
+  "Kepler + J2": {
+   "params": {
+    "p0": 0.999999515312249,
+    "p1": 0.0010822612061027852
+   },
+   "param_sigma": {
+    "p0": 3.887792351312197e-08,
+    "p1": 1.3981541419050878e-07
+   },
+   "one_step_rel_err_heldout": 4.986241601521775e-06
+  },
+  "position_error_km": {
+   "Kepler": {
+    "1d": 298.6430558116185,
+    "7d": 2126.7561790720065,
+    "30d": 9036.740287898858
+   },
+   "Kepler + J2": {
+    "1d": 0.1398099149664336,
+    "7d": 1.5620903584513515,
+    "30d": 11.15544197934562
+   },
+   "neural step model (MLP)": {
+    "1d": 505.62262332263293,
+    "7d": 736.2132253120786,
+    "30d": 3170.311601447794
+   }
+  },
+  "node_rate_deg_per_day": {
+   "data": 0.34252802749786615,
+   "Kepler": -1.945064078412722e-15,
+   "Kepler + J2": 0.34108982210059324
+  }
+ },
+ "agent": {
+  "submitted": {
+   "u1": "u4",
+   "u2": "u5",
+   "u3": "u6",
+   "u4": "-0.006024*u1/(u1**2+u2**2+u3**2)**1.5 - 1.3346e-6*u1*(1 - 5*u3**2/(u1**2+u2**2+u3**2))/(u1**2+u2**2+u3**2)**2.5",
+   "u5": "-0.006024*u2/(u1**2+u2**2+u3**2)**1.5 - 1.3346e-6*u2*(1 - 5*u3**2/(u1**2+u2**2+u3**2))/(u1**2+u2**2+u3**2)**2.5",
+   "u6": "-0.006024*u3/(u1**2+u2**2+u3**2)**1.5 - 1.3346e-6*u3*(3 - 5*u3**2/(u1**2+u2**2+u3**2))/(u1**2+u2**2+u3**2)**2.5"
+  },
+  "cost_usd": 2.134,
+  "n_tool_calls": 20,
+  "units": [
+   0.37,
+   2.9
+  ],
+  "tools": [
+   "intuit",
+   "diagnose",
+   "plot_data",
+   "fit_flow",
+   "fit_flow",
+   "run_python",
+   "run_python",
+   "run_python",
+   "run_python",
+   "validate",
+   "run_python",
+   "run_python",
+   "plot_model",
+   "run_python",
+   "run_python",
+   "submit",
+   "run_python",
+   "run_python",
+   "run_python",
+   "submit"
+  ],
+  "position_error_km": {
+   "1d": 0.16878517390758543,
+   "7d": 1.8027180399933582,
+   "30d": 11.94862441128491
+  },
+  "refit_rhs": {
+   "u1": "u4",
+   "u2": "u5",
+   "u3": "u6",
+   "u4": "-1.33880719766186e-6*u1*(-5*u3**2/(u1**2 + u2**2 + u3**2) + 1)/(u1**2 + u2**2 + u3**2)**2.5 - 0.00602294607022788*u1/(u1**2 + u2**2 + u3**2)**1.5",
+   "u5": "-1.33880719766186e-6*u2*(-5*u3**2/(u1**2 + u2**2 + u3**2) + 1)/(u1**2 + u2**2 + u3**2)**2.5 - 0.00602294607022788*u2/(u1**2 + u2**2 + u3**2)**1.5",
+   "u6": "-1.33880719766186e-6*u3*(-5*u3**2/(u1**2 + u2**2 + u3**2) + 3)/(u1**2 + u2**2 + u3**2)**2.5 - 0.00602294607022788*u3/(u1**2 + u2**2 + u3**2)**1.5"
+  },
+  "refit": {
+   "submitted_constants": [
+    0.006024,
+    1.3346e-06
+   ],
+   "refit_constants": [
+    0.00602294607022788,
+    1.3388071976618582e-06
+   ],
+   "sigma": [
+    1.6687165903976138e-10,
+    1.2446203493298187e-10
+   ],
+   "one_step_rel_err_heldout": 4.904069303873173e-06
+  },
+  "position_error_km_submitted": {
+   "1d": 168.58862000367023,
+   "7d": 1208.6836955648598,
+   "30d": 5133.039185841351
+  }
+ },
+ "agent_alt": {
+  "submitted": {
+   "u1": "u4",
+   "u2": "u5",
+   "u3": "u6",
+   "u4": "-u1*(u1**2+u2**2+u3**2)**(-1.5) - 0.001623*u1*(u1**2+u2**2+u3**2)**(-2.5) + 0.008115*u1*u3**2*(u1**2+u2**2+u3**2)**(-3.5)",
+   "u5": "-u2*(u1**2+u2**2+u3**2)**(-1.5) - 0.001623*u2*(u1**2+u2**2+u3**2)**(-2.5) + 0.008115*u2*u3**2*(u1**2+u2**2+u3**2)**(-3.5)",
+   "u6": "-u3*(u1**2+u2**2+u3**2)**(-1.5) - 0.004869*u3*(u1**2+u2**2+u3**2)**(-2.5) + 0.008115*u3**3*(u1**2+u2**2+u3**2)**(-3.5)"
+  },
+  "cost_usd": 0.966,
+  "n_tool_calls": 13,
+  "tools": [
+   "intuit",
+   "diagnose",
+   "plot_data",
+   "run_python",
+   "run_python",
+   "run_python",
+   "run_python",
+   "run_python",
+   "run_python",
+   "fit_flow",
+   "run_python",
+   "validate",
+   "submit"
+  ],
+  "position_error_km": {
+   "1d": 0.8254341271646036,
+   "7d": 6.553286489295995,
+   "30d": 31.10840355598135
+  },
+  "refit_rhs": {
+   "u1": "u4",
+   "u2": "u5",
+   "u3": "u6",
+   "u4": "0.00812264773891087*u1*u3**2/(u1**2 + u2**2 + u3**2)**3.5 - 0.00162116887918551*u1/(u1**2 + u2**2 + u3**2)**2.5 - u1/(u1**2 + u2**2 + u3**2)**1.5",
+   "u5": "0.00812264773891087*u2*u3**2/(u1**2 + u2**2 + u3**2)**3.5 - 0.00162116887918551*u2/(u1**2 + u2**2 + u3**2)**2.5 - u2/(u1**2 + u2**2 + u3**2)**1.5",
+   "u6": "0.00812264773891087*u3**3/(u1**2 + u2**2 + u3**2)**3.5 - 0.00487545392247554*u3/(u1**2 + u2**2 + u3**2)**2.5 - u3/(u1**2 + u2**2 + u3**2)**1.5"
+  },
+  "refit": {
+   "submitted_constants": [
+    0.001623,
+    0.008115,
+    0.004869
+   ],
+   "refit_constants": [
+    0.0016211688791855094,
+    0.008122647738910874,
+    0.00487545392247554
+   ],
+   "sigma": [
+    2.2053903075231448e-07,
+    7.596521315157393e-07,
+    5.736442406192735e-07
+   ],
+   "one_step_rel_err_heldout": 4.779407830800564e-06
+  },
+  "position_error_km_submitted": {
+   "1d": 0.5420588866624008,
+   "7d": 4.398988242995164,
+   "30d": 22.661343791006207
+  }
+ },
+ "models": [
+  "Kepler",
+  "Kepler + J2",
+  "neural step model (MLP)"
+ ],
+ "RE_km": 6378.13646,
+ "T_s": 806.8110217166428,
+ "train_dates": [
+  "2017-01-01",
+  "2017-01-15",
+  "2017-01-29",
+  "2017-02-12",
+  "2017-02-26",
+  "2017-03-12",
+  "2017-03-26",
+  "2017-04-09",
+  "2017-04-23",
+  "2017-05-07",
+  "2017-05-21",
+  "2017-06-04",
+  "2017-06-18",
+  "2017-07-02",
+  "2017-07-16",
+  "2017-07-30",
+  "2017-08-13",
+  "2017-08-27",
+  "2017-09-10",
+  "2017-09-24",
+  "2017-10-08",
+  "2017-10-22",
+  "2017-11-05",
+  "2017-11-19",
+  "2017-12-03",
+  "2017-12-17",
+  "2017-12-31"
+ ],
+ "uq": {
+  "terms": [
+   {
+    "var": "u4..u6",
+    "term": "central pull (1/r\u00b2)",
+    "coef": 0.006022945673365612,
+    "ci90": [
+     0.006022945366181626,
+     0.006022945980549597
+    ],
+    "rel_uncertainty": 5.100228404994002e-08,
+    "significant": true,
+    "dBIC_if_removed": 179564.32964278784
+   },
+   {
+    "var": "u4..u6",
+    "term": "equatorial bulge (J\u2082)",
+    "coef": 1.338535922678333e-06,
+    "ci90": [
+     1.3383044668192256e-06,
+     1.3387673785374405e-06
+    ],
+    "rel_uncertainty": 0.00017291718151601866,
+    "significant": true,
+    "dBIC_if_removed": 67992.38068787851
+   }
+  ],
+  "missing": [
+   {
+    "var": "\u00b7",
+    "term": "inverse-square pull  \u2212u/r\u00b3",
+    "dBIC_if_added": 8.881715215160511,
+    "error_reduction": 8.409016594157492e-09
+   },
+   {
+    "var": "\u00b7",
+    "term": "drag-like  \u2212v",
+    "dBIC_if_added": 7.800220270873979,
+    "error_reduction": 7.510940373967046e-05
+   },
+   {
+    "var": "\u00b7",
+    "term": "extra radial 1/r\u2074",
+    "dBIC_if_added": 5.101373255049111,
+    "error_reduction": 0.0002624976976953741
+   }
+  ],
+  "validation": {
+   "rollout_valid_time": 22670.587668823224,
+   "rollout_horizon": 22670.587668823224,
+   "rollout_blew_up": false,
+   "criterion": "position error < 1% of radius",
+   "max_rel_error": 0.00625744938777651
+  },
+  "experiments": [
+   {
+    "description": "A second satellite, lower, over the equator",
+    "informs_coefficients": [
+     {
+      "coefficient": "equatorial bulge (J\u2082)",
+      "info_gain_vs_existing": 13.14498896208837
+     },
+     {
+      "coefficient": "central pull (1/r\u00b2)",
+      "info_gain_vs_existing": 1.6498354455533384
+     }
+    ],
+    "score": 13.14498896208837
+   },
+   {
+    "description": "A second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 45\u00b0",
+    "informs_coefficients": [
+     {
+      "coefficient": "equatorial bulge (J\u2082)",
+      "info_gain_vs_existing": 5.538500270315294
+     },
+     {
+      "coefficient": "central pull (1/r\u00b2)",
+      "info_gain_vs_existing": 1.6463283177197494
+     }
+    ],
+    "score": 5.538500270315294
+   },
+   {
+    "description": "A second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 90\u00b0",
+    "informs_coefficients": [
+     {
+      "coefficient": "central pull (1/r\u00b2)",
+      "info_gain_vs_existing": 1.6428263573010158
+     },
+     {
+      "coefficient": "equatorial bulge (J\u2082)",
+      "info_gain_vs_existing": 0.8050150944392358
+     }
+    ],
+    "score": 1.6428263573010158
+   }
+  ],
+  "data_advice": [
+   "Only one satellite, at one height and one inclination: the bulge term is seen from a single geometry, so it cannot be told apart from similar higher-order terms.",
+   "The \u00b1 ranges are statistical only: the agent noted a slow drift its law does not explain (other forces), so the true bulge value sits ~0.03% away, just outside the 90% range."
+  ],
+  "verdict": {
+   "status": "CONFIDENT",
+   "headline": "We are confident this is your equation.",
+   "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. To validate it independently, the most demanding test would be: second satellite: low orbit (0.6\u00d7 this satellite's radius), inclination 0\u00b0."
+  }
+ },
+ "rationale": "This is Kepler two-body motion plus a J2 (oblateness) perturbation. The critic's Kepler hypothesis was right, and testing it settled the structure.\n\nEvidence for each part:\n(1) u1..u3 are positions and u4..u6 velocities. The flow-map fit gave x' = v with coefficient 1 \u00b1 2e-4.\n(2) The radius r=|x| stays at 0.712 \u00b1 0.3%, so the orbit is nearly circular. Inside the observed range this is why a linear oscillator with \u03c9\u00b2=0.016693 fit just as well.\n(3) r oscillates at the orbital frequency \u03c9, not at 2\u03c9 (92% of the spectral power, with dr/dt / dr = \u03c9). A harmonic ellipse centred on the origin would make r oscillate at 2\u03c9. Oscillation at \u03c9 means a focus-centred Kepler ellipse with e\u22480.004.\n(4) L_z is conserved (std 5e-5) while L_x and L_y rotate. So the orbital plane precesses about the u3 axis at +1.926e-5 rad per time unit, with cos i = -0.341 held constant (retrograde orbit, nodal motion positive). This is J2 nodal precession.\n(5) Two candidates remained: harmonic + Coriolis-type rotation + a constant offset in u3, versus Kepler + J2. Tracking the phase of the r-oscillation relative to u3 decided between them. The eccentricity vector turns about 1.3 rad within the orbital plane over the record. J2 apsidal theory predicts -(5cos\u00b2i-1)/(2cos i) \u2248 0.62 times the nodal rotation, about 1.24 rad, which matches. A fixed offset would keep this phase constant. This rules out the linear model I first submitted.\n\nHow the parameters were set:\n- mu = \u03c9\u00b2a\u00b3 with a J2 correction: 0.006024, using a=0.7119 and \u03c9=0.1292029.\n- The J2 strength comes from the nodal rate: J2\u00b7R\u00b2 = \u03a9\u0307\u00b7a\u00b2/(1.5\u00b7n\u00b7|cos i|) = 1.477e-4, so the coefficient is 1.5\u00b7J2\u00b7R\u00b2\u00b7mu = 1.3346e-6.\n- These are analytic estimates; I did not run a shooting fit of the nonlinear model or a rollout check of it before submitting. Small errors in mu (about 1e-3) will make the phase drift over long rollouts.\n\nThe validator's rollout metrics should be ignored here. Sampling gives only about 3.7 points per period, and the rollout starts from a smoothed state that is about 30% too small. Integrated from the raw initial state, the near-equivalent linear model already followed the whole 113k-unit record to about 0.5%."
+}

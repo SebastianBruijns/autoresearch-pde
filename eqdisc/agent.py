@@ -34,16 +34,6 @@ from .systems import SYSTEMS
 from .datagen import add_noise
 
 PLAYBOOK = Path(__file__).with_name("playbook.md")
-SKILLS_DIR = Path(__file__).with_name("skills")
-
-
-def list_skills():
-    out = {}
-    for f in sorted(SKILLS_DIR.glob("*.md")):
-        txt = f.read_text()
-        desc = next((l.split(":", 1)[1].strip() for l in txt.splitlines() if l.startswith("description:")), "")
-        out[f.stem] = desc
-    return out
 
 SYSTEM = """You are an autonomous research agent that discovers governing equations (ODEs / PDEs) from noisy
 measurement data. You work only through the tools. Each tool call that fits a model returns the model and
@@ -60,9 +50,6 @@ which term is missing. When you submit, an independent critic may review the mod
 justify keeping the model. You have a budget of {budget} tool calls; submit before it runs out.
 
 {playbook}
-
-Domain skills you can load with load_skill (do it early when one matches the data or context):
-{skills}
 
 {lessons}"""
 
@@ -98,7 +85,7 @@ TOOLS = [
          "niterations": _int, "timeout": _int, "input_symbols": _strs, "subtract_expr": _str,
          "base_rhs": _rhs, "window": _int, "lowpass_frac": _num,
          "template": {**_str, "description": "optional structure template, e.g. 'f(theta) + g(omega)' or "
-                      "'sin(f(x)) * y'; f, g are searched by PySR (KeplerAgent-style). Strongly reduces the search"},
+                      "'sin(f(x)) * y'; f, g are searched by PySR. Strongly reduces the search"},
          "model_selection": {"type": "string", "enum": ["best", "accuracy", "rollout"],
                              "description": "'rollout' re-scores the whole Pareto front by validation (recommended)"},
          "parsimony": {**_bool, "description": "default true: forbid singular junk like exp(x)/cos(x)"}},
@@ -120,7 +107,7 @@ TOOLS = [
                            "window": _int, "lowpass_frac": _num}, ["rhs_with_params"])},
     {"name": "find_invariants", "description": "Search for conserved quantities H(state) with dH/dt ~ 0 (ODE), or "
      "conserved spatial integrals mean_x[f(u, u_x, u_xx)] (PDE), by sparse regression. Reports constraints (same "
-     "value on all trajectories: they remove a dimension) vs first integrals (they label orbits), terms dropped "
+     "value on all trajectories: they remove a dimension) vs first integrals (they label trajectories), terms dropped "
      "as identities, and a PCA dimension estimate. include_log adds log of positive variables; custom_terms "
      "adds e.g. 'cos(theta)'.",
      "input_schema": _obj({"poly_degree": _int, "include_log": _bool, "custom_terms": _strs, "tol": _num})},
@@ -158,9 +145,13 @@ TOOLS = [
      "for PDEs; or your own pool), refitting coefficients each time. It ranks edits by delta BIC on held-out rows "
      "and fully validates the best ones. Use it when a model is close but not right.",
      "input_schema": _obj({"rhs": _rhs, "pool": _strs}, ["rhs"])},
-    {"name": "load_skill", "description": "Load a domain skill: expert guidance for a class of systems (which terms, "
-     "coordinates, invariants and pitfalls to expect). See the list in the system prompt.",
-     "input_schema": _obj({"name": _str}, ["name"])},
+    {"name": "fit_flow", "description": "Flow-map (shooting) fit for COARSELY SAMPLED ODE data, where derivatives "
+     "cannot be estimated (only a few samples per characteristic period). Proposes rhs with constants p0, p1, ...; "
+     "integrates it from each observed state over one sampling interval and matches the next observation. Returns "
+     "fitted constants with 1-sigma errors and the one-step prediction error on held-out pairs. Use it to compare "
+     "structures when diagnose shows a large change per step.",
+     "input_schema": _obj({"rhs_with_params": _rhs, "init": {"type": "array", "items": _num}, "max_pairs": _int},
+                          ["rhs_with_params"])},
     {"name": "intuit", "description": "Pre-analysis 'intuition' before fitting: positivity and decades, oscillations, fixed "
      "points with linearisation, single-variable dependence shapes (sin, saturating, cubic, ...), interaction "
      "tests, conservation, amplitude-period relation (ODE); dispersion relation of Fourier modes, travelling-wave speed "
@@ -173,7 +164,7 @@ TOOLS = [
      "input_schema": _obj({"poly_degree": _int, "max_deriv": _int, "include_trig": _bool, "custom_terms": _strs,
                            "exclude_terms": _strs, "library_vars": _strs, "thresholds": {"type": "array", "items": _num},
                            "n_test_functions": _int, "selection_tolerance": _num, "targets": _strs})},
-    {"name": "detect_symmetries", "description": "KeplerAgent-style symmetry discovery. ODE: continuous linear (or affine) "
+    {"name": "detect_symmetries", "description": "Symmetry discovery. ODE: continuous linear (or affine) "
      "generators A with f(x) equivariant (rotation, scaling, ...), plus discrete sign flips/permutations and "
      "time-reversal symmetries, each with an error vs the noise level. PDE (1-D periodic): translation invariance, "
      "reflections, field sign flips/swaps, Galilean invariance (frame velocity), linearity. Symmetries constrain "
@@ -378,9 +369,12 @@ class Session:
             path = self.workdir / f"model_{len(self.cache)}.png"
             plots.plot_model(self.meta, self.data, rhs, path)
             return {"ok": True, "rhs_original": rhs if mapped else None, "_images": [str(path)]}
-        if name == "load_skill":
-            f = SKILLS_DIR / f"{args['name']}.md"
-            return {"skill": f.read_text()} if f.exists() else {"error": f"unknown skill; available: {list(list_skills())}"}
+        if name == "fit_flow":
+            from .flow import fit_flow
+            if m["kind"] != "ode":
+                return {"error": "fit_flow is for ODE data"}
+            out = fit_flow(m, d, args["rhs_with_params"], max_pairs=args.get("max_pairs", 600), init=args.get("init"))
+            return self._augment({**out, "validation": tb.validate(m, d, out["rhs"])}) if c is None else self._augment(out)
         if name == "intuit":
             return intuit(m, d)
         if name == "weak_sindy":
@@ -584,7 +578,7 @@ def _tool_result_content(out_s, images):
 
 def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", max_tools=25, experiments=0,
               out_dir=None, verbose=True, client=None, critic=True, learn=False, use_memory=True, report=True,
-              judge_llm=True, human=None, context=None, final_assessment=True, use_skills=True):
+              judge_llm=True, human=None, context=None, final_assessment=True, on_event=None, tag=""):
     """Run one discovery session. Returns {"submitted", "hidden_eval", "usage", "out_dir", ...}.
     `dataset` is a dataset directory, or a raw data file (npz/mat/csv/h5...) that is ingested first."""
     client = client or make_client()
@@ -603,14 +597,11 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
     lessons = mem.retrieve(sess.meta, tb.diagnose(sess.meta, sess.data)) if use_memory else []
     lessons_txt = ("Lessons from previous sessions (use judgement; they may not apply):\n"
                    + "\n".join(f"- {l}" for l in lessons)) if lessons else ""
-    skills_txt = "\n".join(f"- {k}: {v}" for k, v in list_skills().items()) if use_skills else "(none in this session)"
     system = (SYSTEM.replace("{budget}", str(max_tools)).replace("{playbook}", playbook)
-              .replace("{skills}", skills_txt).replace("{lessons}", lessons_txt))
+              .replace("{lessons}", lessons_txt))
     tools = TOOLS if (experiments > 0 and sess.truth is not None) else [t for t in TOOLS if t["name"] != "request_experiment"]
     if human is None:
         tools = [t for t in tools if t["name"] != "ask_human"]
-    if not use_skills:
-        tools = [t for t in tools if t["name"] != "load_skill"]
     # the dataset name can reveal the system (e.g. blind_strogatz_glider_...), which would defeat blinding
     meta_public = {k: v for k, v in sess.meta.items() if k not in ("system", "name")}
     intro = f"Dataset metadata:\n{json.dumps(meta_public, indent=2)}\n"
@@ -624,6 +615,7 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
     messages = [{"role": "user", "content": intro + f"Experiment budget: {experiments if sess.truth else 0}. "
                  "Discover the governing equations."}]
     say = (lambda *a: print(*a, flush=True)) if verbose else (lambda *a: None)
+    emit = (lambda ev: on_event({**ev, "branch": tag})) if on_event else (lambda ev: None)
     n_tools, t0 = 0, time.time()
 
     while sess.submitted is None:
@@ -637,6 +629,7 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
         for b in resp.content:
             if b.type == "text" and b.text.strip():
                 say(f"  [agent] {b.text.strip()[:400]}")
+                emit({"type": "note", "text": b.text.strip()[:600]})
                 sess.log.append({"type": "text", "text": b.text})
         if resp.stop_reason == "refusal":
             say("  [agent] request declined; stopping")
@@ -667,6 +660,10 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
                             "content": _tool_result_content(out_s + note, images),
                             **({"is_error": True} if "error" in out else {})})
             v = out.get("validation_original", out.get("validation", out if u.name == "validate" else {}))
+            emit({"type": "tool", "n": n_tools, "name": u.name, "input": json.dumps(u.input, default=str)[:300],
+                  "rhs": (out.get("rhs_original") or out.get("rhs")) if isinstance(out, dict) else None,
+                  "valid_time": v.get("rollout_valid_time")
+                  if isinstance(v, dict) else None, "error": out.get("error") if isinstance(out, dict) else None})
             say(f"  [tool {n_tools:02d}] {u.name}({json.dumps(u.input)[:160]}) {time.time() - ts:.1f}s "
                 f"-> {json.dumps(v.get('rhs', ''))[:160]} deriv={v.get('deriv_nrmse', '-')} "
                 f"valid_t={v.get('rollout_valid_time', '-')}")

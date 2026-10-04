@@ -2,7 +2,8 @@
 
 Inside the sandbox only the OS (/usr, /etc), the Python installation, explicitly listed read-only paths and the
 writable work directory (mounted at /work) exist. The repository, datasets/*/hidden and the home directory do not.
-Without bwrap, code runs unsandboxed with a warning (set EQDISC_REQUIRE_SANDBOX=1 to make that an error).
+Without bwrap (e.g. macOS) only the interpreter's audit-hook guard applies, with a warning (set
+EQDISC_REQUIRE_SANDBOX=1 to make that an error).
 """
 import os
 import shutil
@@ -33,7 +34,8 @@ def wrap(cmd, workdir, ro=(), binds=None):
     if not available():
         if os.environ.get("EQDISC_REQUIRE_SANDBOX") == "1":
             raise RuntimeError("bwrap not found and EQDISC_REQUIRE_SANDBOX=1")
-        warnings.warn("bwrap not found: agent code runs WITHOUT a sandbox (it can read hidden test data)")
+        warnings.warn("bwrap not found: agent code runs without the bubblewrap sandbox; the interpreter's audit-hook "
+                      "guard still blocks repository file reads and subprocesses")
         return list(cmd), {**env, "HOME": str(workdir)}      # callers pass real paths when bwrap is missing
     argv = ["bwrap", "--ro-bind", "/usr", "/usr", "--ro-bind", "/etc", "/etc",
             "--symlink", "usr/bin", "/bin", "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",

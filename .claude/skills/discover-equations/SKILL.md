@@ -14,8 +14,8 @@ ingest → intuition pre-analysis → parallel agent branches → tournament →
   in a `.env` file at the repo root. Check with `ant auth status`. If neither is set, ask the user to set one up.
 
 ## 2. Before running
-- Ask the user ONE short question for domain context if they have not given it: what the variables are, units,
-  known physics, and whether anything is conserved. Context is optional, but it often decides the answer.
+- Run data-only by default: do not ask for, or add, domain context. Pass `--context` only if the user volunteers
+  it, and say in the result that context was used (it can steer the answer toward what the user already believes).
 - Cost and time: about $0.3–0.5 per agent branch, typically $1–3 and 2–6 minutes for 3 branches plus the
   adversary (more for large or hard problems). Tell the user before running many datasets or more than 3 branches.
 

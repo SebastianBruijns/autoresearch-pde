@@ -1,0 +1,439 @@
+{
+ "verdict": {
+  "status": "COLLECT MORE DATA",
+  "headline": "Best current model, not yet confirmed: 2 alternative structure(s) fit equally well.",
+  "recommendation": "Collect data at: start at (0.699, -6.12). It would mainly pin down sin(theta) in domega/dt, omega in dtheta/dt (about 2.81x more informative than repeating existing conditions). Next best: start at (-0.0788, 9.15)."
+ },
+ "final_model": {
+  "theta": "omega",
+  "omega": "-0.1*omega - 9.81*sin(theta)"
+ },
+ "story": {
+  "headline": "The data (4 trajectories of angle theta and angular velocity omega over 15 s) are described by a damped nonlinear pendulum: d\u03b8/dt = \u03c9 and d\u03c9/dt = \u22129.81\u00b7sin \u03b8 \u2212 0.1\u00b7\u03c9, meaning a gravity-like restoring torque proportional to sin \u03b8 plus a weak linear (viscous) damping.",
+  "key_steps": [
+   {
+    "observation": "The diagnostic showed a two-variable ODE with \u03b8 spanning about \u00b12.4 rad, well outside the small-angle regime, and \u03c9 spanning about \u00b15.4.",
+    "decision": "Added sin(\u03b8) to a degree-1 polynomial library and ran weak-form SINDy, which tolerates noisy derivatives.",
+    "outcome": "Recovered the pendulum skeleton \u03b8' \u2248 1.00\u00b7\u03c9 and \u03c9' \u2248 \u22129.81\u00b7sin \u03b8. No damping term survived sparsification, and rollout valid time was only 2.98 s."
+   },
+   {
+    "observation": "The undamped model drifted on rollouts, which suggested missing dissipation.",
+    "decision": "Fit the parametric skeleton \u03c9' = \u2212p0\u00b7sin \u03b8 \u2212 p1\u00b7\u03c9 directly to the trajectories.",
+    "outcome": "Gave p0 = 9.794 and p1 = 0.106. Rollout valid time rose to 4.26 s. Bootstrap 90% CIs were [9.733, 9.843] for p0 and [0.083, 0.134] for p1, so the damping term excludes zero."
+   },
+   {
+    "observation": "Pairwise model comparisons were inconsistent. One run found damped significantly better; later runs ranked undamped, damped and variants as statistically indistinguishable on cross-validated derivative error.",
+    "decision": "Used BIC term-removal tests to decide whether damping belongs in the model.",
+    "outcome": "Removing the \u03c9 damping term costs \u0394BIC = 9.46, which is moderate evidence. Removing sin \u03b8 or \u03c9 in \u03b8' costs more than 1100. Damping was kept."
+   },
+   {
+    "observation": "Some residual structure could come from a different friction law.",
+    "decision": "Tested quadratic drag (\u03c9|\u03c9|), Coulomb friction (sign \u03c9), cubic and other candidate terms via a skeleton fit and a repair/red-team pass.",
+    "outcome": "The quadratic-drag coefficient came out with an unphysical (energy-adding) sign. No added term gave \u0394BIC above about 6.5, and sin(\u03c9) was borderline at 1.39. The linear-damping incumbent could not be beaten."
+   },
+   {
+    "observation": "The fitted coefficients (9.794, 0.106) are statistically consistent with the round values 9.81 and 0.1.",
+    "decision": "Submitted the rounded model \u03b8' = \u03c9, \u03c9' = \u22120.1\u00b7\u03c9 \u2212 9.81\u00b7sin \u03b8.",
+    "outcome": "Rollout stays within 30% error for about 4.3 s of the 15 s horizon. Plausible alternative models agree up to about 6.2 s."
+   }
+  ],
+  "physical_interpretation": "\u03b8' = \u03c9 is the kinematic definition of angular velocity. The \u22129.81\u00b7sin \u03b8 term is the gravitational restoring torque per unit inertia, g/L, consistent with g \u2248 9.81 m/s\u00b2 and an effective length of about 1 m if units are SI; this is a guess, since the data card gives no units. The \u22120.1\u00b7\u03c9 term is weak viscous damping (for example air drag or pivot friction) with a decay timescale of roughly 10\u201320 s, which is comparable to the 15 s record length.",
+  "caveats": [
+   "Overall confidence is rated low.",
+   "Residual derivative error is 2.5\u00d7 the estimated noise floor. Either structure is still missing, or the excess comes from differentiation bias or correlated noise.",
+   "The damping coefficient is uncertain to about \u00b124% (90% CI 0.083\u20130.134). Supporting evidence is moderate (\u0394BIC 9.46), and the undamped sparse-regression model is indistinguishable on cross-validated derivative error.",
+   "The submitted coefficients (9.81, 0.1) are rounded textbook-like values. The best fit is 9.794 and 0.106; both lie within the CIs, but the rounding was a choice, not a data result.",
+   "Long-horizon prediction is poor. The model stays within 30% error for only about 28% of the 15 s horizon, and plausible models diverge after about 6.2 s.",
+   "The form of the friction law (linear vs quadratic vs Coulomb) is not resolved by the current data.",
+   "The data card was empty, so units, measurement noise and experimental setup are unknown. The physical reading of the coefficients is therefore speculative."
+  ],
+  "recommendation": "Use the model for qualitative behaviour and short-term prediction (\u22724 s), not long-horizon forecasting or precise damping estimates. Next, record longer trajectories (\u226530\u201360 s, so the amplitude decays visibly) from higher-energy initial conditions such as (\u03b8, \u03c9) \u2248 (0.70, \u22126.1) or (\u22120.08, 9.2), outside the current \u03c9 range. These best separate the competing models and pin down both the sin \u03b8 and damping coefficients; also report the expected friction mechanism and measurement noise level."
+ },
+ "insights": [
+  {
+   "step": "Diagnosed the data",
+   "finding": "noise about 1.8% of signal; adequate sampling",
+   "why_it_matters": "Noise above ~1% means derivative-based fits are biased, so weak-form methods were preferred."
+  },
+  {
+   "step": "Compared candidate models",
+   "finding": "Lowest CV derivative error: damped (0.214, 3 terms). Significantly worse: undamped (+0.7%, z=2.9, dBIC=4). Prefer damped. Rollout valid frac 0.33 (best 0.33). Its error is 2.5x the noise floor (0.0839): systematic error remains (missing/wrong terms, or differentiation bias / correlated noise).",
+   "why_it_matters": ""
+  },
+  {
+   "step": "Diagnosed the data",
+   "finding": "noise about 1.8% of signal; adequate sampling",
+   "why_it_matters": "Noise above ~1% means derivative-based fits are biased, so weak-form methods were preferred."
+  },
+  {
+   "step": "Compared candidate models",
+   "finding": "Lowest CV derivative error: damped_lin (0.214, 4 terms). Indistinguishable from it: undamped (+0.8%, z=3.0, <5% and lower BIC), damped (+0.0%, z=1.0). undamped is simpler (2 vs 4 terms) -> prefer undamped. Rollout valid frac 0.12 (best 0.33). Its error is 2.6x the noise floor (0.0839): systematic er",
+   "why_it_matters": ""
+  },
+  {
+   "step": "Compared candidate models",
+   "finding": "Lowest CV derivative error: damped_sin (0.214, 4 terms). Indistinguishable from it: undamped (+0.8%, z=3.5, <5% and lower BIC), damped (+0.1%, z=0.5). undamped is simpler (2 vs 4 terms) -> prefer undamped. Rollout valid frac 0.12 (best 0.33). Its error is 2.6x the noise floor (0.0839): systematic er",
+   "why_it_matters": ""
+  },
+  {
+   "step": "Diagnosed the data",
+   "finding": "noise about 1.8% of signal; adequate sampling",
+   "why_it_matters": "Noise above ~1% means derivative-based fits are biased, so weak-form methods were preferred."
+  },
+  {
+   "step": "Compared candidate models",
+   "finding": "Lowest CV derivative error: sign_fric (0.213, 4 terms). Indistinguishable from it: incumbent (+0.1%, z=1.2), symbolic (+0.1%, z=1.2), weak_damped (+0.1%, z=1.2). incumbent is simpler (3 vs 4 terms) -> prefer incumbent. Rollout valid frac 0.29 (best 0.33). Its error is 2.5x the noise floor (0.0839): ",
+   "why_it_matters": ""
+  },
+  {
+   "step": "Assessed the final model",
+   "finding": "LOW confidence: all terms significantly non-zero (bootstrap 90% CIs exclude 0); no single added term is supported by the data; residual error is 2.5x the noise floor: systematic misfit remains",
+   "why_it_matters": ""
+  }
+ ],
+ "assessment": {
+  "model": {
+   "theta": "omega",
+   "omega": "-0.1*omega - 9.81*sin(theta)"
+  },
+  "statistics_basis": "strong form (smoothed derivatives)",
+  "terms": [
+   {
+    "var": "theta",
+    "term": "omega",
+    "coef": 0.9952,
+    "submitted_coef": 1.0,
+    "ci90": [
+     0.9866,
+     1.003
+    ],
+    "rel_uncertainty": 0.008013,
+    "significant": true,
+    "dBIC_if_removed": 1160.0
+   },
+   {
+    "var": "omega",
+    "term": "omega",
+    "coef": -0.1059,
+    "submitted_coef": -0.1,
+    "ci90": [
+     -0.1335,
+     -0.08332
+    ],
+    "rel_uncertainty": 0.2364,
+    "significant": true,
+    "dBIC_if_removed": 9.46
+   },
+   {
+    "var": "omega",
+    "term": "sin(theta)",
+    "coef": -9.794,
+    "submitted_coef": -9.81,
+    "ci90": [
+     -9.843,
+     -9.733
+    ],
+    "rel_uncertainty": 0.005592,
+    "significant": true,
+    "dBIC_if_removed": 1320.0
+   }
+  ],
+  "missing_term_evidence": [
+   {
+    "var": "omega",
+    "term": "sin(omega)",
+    "dBIC_if_added": 1.39
+   },
+   {
+    "var": "omega",
+    "term": "omega*omega*omega",
+    "dBIC_if_added": 3.75
+   },
+   {
+    "var": "theta",
+    "term": "cos(omega)",
+    "dBIC_if_added": 6.31
+   },
+   {
+    "var": "theta",
+    "term": "theta*theta*omega",
+    "dBIC_if_added": 6.45
+   }
+  ],
+  "model_ambiguity": {
+   "verdict": "Lowest CV derivative error: submitted (0.214, 3 terms). Indistinguishable from it: symbolic (+0.0%, z=0.0), sparse-regression (+0.0%, z=1.0). Prefer submitted. Rollout valid frac 0.29 (best 0.33). Its error is 2.5x the noise floor (0.0839): systematic error remains (missing/wrong terms, or differentiation bias / correlated noise).",
+   "indistinguishable": [
+    "submitted",
+    "symbolic",
+    "sparse-regression"
+   ],
+   "ranking": [
+    "submitted",
+    "symbolic",
+    "sparse-regression"
+   ]
+  },
+  "noise_floor": {
+   "error_to_floor_ratio": 2.547,
+   "floor": 0.08391
+  },
+  "validation": {
+   "deriv_nrmse": 0.41567805082304077,
+   "rollout_valid_time": 4.26,
+   "rollout_horizon": 15.0,
+   "rollout_blew_up": false
+  },
+  "sensitivity": [
+   {
+    "var": "omega",
+    "term": "omega",
+    "coef": -0.106,
+    "ci90_halfwidth": 0.0251,
+    "max_effect_in_noise_units": 6.22
+   },
+   {
+    "var": "omega",
+    "term": "sin(theta)",
+    "coef": -9.79,
+    "ci90_halfwidth": 0.055,
+    "max_effect_in_noise_units": 6.13
+   },
+   {
+    "var": "theta",
+    "term": "omega",
+    "coef": 0.995,
+    "ci90_halfwidth": 0.0082,
+    "max_effect_in_noise_units": 1.66
+   }
+  ],
+  "predictability": {
+   "horizon": 6.2,
+   "horizon_is_full_data_span": false,
+   "meaning": "the plausible models agree (within 3x noise) up to this time from the held-out initial state"
+  },
+  "coverage": {
+   "ranges": {
+    "theta": [
+     -2.39,
+     2.1
+    ],
+    "omega": [
+     -5.42,
+     5.57
+    ]
+   },
+   "n_trajectories": 4,
+   "duration": 15.0,
+   "pairwise_occupancy": [
+    {
+     "pair": [
+      "theta",
+      "omega"
+     ],
+     "occupied_frac": 0.891,
+     "unexplored_cells_next_to_data": [
+      [
+       -2.11,
+       -4.74
+      ],
+      [
+       -2.11,
+       -3.36
+      ],
+      [
+       -2.11,
+       4.88
+      ],
+      [
+       -1.55,
+       -4.74
+      ],
+      [
+       -1.55,
+       4.88
+      ],
+      [
+       1.82,
+       -4.74
+      ]
+     ]
+    }
+   ]
+  },
+  "experiments": {
+   "ranked": [
+    {
+     "score": 93.2,
+     "max_snr": 274.0,
+     "models_blow_up": [],
+     "most_separated": [
+      "submitted",
+      "symbolic"
+     ],
+     "initial_condition": [
+      0.6992131172071061,
+      -6.123539767412311
+     ],
+     "inside_data_range": false,
+     "gain_vs_existing_data": 2.81,
+     "informs_coefficients": [
+      {
+       "coefficient": "sin(theta) in domega/dt",
+       "info_gain_vs_existing": 40.9
+      },
+      {
+       "coefficient": "omega in dtheta/dt",
+       "info_gain_vs_existing": 20.4
+      },
+      {
+       "coefficient": "omega in domega/dt",
+       "info_gain_vs_existing": 18.4
+      }
+     ]
+    },
+    {
+     "score": 92.4,
+     "max_snr": 564.0,
+     "models_blow_up": [],
+     "most_separated": [
+      "submitted",
+      "symbolic"
+     ],
+     "initial_condition": [
+      -0.0788326845379399,
+      9.153242931215866
+     ],
+     "inside_data_range": false,
+     "gain_vs_existing_data": 2.78,
+     "informs_coefficients": [
+      {
+       "coefficient": "sin(theta) in domega/dt",
+       "info_gain_vs_existing": 28.3
+      },
+      {
+       "coefficient": "omega in dtheta/dt",
+       "info_gain_vs_existing": 20.4
+      },
+      {
+       "coefficient": "omega in domega/dt",
+       "info_gain_vs_existing": 18.0
+      }
+     ]
+    },
+    {
+     "score": 92.3,
+     "max_snr": 398.0,
+     "models_blow_up": [],
+     "most_separated": [
+      "submitted",
+      "sparse-regression"
+     ],
+     "initial_condition": [
+      -0.2834510683959719,
+      7.878778137510034
+     ],
+     "inside_data_range": false,
+     "gain_vs_existing_data": 2.78,
+     "informs_coefficients": [
+      {
+       "coefficient": "sin(theta) in domega/dt",
+       "info_gain_vs_existing": 26.0
+      },
+      {
+       "coefficient": "omega in domega/dt",
+       "info_gain_vs_existing": 18.1
+      },
+      {
+       "coefficient": "omega in dtheta/dt",
+       "info_gain_vs_existing": 16.7
+      }
+     ]
+    },
+    {
+     "score": 92.1,
+     "max_snr": 567.0,
+     "models_blow_up": [],
+     "most_separated": [
+      "submitted",
+      "symbolic"
+     ],
+     "initial_condition": [
+      -1.3173938741458553,
+      8.512734600190912
+     ],
+     "inside_data_range": false,
+     "gain_vs_existing_data": 2.77,
+     "informs_coefficients": [
+      {
+       "coefficient": "sin(theta) in domega/dt",
+       "info_gain_vs_existing": 22.8
+      },
+      {
+       "coefficient": "omega in dtheta/dt",
+       "info_gain_vs_existing": 19.7
+      },
+      {
+       "coefficient": "omega in domega/dt",
+       "info_gain_vs_existing": 17.9
+      }
+     ]
+    },
+    {
+     "score": 92.1,
+     "max_snr": 281.0,
+     "models_blow_up": [],
+     "most_separated": [
+      "submitted",
+      "symbolic"
+     ],
+     "initial_condition": [
+      1.017281451498865,
+      6.4536795493512535
+     ],
+     "inside_data_range": false,
+     "gain_vs_existing_data": 2.77,
+     "informs_coefficients": [
+      {
+       "coefficient": "omega in domega/dt",
+       "info_gain_vs_existing": 17.7
+      },
+      {
+       "coefficient": "sin(theta) in domega/dt",
+       "info_gain_vs_existing": 14.0
+      },
+      {
+       "coefficient": "omega in dtheta/dt",
+       "info_gain_vs_existing": 7.42
+      }
+     ]
+    }
+   ],
+   "existing_data_discrimination": 33.2,
+   "n_models": 15,
+   "note": "score = mean over the predicted trajectory of (spread of plausible models / noise)^2, capped at 100 (10 sigma); >1 means a measurement here would discriminate between them. informs_coefficients = how many times more information about each coefficient than re-measuring an existing initial condition"
+  },
+  "data_advice": [
+   "Error is 2.5x the noise floor: the model is missing structure. New data in the recommended regions (below) is more useful than more of the same."
+  ],
+  "confidence": {
+   "level": "low",
+   "points": -1,
+   "reasons": [
+    "all terms significantly non-zero (bootstrap 90% CIs exclude 0)",
+    "no single added term is supported by the data",
+    "residual error is 2.5x the noise floor: systematic misfit remains",
+    "3 structurally different models fit equally well: ['submitted', 'symbolic', 'sparse-regression']",
+    "held-out rollout stays within 30% error for 28% of the horizon"
+   ]
+  },
+  "questions_for_human": [
+   "Is a sin(omega) effect in domega/dt physically plausible? The data are borderline (dBIC 1.39).",
+   "Which of these is more plausible from domain knowledge: ['submitted', 'symbolic', 'sparse-regression']?",
+   "Is any combination of the variables conserved by design (mass, energy, population)? That constraint would remove ambiguity.",
+   "Can you run an experiment starting from [0.6992131172071061, -6.123539767412311]? It is predicted to be the most informative (score 93.2), mainly about sin(theta) in domega/dt, omega in dtheta/dt."
+  ]
+ },
+ "winner_branch": "structure-first",
+ "cost_usd": 1.414,
+ "wall_s": 132.8
+}

@@ -4,8 +4,11 @@ Claude gets the public data file, minimal metadata (no dataset name), one generi
 `submit` tool. There are no eqdisc tools, playbook, skills, memory, critic, branches or adversary. Submissions are
 scored exactly like the `agent` arm of `python -m eqdisc.benchmark` (hidden-test score + symbolic-equivalence judge).
 
-    python bare_claude.py datasets/blind_burgers_dirichlet_n0.02_s1 [more datasets ...] [--max-tools 18]
-    python bare_claude.py --held-out            # the 12 blinded held-out systems of benchmark v1
+Only a fair control inside the bubblewrap sandbox (Linux): without it, its run directory names the dataset and the
+code could read datasets/*/hidden. It therefore refuses to run without bwrap unless EQDISC_REQUIRE_SANDBOX=0.
+
+    python scripts/bare_claude.py datasets/blind_burgers_dirichlet_n0.02_s1 [more datasets ...] [--max-tools 18]
+    python scripts/bare_claude.py --held-out            # the 12 blinded held-out systems of benchmark v1
 """
 import argparse
 import json
@@ -18,6 +21,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
+
+import os
+os.environ.setdefault("EQDISC_REQUIRE_SANDBOX", "1")
 
 from eqdisc import sandbox
 from eqdisc.agent import Usage, _jsonable, _tool_result_content, make_client

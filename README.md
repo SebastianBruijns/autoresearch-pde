@@ -81,6 +81,41 @@ res["verdict"], res["final_model"], res["assessment"]["experiments"]["ranked"][:
 
 ---
 
+## Demo app ("Equation Discovery AutoScientist")
+A web app with four worked examples and an upload page. Everything it needs is in the repo (`demo/showcase/`), so it
+runs straight after cloning; it needs no API key unless you run discovery on your own data.
+
+```bash
+git clone https://github.com/danieldeh/autoresearch-pde && cd autoresearch-pde
+pip install -e ".[demo]"
+streamlit run demo/app.py
+```
+Then open http://localhost:8501. Tabs:
+- **Satellite** (real LAGEOS-1 data), **Big Bulge Orbit** (an honest failure the system flags itself),
+  **Blind Chaos (KS)**, **Reaction-Diffusion (Chemistry)**: each shows the forecast video, the verdict, the law found,
+  where to measure next, and (🔒) how it compared with the hidden truth.
+- **Your Data**: upload a CSV (or pick an example), optionally describe it, press *Discover*. This calls Claude with
+  your own key (`ANTHROPIC_API_KEY`, or `ant auth login`); a run takes a few minutes and about $0.5-3.
+
+No key, or rehearsing a talk? Start in rehearsal mode, where *Your Data* replays a saved run at no cost:
+```bash
+EQDISC_DEMO_FAKE=1 streamlit run demo/app.py
+```
+The page font loads from the web; offline it falls back to a standard serif. See `demo/README.md` for details.
+
+## Static laws y = f(x) (symbolic regression mode)
+`eqdisc.sr.solve(task)` runs parallel Claude sessions with these tools:
+- data probes: power laws, separability, single-variable shapes, two-variable combinations;
+- skeleton fitting by variable projection;
+- PySR;
+- sparse fits;
+- a code interpreter;
+- `assess`: per-term evidence, terms the data favour adding, the noise floor, rival structures, and input regions where
+  plausible models disagree.
+
+The selected law is chosen on validation data and comes with a verdict, like the dynamics mode. Benchmarks:
+`python -m eqdisc.sr_bench llmsr|srsd ...` and `python -m eqdisc.sr_variants make|run` (fresh, unpublished problems).
+
 ## How it works
 
 ```mermaid
@@ -113,7 +148,6 @@ of it works on public data only:
 | `repair`, `compare_models`, `coefficient_uncertainty` | single-term remove/add search; cross-validated model ranking against the noise floor; bootstrap intervals |
 | `assess_model` | the full confidence report and experiment design |
 | `run_python`, `plot_data`, `plot_model` | the agent writes its own analysis code and *looks at* figures (returned to Claude as images) |
-| `load_skill` | domain guidance (orbital mechanics, noisy PDEs, kinetics/ecology, oscillators). Method only, never answers |
 | `ask_human`, `request_experiment` | human in the loop; simulator-backed experiments on benchmark data |
 
 Each submission is reviewed by a **critic** before it is accepted. Identical repeated calls are blocked.
@@ -152,6 +186,15 @@ Rebuild with `python notebooks/build_notebooks.py [01 05 ...]`, then execute wit
 - `eqdisc-evolve` evolves discovery programs or the agent's playbook with an AlphaEvolve-style loop.
 
 ## Results so far
+
+**Honest out-of-sample, data-only results** cover LAGEOS-1, blinded KS, Gray–Scott and unpublished oscillators. Earlier results that leaked domain information to the agent are retracted. The protocol:
+- noisy training data only;
+- autoregressive forecasts of unseen windows;
+- refitted coefficients;
+- FNO or MLP baselines.
+
+Results and caveats: [`docs/honest_oos.md`](docs/honest_oos.md). This protocol supersedes the earlier in-sample numbers below.
+
 
 **Blinded held-out benchmark** (12 systems never used for tuning; variables renamed and coefficients perturbed;
 2% noise). The table counts models symbolically equivalent to the hidden truth:

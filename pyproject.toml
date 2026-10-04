@@ -23,7 +23,9 @@ dependencies = [
 pysr = ["pysr>=1.0"]                 # symbolic regression tool (installs a Julia backend on first use)
 hdf5 = ["h5py"]                      # .h5 / MATLAB v7.3 ingestion
 notebooks = ["jupyter", "nbformat", "ipykernel"]
-all = ["pysr>=1.0", "h5py", "jupyter", "nbformat", "ipykernel"]
+demo = ["streamlit>=1.30", "plotly>=5"]
+bench = ["huggingface_hub", "h5py", "zss"]   # The Well streaming, SRSD NED
+all = ["pysr>=1.0", "h5py", "jupyter", "nbformat", "ipykernel", "streamlit>=1.30", "plotly>=5", "huggingface_hub", "zss"]
 
 [project.scripts]
 eqdisc-discover = "eqdisc.discover:main"
@@ -40,4 +42,4 @@ eqdisc-benchmark = "eqdisc.benchmark:main"
 include = ["eqdisc*"]
 
 [tool.setuptools.package-data]
-eqdisc = ["playbook.md", "skills/*.md"]
+eqdisc = ["playbook.md"]
