@@ -21,7 +21,8 @@ for p in (str(REPO), str(DEMO)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon=":material/function:", layout="wide",
+BRAND = DEMO / "brand"  # Lorenz logo: an abstract vortex (demo/brand/make_logo.py)
+st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon=str(BRAND / "icon-64.png"), layout="wide",
                    initial_sidebar_state="collapsed")
 
 import evidence  # noqa: E402
@@ -1433,6 +1434,7 @@ V3_PAGES = {}
 
 def main():
     ui.inject_css3()
+    st.logo(str(BRAND / "logo-lorenz.svg"), size="large")
     env_fake = os.environ.get("EQDISC_DEMO_FAKE", "") not in ("", "0", "false")
     V3_PAGES.update({
         "home": st.Page(v3_home, title="Home", icon=":material/home:", default=True),
