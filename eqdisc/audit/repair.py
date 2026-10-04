@@ -190,7 +190,7 @@ def repair_model(meta, data, rhs, findings, ledger=None):
             rec = {"finding": f["id"], "tool": tool, "ok": False, "note": "skipped: model repair not attempted in v1"}
         applied.append(rec)
         if ledger:
-            ledger.append("model_repair", **rec)
+            ledger.append("model_repair", **{("repair_kind" if k == "kind" else k): v for k, v in rec.items()})
     return applied
 
 
