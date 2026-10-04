@@ -1154,7 +1154,7 @@ def v3_lorenz():
 
 
 def v3_home():
-    st.markdown("<div class='home-e'>eqdisc</div><div class='home-t'>Equation Discovery AutoScientist</div>"
+    st.markdown("<div class='home-e'>Lorenz</div><div class='home-t'>Equation Discovery AutoScientist</div>"
                 "<div class='home-s'>Data in. Out come the equation, how sure it is, and where to measure next.</div>",
                 unsafe_allow_html=True)
     cards = [("lageos", "Satellite", V3_PAGES["sat"]), ("orbit", "Big Bulge Orbit", V3_PAGES["bulge"]),

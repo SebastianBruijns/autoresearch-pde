@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 # validated categorical slots; the discovered equation is always BLUE, baselines orange/aqua, reference grey
-BLUE, ORANGE, AQUA, VIOLET = "#2a78d6", "#eb6834", "#1baf7a", "#4a3aa7"
+BLUE, ORANGE, AQUA, VIOLET = "#2a78d6", "#eb6834", "#16a07a", "#4a3aa7"   # validated: CVD, contrast >= 3:1
 GREY = "rgba(120,120,120,0.85)"
 
 
@@ -16,8 +16,8 @@ def _layout(fig, h=360, legend_top=False, **kw):
 
 
 # ----------------------------------------------------------------------------- LAGEOS
-LAGEOS_STYLE = {"Kepler": (ORANGE, "dash"), "Kepler + J2": (GREY, "dot"), "neural step model (MLP)": (VIOLET, "solid"),
-                "agent": (AQUA, "solid")}
+LAGEOS_STYLE = {"Kepler": (AQUA, "dash"), "Kepler + J2": (GREY, "dot"), "neural step model (MLP)": (ORANGE, "solid"),
+                "agent": (BLUE, "solid")}   # same entity, same colour on every page
 LAGEOS_LABEL = {"Kepler": "Simple gravity", "Kepler + J2": "Textbook law",
                 "neural step model (MLP)": "Neural network", "agent": "Discovered law"}
 
@@ -31,7 +31,7 @@ def lageos_errors(days, errs, agent_pts=None, xlabel="days into the unseen month
                                  hovertemplate="%{y:,.3g} km<extra>" + LAGEOS_LABEL.get(name, name) + "</extra>"))
     if agent_pts:
         fig.add_trace(go.Scatter(x=[p[0] for p in agent_pts], y=[p[1] for p in agent_pts], mode="markers",
-                                 name="data-only agent", marker=dict(size=11, color=AQUA, symbol="diamond")))
+                                 name="data-only agent", marker=dict(size=11, color=BLUE, symbol="diamond")))
     fig.update_layout(xaxis_title=xlabel,
                       yaxis=dict(type="log", title="position error (km)", exponentformat="power"))
     return _layout(fig, 340)
