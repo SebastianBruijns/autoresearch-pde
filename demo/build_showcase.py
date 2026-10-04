@@ -334,8 +334,16 @@ def clean_thumbs():
     import matplotlib.pyplot as plt
 
     def save(fig, case):
-        fig.savefig(OUT / case / "thumb.jpg", dpi=110, facecolor="white", bbox_inches="tight", pad_inches=0.02)
+        from PIL import Image
+        path = OUT / case / "thumb.jpg"
+        fig.savefig(path, dpi=110, facecolor="white", bbox_inches="tight", pad_inches=0.02)
         plt.close(fig)
+        im = Image.open(path).convert("RGB")             # pad to a uniform 16:9 card image
+        w, h = im.size
+        W, H = max(w, int(round(h * 16 / 9))), max(h, int(round(w * 9 / 16)))
+        canvas = Image.new("RGB", (W, H), "white")
+        canvas.paste(im, ((W - w) // 2, (H - h) // 2))
+        canvas.resize((560, 315)).save(path, quality=90)
 
     def earth(ax):
         u_, v_ = np.mgrid[0:2 * np.pi:60j, 0:np.pi:30j]
