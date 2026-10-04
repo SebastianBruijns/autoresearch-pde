@@ -178,7 +178,7 @@ def page_lageos():
             ok = pe_ag["30d"] < min(n["N"], n["K"])
             ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED")
             ui.tiles([
-                {"label": "eqdisc: 30-day error", "value": km(pe_ag["30d"]), "delta": f"1 day: {km(pe_ag['1d'])}"},
+                {"label": "Discovered law: 30-day error", "value": km(pe_ag["30d"]), "delta": f"1 day: {km(pe_ag['1d'])}"},
                 {"label": "Neural net, same data", "value": km(n["N"]), "delta": "30 days"},
                 {"label": "Round-Earth gravity", "value": km(n["K"]), "delta": "30 days"},
                 {"label": "Hand-built textbook law", "value": km(n["J"]), "delta": "30 days (reference)"},
@@ -269,7 +269,7 @@ def page_orbit():
             ok = pa["24h"] < min(pe["neural step model (MLP)"]["24h"], pe["Kepler"]["24h"])
             ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED")
             ui.tiles([
-                {"label": "eqdisc: error after 1 day", "value": km(pa["24h"]), "delta": f"after 3 days: {km(pa['72h'])}"},
+                {"label": "Discovered law: 1-day error", "value": km(pa["24h"]), "delta": f"after 3 days: {km(pa['72h'])}"},
                 {"label": "Neural network", "value": km(pe["neural step model (MLP)"]["24h"]), "delta": "after 1 day"},
                 {"label": "Round-Earth gravity", "value": km(pe["Kepler"]["24h"]), "delta": "after 1 day"},
                 {"label": "True law (best possible)", "value": km(pe["Kepler + J2"]["24h"]), "delta": "after 1 day"},

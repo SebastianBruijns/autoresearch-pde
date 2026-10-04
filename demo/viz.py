@@ -18,8 +18,8 @@ def _layout(fig, h=360, legend_top=False, **kw):
 # ----------------------------------------------------------------------------- LAGEOS
 LAGEOS_STYLE = {"Kepler": (ORANGE, "dash"), "Kepler + J2": (GREY, "dot"), "neural step model (MLP)": (VIOLET, "solid"),
                 "agent": (AQUA, "solid")}
-LAGEOS_LABEL = {"Kepler": "round-Earth gravity", "Kepler + J2": "textbook law (reference)",
-                "neural step model (MLP)": "neural network", "agent": "eqdisc"}
+LAGEOS_LABEL = {"Kepler": "Simple gravity", "Kepler + J2": "Textbook law",
+                "neural step model (MLP)": "Neural network", "agent": "Discovered law"}
 
 
 def lageos_errors(days, errs, agent_pts=None, xlabel="days into the unseen month (after the 2017 training year)"):
@@ -208,9 +208,9 @@ def lageos_training(orbits, dates, h=None):
     return _layout(fig, 520, legend_top=True)
 
 
-PLAIN = {"true PDE from noisy state": "true equation", "true PDE from noisy frame": "true equation",
-         "weak SINDy (no LLM)": "sparse regression", "eqdisc agent (refit)": "eqdisc",
-         "FNO (same noisy data)": "neural network (FNO)"}
+PLAIN = {"true PDE from noisy state": "True equation", "true PDE from noisy frame": "True equation",
+         "weak SINDy (no LLM)": "Sparse regression", "eqdisc agent (refit)": "Discovered law",
+         "FNO (same noisy data)": "Neural network"}
 
 
 def ks_errors(t_lyap, errs, thr=0.5):
@@ -306,15 +306,15 @@ def pred_vs_true(y, yhat):
 
 def gs_simple(vrmse):
     """One clean horizontal bar per method (forecast error, steps 6-12), plus the best published neural net."""
-    order = [("eqdisc agent (refit)", "eqdisc", BLUE), ("true PDE from noisy frame", "true equation", GREY),
-             ("FNO (same noisy data)", "neural network", ORANGE), ("weak SINDy (no LLM)", "sparse regression", AQUA)]
+    order = [("eqdisc agent (refit)", "Discovered law", BLUE), ("true PDE from noisy frame", "True equation", GREY),
+             ("FNO (same noisy data)", "Neural network", ORANGE), ("weak SINDy (no LLM)", "Sparse regression", AQUA)]
     lab, val, col = [], [], []
     for k, name, c in order:
         if k in vrmse:
             lab.append(name)
             val.append(float(vrmse[k]["6-12"]))
             col.append(c)
-    lab.append("best published neural net")
+    lab.append("Best published neural net")
     val.append(0.29)
     col.append("rgba(120,120,120,.45)")
     fig = go.Figure(go.Bar(x=val, y=lab, orientation="h", marker_color=col, text=[f"{v:.2f}" for v in val],
