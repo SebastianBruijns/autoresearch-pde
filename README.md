@@ -209,9 +209,56 @@ Results and caveats: [`docs/honest_oos.md`](docs/honest_oos.md). This protocol s
 Total cost $9.21. Full table, protocol and an honest account of the failures, including LLM recall of functional
 forms despite blinding: [`docs/benchmark_v1.md`](docs/benchmark_v1.md).
 
+### Benchmarks on open data: SRSD-Feynman hard
+The harness helps on some problems. On clean simulated data, the main mistake it fixes: the model finds a formula
+that fits almost perfectly, calls the small leftover error "noise", and stops.
+
+Problems solved, out of 90 (30 problems × 3 seeds):
+
+| | harness | bare Claude |
+|---|---|---|
+| Opus 5.5 | **72** | 64 |
+| Sonnet 5.5 | **61** | 55 |
+| Haiku 4.5 | **11** | 4 |
+
+Ablations (Opus, same 90 problems):
+
+| bare Claude, plus… | solved |
+|---|---|
+| nothing | 64 |
+| the harness tools | 67 |
+| one sentence: "data are noise-free; an exact formula fits to ~1e-6" | **70** |
+| tools + that sentence | 69 |
+| full harness | **72** |
+
+- That one sentence does most of the work; the tools add little on top.
+- On all 50 problems (one run), Opus solves 36–37 of the 37 problems the data can decide, in every setup. The
+  remaining differences come from 13 problems where the data can't tell the textbook formula from a simpler one.
+- Haiku fails differently: wrong formulas and running out of steps. Nothing tested fixed that.
+
+Details, caveats and every attempt (CSV): [`docs/benchmarks/feynman_srsd_hard.md`](docs/benchmarks/feynman_srsd_hard.md).
+
 **Real data** (no ground truth). On `examples/data/KS_data.mat` all three branches independently recover
 u_t = −u·u_x − u_xx − u_xxxx (coefficients −0.996 to −1.002), and the verdict is CONFIDENT. On the orbit
 `Challenge1.csv` (with domain context) it recovers two-body gravity plus J2 with J2 = 0.5, matching the data generator.
+
+## Benchmark runner: SRSD-Feynman, The Well, and a zero-context baseline
+`run_bench.py` runs the agent on SRSD-Feynman (`eqdisc.srsd`) or The Well (`eqdisc.hf_well`: 1-D, 2-D or 3-D PDEs),
+locally or on Modal. Data stream from Hugging Face inside the container, so nothing large is downloaded. Each run has
+spending caps, a live dashboard and a page per attempt showing the agent's steps and reasoning.
+- `--agent bare`: Claude with only the data, one Python tool and the text "Gimme PDE!" (no system prompt or eqdisc
+  tools). `scripts/bare_claude.py` is a different control, with a scientist's system prompt.
+- `--seed` pairs the same problems across setups. `--bare-exact` / `--harness-prompt tools|tools+exact` are the
+  ablations above. `--disguise` (MHD_64) renames and rescales the data so the model can't recognise the dataset.
+- Agent code runs in the bubblewrap sandbox where installed (`eqdisc.sandbox`) and always under `eqdisc.guard`, which
+  blocks reading outside the agent's folder, starting processes, links and ctypes.
+```bash
+modal run run_bench.py --args "--benchmark srsd:hard --n 10 --total-budget 8"
+modal run run_bench.py --args "--benchmark well:MHD_64 --well-params Ma_0.7_Ms_0.5. --agent bare --disguise"
+python -m eqdisc.tests.test_srsd        # offline tests (also test_hf_well, test_3d, test_mhd_sim)
+```
+Scripts: `experiments/` (`harness_vs_bare.sh` with `MODEL=`, `experiments_mhd.sh`, `ablation_2x2.sh`).
+Video: `send_video.py` sends a video's frames to Claude on Modal (`eqdisc.video`; the API takes images, not video).
 
 ## Related work
 LLM-SR / LLM-SRBench (Shojaee et al.), KeplerAgent (Yang et al. 2026), STRIDE (Su et al. 2026), AlphaEvolve
