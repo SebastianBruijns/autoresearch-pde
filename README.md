@@ -1,8 +1,34 @@
-# eqdisc: an autoresearch lab for the laws of nature
+<p align="center"><img src="demo/brand/logo-leibniz.svg" alt="Leibniz" height="80"></p>
 
-**Give it raw measurements. It proposes equations, tests them, attacks them and revises them. It stops when the evidence settles on one law, or when it can tell you exactly which measurement would settle it.**
+<p align="center"><b>An AI research lab that finds the equations behind your data, and tells you when not to trust them.</b><br>
+<sub>Project: Leibniz. Python package and command line: <code>eqdisc</code>.</sub></p>
 
-|  | eqdisc | baseline |
+## In 30 seconds
+
+- **You give it** measurements of something that changes: a satellite's positions, a chemical concentration on a grid, a chaotic field. Any of CSV, MAT, NPZ, HDF5 or JSON. No labels, no names, no hints.
+- **You get back** the governing equation (for example `u_t = -u u_x - u_xx - u_xxxx`), a verdict on how far to trust it, error bars on every term, a forecast, and the next measurement that would settle any remaining doubt.
+- **How.** Claude agents work as competing scientists who propose, test, attack and revise equations. Statistics and numerics, not the LLM, decide who wins.
+- **Fastest look.** `pip install -e ".[demo]" && streamlit run demo/app.py` opens worked cases in the browser, with no API key needed.
+
+## Why this matters
+
+Most of science and engineering runs on differential equations: orbits, weather, combustion, epidemics, batteries, chemistry. The equation is the most useful thing you can know about a system. It forecasts beyond the data it came from, it extrapolates to conditions nobody measured, and a person can read it, check it and build on it.
+
+For many systems nobody knows the equation. There are only measurements. Today there are three ways to get from measurements to predictions, and each has a gap:
+- **Neural surrogates** (neural nets, Fourier neural operators) fit the data but are black boxes and drift once they leave it. On the LAGEOS satellite, a neural net is 3,170 km off after 30 days. The equation Leibniz found is 12 km off.
+- **Equation-discovery tools** (SINDy, PySR) return readable equations, but an expert must pick the candidate terms, derivatives, noise handling and thresholds. They return a wrong equation as confidently as a right one. Plain SINDy recovers 1 of 12 blinded held-out systems.
+- **Asking an LLM** mostly recites textbook equations it has memorised. That is recall, not discovery, which is why the held-out benchmark is blinded.
+
+## Where Leibniz innovates
+
+1. **It automates the whole scientific loop, not just the fit.** Hypothesise, experiment, select, falsify, diagnose, revise, and decide what to measure next, end to end from raw data. A single agent recovers 10 of 12 blinded systems, against 1 of 12 for SINDy.
+2. **It knows when not to trust itself.** Deterministic checks ask whether the law holds on every slice of the data and whether only noise is left over. A failed check vetoes a confident verdict and proposes a fix, which must win the tournament to be kept. On corrupted data the no-LLM pipeline is never confidently wrong (0 of 96 dev cases).
+3. **The LLM gives judgment; numerics give numbers.** Agents choose what to try. A toolbox does the arithmetic, and a statistical tournament (cross-validation, BIC, rollouts) picks the winner. Only refitted coefficients are scored, never constants the LLM typed.
+4. **It is built against self-deception.** Blinded benchmarks rename every variable and change every coefficient by ±25%. Thresholds are tuned on development systems only. Earlier results that leaked domain information are publicly retracted ([honest_oos](docs/honest_oos.md)).
+
+## Headline results
+
+|  | Leibniz | baseline |
 |---|---|---|
 | Blinded held-out systems recovered exactly, single agent ([protocol](docs/benchmark_v1.md)) | **10 / 12** | 1 / 12 (SINDy) |
 | LAGEOS-1 satellite, 30-day forecast from data alone ([details](docs/honest_oos.md)) | **12 km** | 3,170 km (neural net) |
@@ -11,6 +37,7 @@
 
 The agent never sees the system's name, a description or meaningful variable names. It gets data only.
 
+**One command: raw data in, verdict out.**
 ```bash
 eqdisc-discover examples/data/KS_data.mat
 ```
@@ -56,20 +83,7 @@ flowchart LR
 - **Decide what to measure next.** All plausible models are simulated, and the report ranks the next experiments by how strongly they would separate those models.
 - **Learn.** `eqdisc-agent --learn` writes lessons that later sessions retrieve (`memory/lessons.jsonl`), and `eqdisc-evolve` evolves the agents' playbook or discovery program AlphaEvolve-style. Held-out sets are reported, never optimised.
 
-## What makes it different
-
-- **Competition, not consensus.** Parallel agents follow different strategies. A cross-validated statistical tournament decides between them, and an adversary has to win that same tournament to replace the incumbent.
-- **It knows when not to trust itself.** Model checks can veto a confident verdict, and the checks never call an LLM:
-  - coefficients must agree across runs, early vs late time, regions of space and amplitude;
-  - the residual must be indistinguishable from noise.
-- **Diagnosis drives revision.** "The residual follows time" becomes "add a forcing term at this frequency", and the system tests that fix. This closes the loop from falsify to revise.
-- **It says what to measure next.** Uncertainty-driven experiment design names the initial condition that best separates the surviving models, and the coefficient it would pin down.
-- **Built against self-deception.**
-  - Blinded benchmarks rename every variable and change every coefficient by ±25%, so they measure discovery rather than recall of textbook equations.
-  - Results are scored only on refitted coefficients.
-  - Earlier results that leaked domain information are publicly retracted ([honest_oos](docs/honest_oos.md)).
-
-## Results
+## Results in detail
 
 **Blinded held-out benchmark:** 12 systems never used for tuning, 2% noise, scored on unseen initial conditions ([full table](docs/benchmark_v1.md)).
 
@@ -111,6 +125,22 @@ See `demo/README.md` for more.
 - **Cost.** A full run takes $1–3 and 2–8 minutes. Each agent branch costs about $0.3–0.5. For a cheap pass, use `--branches 2 --no-adversary`.
 - **Cheap checks.** Every check, the grade and the verdict are deterministic numpy/scipy, with no tokens. They add about 1% to an assessment, and model checks are cached per model.
 - **No wasted calls.** Identical repeated tool calls are blocked, and the critic stands aside when the tool budget is nearly spent.
+
+## What is where
+
+| path | what it holds |
+|---|---|
+| `eqdisc/orchestrate.py` | the pipeline: evidence checks → intuition → agent branches → tournament → adversary → assessment → report |
+| `eqdisc/agent.py` | the Claude tool-use loop and the tool schemas the agents can call |
+| `eqdisc/toolbox.py`, `weakform.py`, `fitting.py`, `symmetry.py`, `coordinates.py` | the numerics the agents run: SINDy, PySR, skeleton and trajectory fits, symmetries, transforms |
+| `eqdisc/assess.py`, `uq.py`, `insights.py` | uncertainty per term, rival models, next experiments, the verdict |
+| `eqdisc/ingest.py`, `report.py` | any data file in, `report.html` out |
+| `eqdisc/playbook.md` | the research strategy the agents follow (method only, no domain answers) |
+| `eqdisc/datagen.py`, `blind.py`, `benchmark.py` | synthetic systems, blinded variants, the benchmark |
+| `demo/` | the Streamlit app (`app.py`) and the logo (`brand/`) |
+| `docs/` | benchmark protocol, out-of-sample results, toolbox reference |
+| `notebooks/` | five walkthroughs: baselines, structure, agent, real data, confidence |
+| `.claude/skills/discover-equations` | the skill Claude Code uses when you ask it to discover equations |
 
 ## Run it
 
@@ -159,7 +189,7 @@ Static laws y = f(x) and the notebooks are covered in [docs/sr_mode.md](docs/sr_
 
 ## Next
 
-- Ablations against Claude alone: Claude with a code sandbox vs eqdisc vs eqdisc with evidence checks, on held-out seeds.
+- Ablations against Claude alone: Claude with a code sandbox vs Leibniz vs Leibniz with evidence checks, on held-out seeds.
 - Revision families that don't assume a shape: multi-frequency forcing, spline sources.
 - A partition test that decides whether a large coherent event is real dynamics or corrupt data.
 - Hidden variables and delay embeddings.
