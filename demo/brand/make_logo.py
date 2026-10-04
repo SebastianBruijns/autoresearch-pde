@@ -1,62 +1,64 @@
-"""Generate the logo: an Euler spiral (the curve of the Fresnel integrals) drawn as Leibniz's integral sign.
+"""Generate the Leibniz logo: an abstract vortex, five swept rings narrowing down into a bending tail.
 
-The clothoid's centre reads as the long s of the integral; its two ends wind into opposite vortices. The stroke is
-calligraphic: widest in the middle, thinning into the spiral cores. Run: python demo/brand/make_logo.py
+Each ring is the front of a funnel cross-section drawn as a comet stroke: a round head on the left, tapering as it
+sweeps right, so the stack reads as spinning. Run: python demo/brand/make_logo.py
 """
 import subprocess
-import sys
 from pathlib import Path
 
 import numpy as np
 
 OUT = Path(__file__).parent
-INK, ACCENT = "#1d1f22", "#2a78d6"     # theme text and primary colours (.streamlit/config.toml)
+INK, ACCENT, VIOLET = "#1d1f22", "#2a78d6", "#4a3aa7"   # theme colours (.streamlit/config.toml)
 FONT = "https://github.com/google/fonts/raw/main/ofl/sourceserif4/SourceSerif4%5Bopsz,wght%5D.ttf"
 
 
-def outline(T=2.4, stem=0.4, w_mid=0.16, w_end=0.014, slant=76, n=1400):
-    """Closed polygon (x, y) of the variable-width stroke, y pointing up.
-
-    Curvature grows linearly with arc length beyond a straight stem of half-length `stem` (two Euler spirals joined by
-    a line), so the ends are true clothoid vortices while the middle stays long, like a typeset integral.
-    """
-    s = np.linspace(-(T + stem), T + stem, n)
-    t = np.sign(s) * np.maximum(np.abs(s) - stem, 0)       # clothoid parameter: 0 along the stem
-    theta = -np.pi * t ** 2 / 2                            # curvature pi*t, mirrored so the top end curls right
-    ds = s[1] - s[0]
-    x, y = np.cumsum(np.cos(theta)) * ds, np.cumsum(np.sin(theta)) * ds
-    x, y = x - x.mean(), y - y.mean()
-    a = np.deg2rad(slant)                                   # lean the stem like an italic long s
-    x, y = x * np.cos(a) - y * np.sin(a), x * np.sin(a) + y * np.cos(a)
+def stroke(x, y, w):
+    """Closed outline of a centreline (x, y) with per-point width w and round caps."""
     dx, dy = np.gradient(x), np.gradient(y)
     L = np.hypot(dx, dy)
     nx, ny = -dy / L, dx / L
-    w = w_end + (w_mid - w_end) * np.exp(-(t / (0.55 * T)) ** 2)
-    w = np.minimum(w, 0.9 / (np.pi * np.abs(t) + 1e-9) * 0.5)   # never wider than the local radius of curvature
-    left = np.c_[x + nx * w / 2, y + ny * w / 2]
-    right = np.c_[x - nx * w / 2, y - ny * w / 2][::-1]
-    ang = np.linspace(0, np.pi, 12)[1:-1]   # round caps
-    def cap(i, sgn):
-        c, r = np.array([x[i], y[i]]), w[i] / 2
-        base = np.arctan2(ny[i], nx[i])
-        return np.c_[c[0] + r * np.cos(base + sgn * ang), c[1] + r * np.sin(base + sgn * ang)]
-    return np.vstack([left, cap(-1, -1), right, cap(0, -1)]) * [1, -1]   # flip to SVG coordinates (y down)
+    a = np.linspace(0, np.pi, 16)[1:-1]
+    b0, b1 = np.arctan2(ny[0], nx[0]), np.arctan2(ny[-1], nx[-1])
+    end = np.c_[x[-1] + w[-1] / 2 * np.cos(b1 - a), y[-1] + w[-1] / 2 * np.sin(b1 - a)]
+    start = np.c_[x[0] + w[0] / 2 * np.cos(b0 + np.pi - a), y[0] + w[0] / 2 * np.sin(b0 + np.pi - a)]
+    return np.vstack([np.c_[x + nx * w / 2, y + ny * w / 2], end, np.c_[x - nx * w / 2, y - ny * w / 2][::-1], start])
 
 
-def path_d(poly):
-    return "M" + " L".join(f"{px:.4f},{py:.4f}" for px, py in poly) + " Z"
+def vortex(k=5, wmax=0.17, gap=0.56, tilt=0.3, bend=0.5, rmin=0.2, m=240):
+    """List of ring outlines (y up). Rings shrink and drift right as they go down; spacing tightens slightly."""
+    rings = []
+    for i in range(k):
+        f = i / (k - 1)
+        R = rmin + (1 - rmin) * (1 - f) ** 1.2
+        cx, cy = bend * f ** 1.8, -gap * (i - 0.06 * i * (i - 1))
+        u = np.linspace(0, 1, m)
+        th = np.pi * (1 - u)                                   # left to right along the front of the ring
+        x, y = cx + R * np.cos(th), cy - tilt * R * np.sin(th)
+        rings.append(stroke(x, y, (wmax * (1 - u) ** 0.7 + 0.012) * (1 - 0.25 * f)))
+    return rings
 
 
-def mark_svg(poly, color=INK, pad=0.12, bg=None, size=512):
-    x0, y0 = poly.min(0)
-    x1, y1 = poly.max(0)
+def path_d(rings, k=1.0, dx=0.0, dy=0.0):
+    return "".join("M" + " L".join(f"{(px - dx) * k:.4f},{(dy - py) * k:.4f}" for px, py in r) + " Z" for r in rings)
+
+
+def gradient(id_):
+    return (f"<defs><linearGradient id='{id_}' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='{ACCENT}'/>"
+            f"<stop offset='1' stop-color='{VIOLET}'/></linearGradient></defs>")
+
+
+def mark_svg(rings, color=ACCENT, pad=0.11, bg=None, size=512, grad=False):
+    allp = np.vstack(rings)
+    (x0, y0), (x1, y1) = allp.min(0), allp.max(0)
     s = max(x1 - x0, y1 - y0) * (1 + 2 * pad)
-    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    vb = f"{cx - s / 2:.4f} {cy - s / 2:.4f} {s:.4f} {s:.4f}"
+    cx, cy = (x0 + x1) / 2, -(y0 + y1) / 2
     rect = (f"<rect x='{cx - s / 2:.4f}' y='{cy - s / 2:.4f}' width='{s:.4f}' height='{s:.4f}' rx='{s * .22:.4f}' "
             f"fill='{bg}'/>") if bg else ""
-    return (f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='{vb}' width='{size}' height='{size}'>{rect}"
-            f"<path d='{path_d(poly)}' fill='{color}'/></svg>")
+    fill = "url(#g)" if grad else color
+    return (f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='{cx - s / 2:.4f} {cy - s / 2:.4f} {s:.4f} {s:.4f}' "
+            f"width='{size}' height='{size}'>{gradient('g') if grad else ''}{rect}"
+            f"<path d='{path_d(rings)}' fill='{fill}'/></svg>")
 
 
 def text_path(text, font_file, wght=600, opsz=32):
@@ -75,29 +77,29 @@ def text_path(text, font_file, wght=600, opsz=32):
     return pen.getCommands(), x
 
 
-def lockup_svg(poly, name, font_file, height=96):
-    """Horizontal logo: mark, then the name; the mark spans cap height to descender, like an integral beside text."""
+def lockup_svg(rings, name, font_file, height=96):
+    """Horizontal logo: the mark spans cap height (0.66 em) plus a little, then the name."""
     d, adv = text_path(name, font_file)
-    x0, y0 = poly.min(0)
-    x1, y1 = poly.max(0)
-    k = 1.05 / (y1 - y0)                    # mark height in em
-    mx = lambda p: f"{(p[0] - x0) * k:.4f},{(p[1] - y0) * k - 0.83:.4f}"
-    mark = "M" + " L".join(mx(p) for p in poly) + " Z"
-    tx = (x1 - x0) * k + 0.16
-    w, top, h = tx + adv + 0.04, -0.86, 1.12
+    allp = np.vstack(rings)
+    (x0, y0), (x1, y1) = allp.min(0), allp.max(0)
+    k = 0.8 / (y1 - y0)                                       # mark height in em
+    mark = path_d(rings, k, x0, y1)                           # top at y = 0; shifted up to sit on the cap height
+    tx = (x1 - x0) * k + 0.2
+    top, h = -0.86, 1.12
+    w = tx + adv + 0.04
     return (f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='-0.02 {top} {w:.4f} {h}' height='{height}' "
-            f"width='{height * w / h:.0f}'><path d='{mark}' fill='{ACCENT}'/>"
+            f"width='{height * w / h:.0f}'><path transform='translate(0 -0.73)' d='{mark}' fill='{ACCENT}'/>"
             f"<path transform='translate({tx:.4f} 0)' d='{d}' fill='{INK}'/></svg>")
 
 
 if __name__ == "__main__":
-    poly = outline(w_mid=0.19, w_end=0.02)
+    rings = vortex()
     font = Path("/tmp/SourceSerif4.ttf")
     if not font.exists():
         subprocess.run(["curl", "-sSL", "-o", str(font), FONT], check=True)
-    (OUT / "mark.svg").write_text(mark_svg(poly, ACCENT))
-    (OUT / "mark-ink.svg").write_text(mark_svg(poly, INK))
-    (OUT / "icon.svg").write_text(mark_svg(outline(T=2.1, w_mid=0.26, w_end=0.05), "#fff", pad=0.2, bg=ACCENT))
-    for name in sys.argv[1:] or ["eqdisc", "Gottfried"]:
-        (OUT / f"logo-{name.lower()}.svg").write_text(lockup_svg(poly, name, font))
+    (OUT / "mark.svg").write_text(mark_svg(rings))
+    (OUT / "mark-gradient.svg").write_text(mark_svg(rings, grad=True))
+    (OUT / "icon.svg").write_text(mark_svg(vortex(wmax=0.22), "#fff", pad=0.2, bg=ACCENT))
+    (OUT / "logo-leibniz.svg").write_text(lockup_svg(vortex(wmax=0.23), "Leibniz", font))   # heavier beside text
+    subprocess.run(["rsvg-convert", "-w", "64", str(OUT / "icon.svg"), "-o", str(OUT / "icon-64.png")], check=True)
     print("wrote", ", ".join(sorted(p.name for p in OUT.glob("*.svg"))))
