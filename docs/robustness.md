@@ -34,6 +34,10 @@ Code: `eqdisc/robustness.py` (`make`, `run`). Data only, one agent session per c
 
 Total cost $14.85.
 
+![Lorenz](figures/robust_lorenz.png)
+
+![KdV](figures/robust_kdv.png)
+
 ## What this shows
 
 - **Spikes are where the agent clearly beats plain regression.** Lorenz: 0.2–0.5% vs 11–37%. KdV: 0.1% vs 5.4%.
