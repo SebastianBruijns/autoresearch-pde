@@ -35,7 +35,7 @@ PROTOCOL = ("Data only: the agent gets numbers with neutral names, no descriptio
             "and its code cannot read anything else. Honest test: noisy training data → forecast an unseen future or "
             "held-out trajectory from a noisy observed state; coefficients refitted; a neural net trained on the same data.")
 TOOL_LABEL = {"diagnose": "diagnose", "intuit": "intuition", "run_sindy": "SINDy", "weak_sindy": "weak SINDy",
-              "run_pysr": "PySR", "fit_skeleton": "skeleton fit", "fit_flow": "flow-map fit",
+              "run_pysr": "PySR", "fit_skeleton": "skeleton fit", "fit_flow": "flow-map fit", "fit_trajectories": "trajectory fit",
               "find_invariants": "invariants", "transform": "coordinates", "set_coordinates": "coordinates",
               "detect_symmetries": "symmetries", "equivariant_sindy": "equivariant SINDy",
               "ensemble_sindy": "ensemble SINDy", "compare_models": "model comparison",
@@ -980,13 +980,88 @@ def v3_reaction():
         gs_details(info, agent, vr)
 
 
+def v3_hidden():
+    info, a = load_case("hidden_oscillator")
+    if not info:
+        return missing("hidden_oscillator")
+    uq = info.get("uq") or {}
+    pol = info.get("polar") or {}
+    ui.page_title("Hidden Oscillator", "Synthetic · 3 unnamed variables, 4 noisy runs · the law hides behind a tilted, "
+                                       "stretched ellipse and a square root")
+
+    def law():
+        if pol:
+            ui.equations([rf"\dot r = {pol['growth']:.3f}\, r\,(1 - r)",
+                          rf"\dot\varphi = {pol['omega0']:.3f} + {pol['omega1']:.3f}\, r",
+                          rf"\dot u_2 = -{pol['decay']:.3f}\, u_2 + {pol['drive']:.3f}\, r"], small=True)
+        st.markdown("<div class='law'>a self-sustained oscillation, in coordinates it found itself<br>"
+                    "<span style='opacity:.6;font-weight:500'>r, φ: distance and angle around a hidden centre, "
+                    "after undoing a tilt and a stretch</span></div>", unsafe_allow_html=True)
+    _hero("hidden_oscillator", law, uq, video_title="Forecast of a run it never saw")
+    names = [str(n) for n in a.get("names", [])]
+    errs = {n: a[f"err_{i}"] for i, n in enumerate(names)}
+    c1, c2, c3 = st.columns(3, gap="large")
+    with c1:
+        ui.fig_title("Training data (3 noisy runs)")
+        if "train" in a:
+            show(_bigfont(viz.hidden_training(a["train"]), 430), "ho_train")
+    with c2:
+        ui.fig_title("Forecast error over time", locked=True)
+        if errs:
+            show(_bigfont(viz.hidden_errors(a["t"], errs), 430), "ho_err")
+    with c3:
+        ui.fig_title("How precisely known")
+        sq = info.get("radius_term")
+        nm = {t["term"]: t["term"].replace(sq, "r") if sq else t["term"] for t in uq.get("terms") or []}
+        f = ui.precision_fig(uq, nm)
+        if f:
+            show(_bigfont(f), "ho_prec")
+    with st.expander("🧠 How it got there"):
+        steps = (info.get("story") or {}).get("key_steps") or []
+        tool_chips(info.get("tools") or {}, title="tools it used (all branches)")
+        for k, s_ in enumerate(steps, 1):
+            st.markdown(f"**{k}. {s_.get('observation', '')}**  \n{s_.get('decision', '')}  \n*{s_.get('outcome', '')}*")
+    with st.expander("🔭 What the equation means"):
+        st.markdown(
+            "- **r(1 − r):** a limit cycle. Small swings grow, large ones shrink, so every run settles onto the same "
+            "loop (r = 1).\n"
+            "- **φ̇ = a + b·r:** it circles faster the further out it is (the frequency depends on amplitude).\n"
+            "- **u₂:** a third variable that simply follows the size of the swing, with a lag.\n"
+            "- In the measured variables none of this is visible: r is a square root of a tilted quadratic form, so no "
+            "polynomial can write it. The agent found the centre, undid the tilt and stretch, and fitted in (r, φ).")
+    with st.expander("✅ The checks behind the verdict"):
+        st.markdown(ui.checks_md(uq))
+        for adv in uq.get("data_advice") or []:
+            st.caption(adv)
+    with st.expander("🔒 Benchmark details"):
+        tr = {"growth": 0.7029, "omega0": 1.9022, "omega1": 0.5183 * 0.8274, "decay": 0.9497, "drive": 0.3493 * 0.8274}
+        lab = {"growth": "growth rate (r term)", "omega0": "base frequency", "omega1": "frequency per unit r",
+               "decay": "u₂ decay rate", "drive": "u₂ drive by r"}
+        if pol:
+            st.markdown("**Discovered vs. true law** (in the same coordinates; the limit cycle at r = 1)\n\n| | true | "
+                        "discovered | off by |\n|---|---|---|---|\n" + "\n".join(
+                            f"| {lab[k]} | {tr[k]:.4f} | {pol[k]:.4f} | {abs(pol[k] - tr[k]) / tr[k]:.1%} |" for k in tr))
+        em = info.get("errors_mean") or {}
+        b = info.get("bare") or {}
+        st.markdown(
+            f"**Forecast of the held-out run** (mean distance from reality over 30 time units): discovered law "
+            f"{em.get('Discovered law', 0):.1%}, true law {em.get('True law', 0):.1%}, Claude alone "
+            f"{em.get('Claude alone', 0):.1%}.\n\n"
+            f"**Claude alone** is the same model with only a Python sandbox and the prompt *Gimme PDE!*, on the same "
+            f"training runs (${b.get('cost_usd', 0):.2f}, {b.get('n_tool_calls', 0)} tool calls). It fitted a cubic "
+            f"polynomial oscillator: close on the loop, but wrong while a run settles. eqdisc: "
+            f"${info.get('cost_usd', 0):.2f}, {info.get('wall_s', 0) / 60:.0f} min; the winning law came from its "
+            f"{info.get('winner_branch', '')} step.")
+
+
 def v3_home():
     st.markdown("<div class='home-t'>Equation Discovery AutoScientist</div>"
                 "<div class='home-s'>Data in → the equation, how sure it is, and where to measure next</div>",
                 unsafe_allow_html=True)
     cards = [("lageos", "Satellite", V3_PAGES["sat"]), ("orbit", "Big Bulge Orbit", V3_PAGES["bulge"]),
-             ("ks", "Blind Chaos (KS)", V3_PAGES["chaos"]), ("gray_scott", "Reaction-Diffusion (Chemistry)", V3_PAGES["rd"])]
-    cols = st.columns(4, gap="large")
+             ("ks", "Blind Chaos (KS)", V3_PAGES["chaos"]), ("gray_scott", "Reaction-Diffusion (Chemistry)", V3_PAGES["rd"]),
+             ("hidden_oscillator", "Hidden Oscillator", V3_PAGES["hidden"])]
+    cols = st.columns(len(cards), gap="large")
     for c, (case, name, page) in zip(cols, cards):
         with c, st.container(border=True):
             th = SHOW / case / "thumb.jpg"
@@ -1183,6 +1258,7 @@ def main():
         "bulge": st.Page(v3_bulge, title="Big Bulge Orbit", url_path="big-bulge-orbit"),
         "chaos": st.Page(v3_chaos, title="Blind Chaos (KS)", url_path="blind-chaos"),
         "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", url_path="reaction-diffusion"),
+        "hidden": st.Page(v3_hidden, title="Hidden Oscillator", url_path="hidden-oscillator"),
         "yours": st.Page(v3_yourdata, title="Your Data", url_path="your-data"),
     })
     nav = st.navigation(list(V3_PAGES.values()), position="top")

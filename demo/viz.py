@@ -322,3 +322,31 @@ def gs_simple(vrmse):
     fig.update_layout(xaxis=dict(title="error (lower is better)", range=[0, max(val) * 1.25]),
                       yaxis=dict(autorange="reversed"), showlegend=False)
     return _layout(fig, 360, hovermode="closest")
+
+
+# ----------------------------------------------------------------------------- hidden oscillator
+HIDDEN_STYLE = {"Discovered law": ("#16a34a", "solid", 4), "Claude alone": ("#ea580c", "solid", 4),
+                "True law": ("#111827", "dash", 2)}
+
+
+def hidden_training(train, h=430):
+    """The three training runs in the (u0, u1) plane, as measured (noisy)."""
+    fig = go.Figure()
+    for k, tr in enumerate(train):
+        fig.add_trace(go.Scatter(x=tr[:, 0], y=tr[:, 1], mode="markers", marker=dict(size=3, color=GREY, opacity=0.6),
+                                 name=f"run {k + 1}", hovertemplate="u0 %{x:.2f}<br>u1 %{y:.2f}<extra></extra>"))
+    fig.update_xaxes(title="u0"); fig.update_yaxes(title="u1", scaleanchor="x", scaleratio=1)
+    return _layout(fig, h, showlegend=False, hovermode="closest")
+
+
+def hidden_errors(t, errs, h=430):
+    """Distance from (smoothed) reality over time for each model, log scale in percent."""
+    fig = go.Figure()
+    for name, e in errs.items():
+        col, dash, w = HIDDEN_STYLE.get(name, (GREY, "solid", 2))
+        fig.add_trace(go.Scatter(x=t, y=100 * np.maximum(e, 1e-3), mode="lines", name=name,
+                                 line=dict(color=col, dash=dash, width=w), hovertemplate="%{y:.2g}%<extra>" + name + "</extra>"))
+    fig.add_vrect(x0=0, x1=8, fillcolor="#fef3c7", opacity=0.5, line_width=0, layer="below")
+    fig.update_xaxes(title="time")
+    fig.update_yaxes(title="distance from reality", type="log", ticksuffix="%")
+    return _layout(fig, h, legend_top=True)

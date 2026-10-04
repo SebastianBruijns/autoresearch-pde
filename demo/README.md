@@ -16,6 +16,7 @@ offline and without an API key. *Your Data* runs the real pipeline on an uploade
 | Big Bulge Orbit | synthetic, 3 noisy days | an honest failure: the law found is wrong and the system's own checks say "don't trust this law" |
 | Blind Chaos (KS) | real KS data, rescaled, 2% noise | forecast useful for 4.5 Lyapunov times (neural net 0.8) |
 | Reaction-Diffusion (Chemistry) | Gray-Scott (The Well), 5% noise | right law, but rival versions fit equally well: "collect more data" |
+| Hidden Oscillator | synthetic, 3 unnamed variables, 4 noisy runs | finds a non-polynomial law (limit cycle in polar coordinates about a hidden, tilted and stretched centre); compared with Claude alone (no tools) |
 | Your Data | your CSV | the same layout for your own measurements |
 
 Each example page: forecast video and verdict / law / *measure next* side by side, three figures, and collapsible
