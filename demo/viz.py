@@ -18,8 +18,8 @@ def _layout(fig, h=360, legend_top=False, **kw):
 # ----------------------------------------------------------------------------- LAGEOS
 LAGEOS_STYLE = {"Kepler": (ORANGE, "dash"), "Kepler + J2": (GREY, "dot"), "neural step model (MLP)": (VIOLET, "solid"),
                 "agent": (AQUA, "solid")}
-LAGEOS_LABEL = {"Kepler": "Newton's gravity, perfectly round Earth", "Kepler + J2": "textbook model incl. Earth's bulge (reference)",
-                "neural step model (MLP)": "neural network trained on the same data", "agent": "eqdisc: equation found from the data"}
+LAGEOS_LABEL = {"Kepler": "round-Earth gravity", "Kepler + J2": "textbook law (reference)",
+                "neural step model (MLP)": "neural network", "agent": "eqdisc"}
 
 
 def lageos_errors(days, errs, agent_pts=None, xlabel="days into the unseen month (after the 2017 training year)"):
@@ -86,7 +86,7 @@ def _scene(lim=2.7):
                 camera=dict(eye=dict(x=0.95, y=0.95, z=0.5)))
 
 
-def orbit_animation(t, U, n_orbits=4.0, n_frames=90, full_label="the 3 days of noisy measurements the agent got"):
+def orbit_animation(t, U, n_orbits=4.0, n_frames=90, full_label="3 noisy days"):
     """Earth + measured orbit (faint, full) + animated satellite with a trail over the first few orbits."""
     period = 18.4
     k_end = int(np.searchsorted(t, t[0] + n_orbits * period))
@@ -97,7 +97,7 @@ def orbit_animation(t, U, n_orbits=4.0, n_frames=90, full_label="the 3 days of n
     fig.add_trace(_earth())
     fig.add_trace(go.Scatter3d(x=full[:, 0], y=full[:, 1], z=full[:, 2], mode="lines", name=full_label,
                                line=dict(color="rgba(100,116,139,0.6)", width=2), hoverinfo="skip"))
-    fig.add_trace(go.Scatter3d(x=[0, 0], y=[0, 0], z=[-1.6, 1.6], mode="lines", name="Earth's spin axis",
+    fig.add_trace(go.Scatter3d(x=[0, 0], y=[0, 0], z=[-1.6, 1.6], mode="lines", name="spin axis",
                                line=dict(color="rgba(200,200,200,0.8)", width=4, dash="dash"), hoverinfo="skip"))
 
     def trail(i):
@@ -178,7 +178,7 @@ def lageos_training(orbits, dates, h=None):
     cols = [f"rgba(42,120,214,{0.15 + 0.6 * i / max(n - 1, 1):.2f})" for i in range(n)]
     fig = go.Figure()
     fig.add_trace(_earth_mesh())
-    fig.add_trace(go.Scatter3d(x=[0, 0], y=[0, 0], z=[-1.7, 1.7], mode="lines", name="Earth's spin axis",
+    fig.add_trace(go.Scatter3d(x=[0, 0], y=[0, 0], z=[-1.7, 1.7], mode="lines", name="spin axis",
                                line=dict(color="rgba(150,150,150,0.9)", width=4, dash="dash"), hoverinfo="skip"))
     for i, O in enumerate(orbits):          # faint history of all fortnightly orbits
         fig.add_trace(go.Scatter3d(x=O[:, 0], y=O[:, 1], z=O[:, 2], mode="lines", showlegend=i == 0,
@@ -208,10 +208,9 @@ def lageos_training(orbits, dates, h=None):
     return _layout(fig, 520, legend_top=True)
 
 
-PLAIN = {"true PDE from noisy state": "true equation (the best possible)", "true PDE from noisy frame":
-         "true equation (the best possible)", "weak SINDy (no LLM)": "sparse regression, no LLM",
-         "eqdisc agent (refit)": "eqdisc: equation found from the data", "FNO (same noisy data)":
-         "neural operator (FNO) trained on the same data"}
+PLAIN = {"true PDE from noisy state": "true equation", "true PDE from noisy frame": "true equation",
+         "weak SINDy (no LLM)": "sparse regression", "eqdisc agent (refit)": "eqdisc",
+         "FNO (same noisy data)": "neural network (FNO)"}
 
 
 def ks_errors(t_lyap, errs, thr=0.5):
@@ -222,7 +221,7 @@ def ks_errors(t_lyap, errs, thr=0.5):
         fig.add_trace(go.Scatter(x=t_lyap, y=e, mode="lines", name=lab, line=dict(color=c, width=2.5, dash=dash),
                                  hovertemplate="%{y:.2f}<extra>" + lab + "</extra>"))
     fig.add_hline(y=thr, line=dict(color="rgba(120,120,120,.6)", width=1, dash="dash"),
-                  annotation_text="above this line the forecast is no longer useful", annotation_position="bottom right",
+                  annotation_text="useless above here", annotation_position="bottom right",
                   annotation_font_size=10)
     fig.update_layout(xaxis_title="Lyapunov times into the unseen future",
                       yaxis=dict(title="relative error vs truth", range=[0, 1.6]))
@@ -254,7 +253,7 @@ def gs_vrmse(vrmse):
         fig.add_trace(go.Scatter(x=[k - 0.45, k + 0.45], y=[yv, yv], xaxis="x2", mode="lines+text",
                                  text=["", f"{nm} {val}"], textposition="top left", textfont=dict(size=10, color="gray"),
                                  line=dict(color="rgba(120,120,120,.7)", dash="dash", width=1),
-                                 name="published neural surrogates (The Well paper, trained on 100s of runs)", legendgroup="well",
+                                 name="published neural nets", legendgroup="well",
                                  showlegend=(j == 0), hoverinfo="skip"))
     fig.update_layout(barmode="group", bargap=0.3,
                       xaxis2=dict(overlaying="x", range=[-0.5, 1.5], visible=False),
@@ -302,4 +301,24 @@ def pred_vs_true(y, yhat):
                      go.Scatter(x=[lo - pad, hi + pad], y=[lo - pad, hi + pad], mode="lines", name="perfect",
                                 line=dict(color=GREY, dash="dash", width=1))])
     fig.update_layout(xaxis_title="measured", yaxis_title="predicted by the discovered law", showlegend=False)
+    return _layout(fig, 360, hovermode="closest")
+
+
+def gs_simple(vrmse):
+    """One clean horizontal bar per method (forecast error, steps 6-12), plus the best published neural net."""
+    order = [("eqdisc agent (refit)", "eqdisc", BLUE), ("true PDE from noisy frame", "true equation", GREY),
+             ("FNO (same noisy data)", "neural network", ORANGE), ("weak SINDy (no LLM)", "sparse regression", AQUA)]
+    lab, val, col = [], [], []
+    for k, name, c in order:
+        if k in vrmse:
+            lab.append(name)
+            val.append(float(vrmse[k]["6-12"]))
+            col.append(c)
+    lab.append("best published neural net")
+    val.append(0.29)
+    col.append("rgba(120,120,120,.45)")
+    fig = go.Figure(go.Bar(x=val, y=lab, orientation="h", marker_color=col, text=[f"{v:.2f}" for v in val],
+                           textposition="outside", textfont=dict(size=15)))
+    fig.update_layout(xaxis=dict(title="error (lower is better)", range=[0, max(val) * 1.25]),
+                      yaxis=dict(autorange="reversed"), showlegend=False)
     return _layout(fig, 360, hovermode="closest")

@@ -65,6 +65,15 @@ def _copy(src, dst):
     return True
 
 
+def _rationale(transcript):
+    """The agent's final submission rationale (its own chain of reasoning), from transcript.json."""
+    f = Path(transcript)
+    if not f.exists():
+        return None
+    r = [e.get("input", {}).get("rationale") for e in json.loads(f.read_text()) if e.get("name") == "submit"]
+    return r[-1] if r else None
+
+
 def _tools(*transcripts):
     """Tool names actually called by the agent(s), in order, from transcript.json files."""
     out = []
@@ -139,7 +148,8 @@ def build_lageos():
             "The ± ranges are statistical only: the agent noted a slow drift its law does not explain (other forces), "
             "so the true bulge value sits ~0.03% away, just outside the 90% range."]
     info = {"results": res, "agent": agent, "agent_alt": agent_alt, "models": models, "RE_km": RE_E / 1e3,
-            "T_s": float(T_E), "train_dates": train_dates, "uq": uq}
+            "T_s": float(T_E), "train_dates": train_dates, "uq": uq,
+            "rationale": _rationale(REPO / "runs/oos_lageos_dataonly_units/agent/transcript.json")}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)
 
@@ -283,6 +293,7 @@ def build_gray_scott(regime="spirals", noise=0.05):
             "params": (truth or {}).get("params"), "regimes": {k: list(v) for k, v in REGIMES.items()},
             "has_video": has_video, "tools": _tools(REPO / "runs/dataonly/gs_agent"),
             "uq": _json(REPO / "runs/assess_gray_scott.json"),
+            "rationale": _rationale(REPO / "runs/dataonly/gs_agent/transcript.json"),
             "agent_cost": (_json(REPO / "runs/dataonly/gs_agent/result.json") or {}).get("cost_usd")}
     (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
     np.savez_compressed(d / "arrays.npz", **arrays)
@@ -315,6 +326,60 @@ def build_rehearsal():
 
 CASES = {"lageos": build_lageos, "orbit": build_orbit, "ks": build_ks, "gray_scott": build_gray_scott, "rehearsal": build_rehearsal}
 
+
+# ----------------------------------------------------------------------------- clean card thumbnails (no text)
+def clean_thumbs():
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    def save(fig, case):
+        fig.savefig(OUT / case / "thumb.jpg", dpi=110, facecolor="white", bbox_inches="tight", pad_inches=0.02)
+        plt.close(fig)
+
+    def earth(ax):
+        u_, v_ = np.mgrid[0:2 * np.pi:60j, 0:np.pi:30j]
+        ax.plot_surface(np.cos(u_) * np.sin(v_), np.sin(u_) * np.sin(v_), np.cos(v_), color="#2f6db5", alpha=.9,
+                        linewidth=0, shade=True)
+        ax.set_box_aspect((1, 1, 1))
+        ax.set_axis_off()
+
+    z = np.load(OUT / "lageos" / "arrays.npz")
+    if "train_orbits" in z.files:
+        fig = plt.figure(figsize=(5.6, 3.15))
+        ax = fig.add_subplot(111, projection="3d")
+        earth(ax)
+        O = z["train_orbits"]
+        for i, o in enumerate(O):
+            ax.plot(o[:, 0], o[:, 1], o[:, 2], color=plt.cm.cool(i / len(O)), lw=0.8, alpha=.85)
+        lim = 1.6
+        ax.set(xlim=(-lim, lim), ylim=(-lim, lim), zlim=(-lim, lim))
+        ax.view_init(18, 35)
+        save(fig, "lageos")
+    z = np.load(OUT / "orbit" / "arrays.npz")
+    fig = plt.figure(figsize=(5.6, 3.15))
+    ax = fig.add_subplot(111, projection="3d")
+    earth(ax)
+    U = z["U_train"]
+    ax.plot(U[:, 0], U[:, 1], U[:, 2], color="#eb6834", lw=0.5, alpha=.8)
+    lim = 2.4
+    ax.set(xlim=(-lim, lim), ylim=(-lim, lim), zlim=(-lim, lim))
+    ax.view_init(20, 40)
+    save(fig, "orbit")
+    f = np.load(REPO / "runs/oos_ks_dataonly/rollouts.npz", allow_pickle=True)
+    fig, ax = plt.subplots(figsize=(5.6, 3.15))
+    Y = f["Y0"]
+    ax.imshow(Y.T, aspect="auto", origin="lower", cmap="RdBu_r", vmin=-np.abs(Y).max(), vmax=np.abs(Y).max())
+    ax.set_axis_off()
+    save(fig, "ks")
+    f = np.load(REPO / "runs/oos_gs_dataonly/rollouts.npz", allow_pickle=True)
+    fig, ax = plt.subplots(figsize=(5.6, 3.15))
+    B = f["Y0"][-1, ..., 1]
+    ax.imshow(np.tile(B.T, (1, 2))[:, : int(B.shape[0] * 1.78)], origin="lower", cmap="magma", aspect="auto")
+    ax.set_axis_off()
+    save(fig, "gray_scott")
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     for name in (sys.argv[1:] or list(CASES)):
@@ -324,5 +389,9 @@ if __name__ == "__main__":
             print(f"[{name}] ok ({time.time() - t0:.1f}s)", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"[{name}] FAILED: {type(e).__name__}: {e}", flush=True)
+    try:
+        clean_thumbs()
+    except Exception as e:  # noqa: BLE001
+        print(f"[thumbs] FAILED: {e}")
     total = sum(f.stat().st_size for f in OUT.rglob("*") if f.is_file())
     print(f"showcase total: {total / 1e6:.1f} MB")

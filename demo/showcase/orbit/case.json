@@ -346,7 +346,7 @@
   },
   "experiments": [
    {
-    "description": "a new track further out (1.6\u00d7 radius), same tilt",
+    "description": "A wider orbit (1.6\u00d7 further out)",
     "score": 2.393150441038081,
     "informs_coefficients": [
      {
@@ -356,7 +356,7 @@
     ]
    },
    {
-    "description": "a new track further out (1.6\u00d7 radius), tilt 45\u00b0",
+    "description": "A new track further out (1.6\u00d7 radius), tilt 45\u00b0",
     "score": 2.3615977780860717,
     "informs_coefficients": [
      {
@@ -366,7 +366,7 @@
     ]
    },
    {
-    "description": "a new track further out (1.6\u00d7 radius), tilt 90\u00b0",
+    "description": "A new track further out (1.6\u00d7 radius), tilt 90\u00b0",
     "score": 2.195635114559971,
     "informs_coefficients": [
      {

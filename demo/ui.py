@@ -322,3 +322,114 @@ def confidence_panel(a, key, names=None):
             st.markdown(f"<div class='small' style='margin-top:8px'>💡 {html.escape(adv)}</div>", unsafe_allow_html=True)
         if v.get("recommendation") and not ex and not a.get("data_advice"):
             st.markdown(f"<div class='small'>{html.escape(v['recommendation'])}</div>", unsafe_allow_html=True)
+
+
+# ----------------------------------------------------------------------------- presentation layout (v3)
+CSS3 = """
+<style>
+.block-container {padding-top: 4.6rem; max-width: 1500px;}
+.pt {font-size: 3.1rem; font-weight: 850; letter-spacing: -0.03em; line-height: 1.05; margin: 0 0 .25rem 0;}
+.ps {font-size: 1.15rem; opacity: .6; margin: 0 0 1.4rem 0;}
+.ft {font-size: 1.45rem; font-weight: 800; letter-spacing: -0.01em; margin: .4rem 0 .35rem 0;}
+.ft .lock {font-size: .85rem; font-weight: 600; opacity: .55; margin-left: .5rem; vertical-align: middle;}
+.vbox {border-radius: 18px; padding: 18px 22px; color: #fff; margin-bottom: 14px;}
+.vbox .v {font-size: 1.9rem; font-weight: 850; line-height: 1.15;}
+.vbox .s {font-size: 1.0rem; opacity: .92; margin-top: .3rem;}
+.nbox {border-radius: 18px; padding: 16px 22px; border: 2px solid rgba(99,102,241,.55);
+       background: rgba(99,102,241,.09); margin-top: 14px;}
+.nbox .h {font-size: .85rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: #6366f1;}
+.nbox .w {font-size: 1.45rem; font-weight: 800; line-height: 1.25; margin-top: .2rem;}
+.nbox .y {font-size: .95rem; opacity: .7; margin-top: .35rem;}
+.law {font-size: 1.25rem; font-weight: 700; margin: .2rem 0;}
+.home-t {font-size: 3.6rem; font-weight: 900; letter-spacing: -0.035em; line-height: 1.05; margin: 1rem 0 .4rem 0;}
+.home-s {font-size: 1.3rem; opacity: .6; margin-bottom: 2rem;}
+.cardn {font-size: 1.55rem; font-weight: 850; text-align: center; margin: .5rem 0 .2rem 0;}
+</style>
+"""
+
+
+def inject_css3():
+    st.html(CSS3)
+
+
+def page_title(title, sub=None):
+    st.markdown(f"<div class='pt'>{html.escape(title)}</div>" + (f"<div class='ps'>{html.escape(sub)}</div>" if sub else ""),
+                unsafe_allow_html=True)
+
+
+def fig_title(text, locked=False):
+    lock = "<span class='lock'>🔒 hidden truth</span>" if locked else ""
+    st.markdown(f"<div class='ft'>{html.escape(text)}{lock}</div>", unsafe_allow_html=True)
+
+
+def _status(a):
+    v = (a.get("verdict") or {})
+    status = v.get("status")
+    val = a.get("validation") or {}
+    failed = bool(val) and not val.get("rollout_timed_out") and (
+        val.get("rollout_blew_up") or (val.get("rollout_valid_time") or 0) < 0.7 * (val.get("rollout_horizon") or 1))
+    if status == "INCONCLUSIVE" and not failed:
+        status = "COLLECT MORE DATA"
+    return status, failed
+
+
+SHORT_VERDICT = {"CONFIDENT": ("#16a34a", "✓ Very likely the law", "every check passed"),
+                 "CONFIDENT IN PREDICTIONS": ("#0891b2", "✓ Predictions trustworthy", "rival forms predict the same"),
+                 "COLLECT MORE DATA": ("#d97706", "◐ Not sure yet", "rival versions fit equally well"),
+                 "INCONCLUSIVE": ("#dc2626", "✗ Don't trust this law", "it fails its own checks")}
+
+
+def verdict_box(a):
+    status, _ = _status(a)
+    color, label, sub = SHORT_VERDICT.get(status, SHORT_VERDICT["INCONCLUSIVE"])
+    st.markdown(f"<div class='vbox' style='background:{color}'><div class='v'>{html.escape(label)}</div>"
+                f"<div class='s'>{html.escape(sub)}</div></div>", unsafe_allow_html=True)
+
+
+def next_box(a, names=None):
+    names = names or {}
+    ex = a.get("experiments") or []
+    what = why = None
+    if ex:
+        e = ex[0]
+        what = e.get("description")
+        g = [x for x in (e.get("informs_coefficients") or []) if x.get("info_gain_vs_existing")]
+        if g:
+            nm = names.get(g[0]["coefficient"].split(" in ")[0], g[0]["coefficient"])
+            why = f"{g[0]['info_gain_vs_existing']:.2g}× more informative about {nm} than more of the same"
+    elif a.get("data_advice"):
+        amb = (a.get("model_ambiguity") or {}).get("indistinguishable") or []
+        what = "More runs, from new starting patterns"
+        why = (f"{len(amb) - 1} rival versions fit equally well; new runs tell them apart" if len(amb) > 1
+               else a["data_advice"][0])
+    if what:
+        st.markdown(f"<div class='nbox'><div class='h'>📍 Measure next</div><div class='w'>{html.escape(str(what))}</div>"
+                    + (f"<div class='y'>{html.escape(why)}</div>" if why else "") + "</div>", unsafe_allow_html=True)
+
+
+def precision_fig(a, names=None):
+    import plotly.graph_objects as go
+    names = names or {}
+    terms = a.get("terms") or []
+    if not terms:
+        return None
+    lab = [names.get(t["term"], t["term"]) for t in terms]
+    pct = [100 * float(t.get("rel_uncertainty") or 0) for t in terms]
+    col = ["#16a34a" if (t.get("significant") and p < 10) else "#d97706" if t.get("significant") else "#dc2626"
+           for t, p in zip(terms, pct)]
+    txt = [f"±{p:.2g}%" if p >= 0.01 else f"1 part in {100 / p:,.0f}" for p in pct]
+    fig = go.Figure(go.Bar(x=pct, y=lab, orientation="h", marker_color=col, text=txt,
+                           textposition="outside", textfont=dict(size=14), hovertemplate="%{y}: ±%{x:.3g}%<extra></extra>"))
+    dec = _decades(pct)
+    fig.update_layout(height=max(260, 70 + 40 * len(terms)), margin=dict(l=10, r=60, t=10, b=10), font=dict(size=15),
+                      xaxis=dict(type="log", tickvals=dec, ticktext=[f"{v:g}%" for v in dec],
+                                 range=[np.log10(dec[0]), np.log10(dec[-1]) + 0.35]),
+                      yaxis=dict(autorange="reversed"), showlegend=False)
+    return fig
+
+
+def checks_md(a):
+    out = []
+    for name, ok, detail in _checks(a):
+        out.append(f"- {'✅' if ok else ('➖' if ok is None else '⚠️')} **{name}**: {detail}")
+    return "\n".join(out)

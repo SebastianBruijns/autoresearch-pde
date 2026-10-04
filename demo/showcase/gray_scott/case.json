@@ -376,5 +376,6 @@
    ]
   }
  },
+ "rationale": "This is the Gray-Scott model with F=0.018, k=0.051, D_A=2e-5 and D_B=1e-5. Weak SINDy found the same 9 terms on its own, with coefficients within about 1% of these values and with error at the noise floor (val_err 0.0261, noise floor 0.0262).\n\nResponse to the critic:\n(1) The built-in rollout blew up because explicit stepping at dt=10 is unstable for this diffusion. I re-ran the model myself with a stable semi-implicit spectral integrator (implicit diffusion, inner step 0.5), starting from the first snapshot of each trajectory. The relative error stays near the noise level (0.046\u20130.09) for the first 150\u2013200 time units and stays below about 0.11 up to roughly 250 units. After that it grows, to 0.41\u20130.49 by t=590, which is expected phase drift for spiral dynamics.\n(2) I tested the suggested extra -0.0044*B term in the A equation in the same rollout. It makes the result much worse (error 0.67 vs 0.088 after 200 time units). Weak SINDy, which does not differentiate the data in time, also drops this term. It is therefore an artefact of the coarse finite-difference time derivatives.\n(3) I left out the anisotropic 4th-order terms.",
  "agent_cost": 0.862
 }

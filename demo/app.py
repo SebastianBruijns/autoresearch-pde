@@ -4,6 +4,7 @@ Three out-of-sample cases (one screen each) + a live "Run on your data" page. Re
 demo/examples/ (build with demo/build_showcase.py). Rehearsal mode (EQDISC_DEMO_FAKE=1 or the sidebar toggle)
 replays a scripted live run without API calls.
 """
+import html
 import json
 import os
 import sys
@@ -20,8 +21,8 @@ for p in (str(REPO), str(DEMO)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-st.set_page_config(page_title="eqdisc — equations that forecast", page_icon="🧭", layout="wide",
-                   initial_sidebar_state="expanded")
+st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon="🧭", layout="wide",
+                   initial_sidebar_state="collapsed")
 
 import live  # noqa: E402
 import ui  # noqa: E402
@@ -756,15 +757,256 @@ digraph G { rankdir=LR; bgcolor="transparent"; node [shape=box, style="rounded,f
 
 
 # ============================================================================= main
-def main():
-    env_fake = os.environ.get("EQDISC_DEMO_FAKE", "") not in ("", "0", "false")
-    with st.sidebar:
-        st.markdown("### 🧭 eqdisc")
-        page = st.radio("Navigate", [PAGES[i] for i in (0, 1, 6, 2, 3, 4, 5)], key="nav", label_visibility="collapsed")
-        with st.expander("⚙️", expanded=False):
-            fake = st.toggle("Rehearsal mode (no API calls)", value=env_fake, key="fake")
-    {"Home": page_home, PAGES[1]: page_lageos, PAGES[2]: page_ks, PAGES[3]: page_gs,
-     PAGES[5]: page_how, PAGES[6]: page_orbit}.get(page, lambda: page_live(fake))()
+# ============================================================================= presentation pages (v3)
+def _bigfont(fig, h=None):
+    fig.update_layout(font=dict(size=15), legend=dict(font=dict(size=13)))
+    if h:
+        fig.update_layout(height=h)
+    return fig
 
+
+def _hero(case_dir, law_fn, uq, names=None, video_title="Forecast vs reality"):
+    left, right = st.columns([1.35, 1], gap="large")
+    with left:
+        ui.fig_title(video_title, locked=True)
+        hero_video(case_dir)
+    with right:
+        ui.fig_title("The verdict")
+        if uq:
+            ui.verdict_box(uq)
+        ui.fig_title("The law it found")
+        law_fn()
+        if uq:
+            ui.next_box(uq, names)
+
+
+def _reasoning(text, tools=None):
+    if tools:
+        tool_chips(tools, title="tools it used")
+    if text:
+        st.markdown(text.replace("\n", "\n\n"))
+
+
+def v3_satellite():
+    info, a = load_case("lageos")
+    if not info:
+        return missing("lageos")
+    ag = info.get("agent") or {}
+    uq = info.get("uq") or {}
+    ui.page_title("Satellite", "Real satellite LAGEOS-1 · one year of hourly positions")
+
+    def law():
+        ui.equations(lageos_latex(lageos_agent_rhs(ag)), small=True)
+        st.markdown("<div class='law'>Newton's gravity + Earth's equatorial bulge</div>", unsafe_allow_html=True)
+    _hero("lageos", law, uq)
+    errs = {m: a[f"err{i}"] for i, m in enumerate(info["models"])}
+    if "err_agent" in a:
+        errs["agent"] = a["err_agent"]
+    c1, c2, c3 = st.columns(3, gap="large")
+    with c1:
+        ui.fig_title("Training data")
+        if "train_orbits" in a:
+            show(_bigfont(viz.lageos_training(a["train_orbits"], info["train_dates"]), 430), "sat_train")
+    with c2:
+        ui.fig_title("Forecast error (km)", locked=True)
+        show(_bigfont(viz.lageos_errors(a["days"], errs, xlabel="days into the unseen month"), 430), "sat_err")
+    with c3:
+        ui.fig_title("How precisely known")
+        f = ui.precision_fig(uq, {"central pull (1/r²)": "gravity", "equatorial bulge (J₂)": "bulge (J₂)"})
+        if f:
+            show(f, "sat_prec")
+    with st.expander("🧠 How it got there"):
+        _reasoning(info.get("rationale"), ag.get("tools"))
+    with st.expander("🔭 What the equation means"):
+        st.markdown(
+            "- **1/r² term:** Newton's gravity, the pull toward Earth's centre.\n"
+            "- **Bulge term (J₂):** Earth is fatter at the equator; this extra pull makes the orbit's plane slowly turn "
+            f"(measured ≈ {lageos_numbers(info)['node']['data']:.3f}°/day).\n"
+            "- The agent inferred both from unnamed numbers in random units: it was never told this is a satellite.")
+    with st.expander("✅ The checks behind the verdict"):
+        st.markdown(ui.checks_md(uq))
+        for adv in uq.get("data_advice") or []:
+            st.caption(adv)
+    with st.expander("🔒 Benchmark details"):
+        st.markdown(LEGEND_ORBIT, unsafe_allow_html=True)
+        n = lageos_numbers(info)
+        lageos_details(info, n, ag, ag.get("position_error_km") or {})
+
+
+def v3_bulge():
+    info, a = load_case("orbit")
+    if not info:
+        return missing("orbit")
+    ag = info.get("agent") or {}
+    uq = info.get("uq") or {}
+    ui.page_title("Big Bulge Orbit", "Synthetic satellite · 3 noisy days · here it gets it wrong, and says so")
+
+    def law():
+        n_c = len((ag.get("refit") or {}).get("refit_constants") or [])
+        st.markdown(f"<div class='law'>acceleration = position × polynomial<br><span style='opacity:.6;font-weight:500'>"
+                    f"{n_c} fitted constants, no 1/r² gravity</span></div>", unsafe_allow_html=True)
+    _hero("orbit", law, uq, names={"which law is right (current, or with an added 1/r² pull)": "which law is right"})
+    errs = {m: a[f"err{i}"] for i, m in enumerate(info["models"])}
+    errs = {("agent" if m == "data-only agent" else m): v for m, v in errs.items()}
+    c1, c2, c3 = st.columns(3, gap="large")
+    with c1:
+        ui.fig_title("Training data")
+        show(_bigfont(viz.orbit_animation(a["t_train"], a["U_train"]), 470), "bb_train")
+    with c2:
+        ui.fig_title("Forecast error (km)", locked=True)
+        show(_bigfont(viz.lageos_errors((a["hrs"] - a["hrs"][0]) / 24, errs, xlabel="days"), 470), "bb_err")
+    with c3:
+        if "kj_t" in a:
+            ui.fig_title("What it missed", locked=True)
+            show(_bigfont(viz.orbit_kepler_vs_j2(a["kj_t"], a["kj_disc"], a["kj_kep"]), 470), "bb_kj")
+    with st.expander("🧠 How it got there"):
+        _reasoning(ag.get("rationale"), ag.get("tools"))
+    with st.expander("🔭 What went wrong"):
+        st.markdown(
+            "- It found that velocity is the rate of change of position, and that the motion is symmetric about one axis.\n"
+            "- It then fitted a smooth polynomial instead of Newton's 1/r² gravity plus a bulge term.\n"
+            "- Its own checks catch this from the training data alone: an added 1/r² pull is strongly favoured, and a "
+            "hold-out forecast fails at once. So it says *don't trust this law* and where to measure next.\n"
+            "- The ‘missing term’ check tries a short generic menu (a 1/r² pull, drag, an extra radial power) for any "
+            "position-and-velocity data; it was not chosen knowing the answer.")
+    with st.expander("✅ The checks behind the verdict"):
+        st.markdown(ui.checks_md(uq))
+        f = ui.precision_fig(uq)
+        if f:
+            show(f, "bb_prec")
+    with st.expander("🔒 Benchmark details"):
+        if "raan_disc" in a:
+            st.markdown("**The tell-tale drift: measured vs forecast**")
+            show(viz.orbit_elements(a["el_hrs"], a["raan_data"], a["argp_data"], a["hrs"], a["raan_disc"], a["argp_disc"],
+                                    a["raan_kep"], a["argp_kep"]), "bb_el")
+        orbit_details(info, info["results"]["position_error_km"], ag)
+
+
+def v3_chaos():
+    info, a = load_case("ks")
+    if not info:
+        return missing("ks")
+    r = info["results"]
+    ag = r["agent"]
+    uq = info.get("uq") or {}
+    names = {"u_xx": "u_xx (anti-diffusion)", "u_xxxx": "u_xxxx (hyper-diffusion)", "u*u_x": "u·u_x (steepening)"}
+    ui.page_title("Blind Chaos (KS)", "A chaotic field · rescaled so no textbook numbers apply · 2% noise")
+    import re as _re
+    for e in uq.get("experiments") or []:            # plain words for the audience
+        m_ = _re.match(r"single Fourier mode k=(\d+)", e.get("description") or "")
+        if m_:
+            e["description"] = f"Start from one clean ripple ({m_.group(1)} waves across)"
+
+    def law():
+        ui.equations(ui.rhs_latex(ag["refit"] if isinstance(ag["refit"], dict) else {"u": ag["refit"]}, pde=True, digits=4))
+    _hero("ks", law, uq, names=names)
+    truth = _coef_dict(r["truth"]["u"])
+    rows = []
+    for c in ag["coefficients"]:
+        tv = truth.get(_canon(c["term"]))
+        rows.append({"term": c["term"], "truth": tv, "refit": c["refit"], "90% CI": c["ci90"],
+                     "inside": tv is not None and c["ci90"][0] <= tv <= c["ci90"][1]})
+    c1, c2 = st.columns(2, gap="large")
+    with c1:
+        ui.fig_title("Forecast error (Lyapunov times)", locked=True)
+        errs = {lab: a[f"err{i}"] for i, lab in enumerate(info["labels"]) if i > 0}
+        show(_bigfont(viz.ks_errors(a["t_lyap"], errs), 400), "ks_err3")
+    with c2:
+        ui.fig_title("How precisely known")
+        f = ui.precision_fig(uq, names)
+        if f:
+            show(f, "ks_prec3")
+    with st.expander("🧠 How it got there"):
+        story = info.get("story") or {}
+        tool_chips(info.get("tools"), title="tools it used")
+        for s_ in story.get("key_steps") or []:
+            st.markdown(f"- **{s_.get('observation', '')}** → {s_.get('decision', '')}")
+    with st.expander("🔭 What the equation means"):
+        st.markdown(
+            "- **u_xx with a minus sign (anti-diffusion):** pumps energy into long waves (the instability).\n"
+            "- **u_xxxx (hyper-diffusion):** kills short waves, so cells of a preferred size form.\n"
+            "- **u·u_x (steepening):** moves energy between scales; together these make cellular chaos.\n"
+            "- This is the Kuramoto–Sivashinsky equation, but rescaled: its numbers appear in no textbook.")
+    with st.expander("✅ The checks behind the verdict"):
+        st.markdown(ui.checks_md(uq))
+    with st.expander("🔒 Benchmark details"):
+        ks_details(info, r, rows)
+
+
+def v3_reaction():
+    info, a = load_case("gray_scott")
+    if not info:
+        return missing("gray_scott")
+    res = info.get("results") or {}
+    vr = res.get("vrmse") or {}
+    agent = res.get("agent")
+    uq = info.get("uq") or {}
+    names = {"A_xx": "diffusion of A", "A_yy": "diffusion of A (y)", "B_xx": "diffusion of B", "B_yy": "diffusion of B (y)",
+             "A*B**2": "reaction A·B²", "A": "decay of A", "B": "decay of B", "1": "feed"}
+    ui.page_title("Reaction-Diffusion (Chemistry)", "Two chemicals reacting and spreading · two noisy movies")
+
+    def law():
+        if agent:
+            ui.equations(ui.rhs_latex(agent["refit"], pde=True, digits=3), small=True)
+    _hero("gray_scott", law, uq, names=names)
+    c1, c2 = st.columns(2, gap="large")
+    with c1:
+        ui.fig_title("Forecast error", locked=True)
+        if vr:
+            show(_bigfont(viz.gs_simple(vr), 400), "gs_err3")
+    with c2:
+        ui.fig_title("How precisely known")
+        f = ui.precision_fig(uq, names)
+        if f:
+            show(f, "gs_prec3")
+    with st.expander("🧠 How it got there"):
+        _reasoning(info.get("rationale"), info.get("tools"))
+    with st.expander("🔭 What the equations mean"):
+        st.markdown(
+            "- **Feed and decay:** chemical A is supplied, B is removed.\n"
+            "- **A·B² reaction:** B converts A into more B (autocatalysis), the engine of the patterns.\n"
+            "- **Diffusion:** A spreads faster than B; that mismatch is what makes spots and spirals (a Turing mechanism).")
+    with st.expander("✅ The checks behind the verdict"):
+        st.markdown(ui.checks_md(uq))
+        st.caption("🔒 Its equations turn out to be the true ones. The checks could not know that: with two noisy runs, "
+                   "close rival versions fit equally well, so ‘collect more data’ is the right call.")
+    with st.expander("🔒 Benchmark details"):
+        gs_details(info, agent, vr)
+
+
+def v3_home():
+    st.markdown("<div class='home-t'>Equation Discovery AutoScientist</div>"
+                "<div class='home-s'>Data in → the equation, how sure it is, and where to measure next</div>",
+                unsafe_allow_html=True)
+    cards = [("lageos", "Satellite", V3_PAGES["sat"]), ("orbit", "Big Bulge Orbit", V3_PAGES["bulge"]),
+             ("ks", "Blind Chaos (KS)", V3_PAGES["chaos"]), ("gray_scott", "Reaction-Diffusion (Chemistry)", V3_PAGES["rd"])]
+    cols = st.columns(4, gap="large")
+    for c, (case, name, page) in zip(cols, cards):
+        with c, st.container(border=True):
+            th = SHOW / case / "thumb.jpg"
+            if th.exists():
+                st.image(str(th), width="stretch")
+            st.markdown(f"<div class='cardn'>{html.escape(name)}</div>", unsafe_allow_html=True)
+            st.page_link(page, label="Open →", width="stretch")
+    st.write("")
+    with st.expander("How we keep it honest"):
+        st.markdown(f"{PROTOCOL}\n\n🔒 marks anything that uses the hidden future or the true law: eqdisc never sees it.")
+
+
+V3_PAGES = {}
+
+
+def main():
+    ui.inject_css3()
+    env_fake = os.environ.get("EQDISC_DEMO_FAKE", "") not in ("", "0", "false")
+    V3_PAGES.update({
+        "home": st.Page(v3_home, title="Home", default=True),
+        "sat": st.Page(v3_satellite, title="Satellite", url_path="satellite"),
+        "bulge": st.Page(v3_bulge, title="Big Bulge Orbit", url_path="big-bulge-orbit"),
+        "chaos": st.Page(v3_chaos, title="Blind Chaos (KS)", url_path="blind-chaos"),
+        "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", url_path="reaction-diffusion"),
+    })
+    nav = st.navigation(list(V3_PAGES.values()), position="top")
+    nav.run()
 
 main()
