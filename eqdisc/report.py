@@ -31,6 +31,11 @@ img{max-width:100%;border-radius:8px;border:1px solid var(--line);background:#ff
 """
 
 
+def _txt(x):
+    """Narration fields may be strings or lists of strings."""
+    return "; ".join(map(str, x)) if isinstance(x, (list, tuple)) else str(x or "")
+
+
 def _latex(v, e, names):
     try:
         ex = parse(e, names)
@@ -244,8 +249,8 @@ def build_discovery_report(out_dir, res, meta, data):
     steps = st.get("key_steps") or []
     if steps:
         P.append("<h2>Key steps</h2><table><tr><th>#</th><th>observation</th><th>decision</th><th>outcome</th></tr>" + "".join(
-            f"<tr><td>{i}</td><td>{html.escape(s_.get('observation', ''))}</td><td>{html.escape(s_.get('decision', ''))}</td>"
-            f"<td>{html.escape(s_.get('outcome', ''))}</td></tr>" for i, s_ in enumerate(steps, 1)) + "</table>")
+            f"<tr><td>{i}</td><td>{html.escape(_txt(s_.get('observation', '')))}</td><td>{html.escape(_txt(s_.get('decision', '')))}</td>"
+            f"<td>{html.escape(_txt(s_.get('outcome', '')))}</td></tr>" for i, s_ in enumerate(steps, 1)) + "</table>")
     P.append("<h2>Findings along the way</h2><table><tr><th>step</th><th>finding</th><th>why it matters</th></tr>" + "".join(
         f"<tr><td>{html.escape(i['step'])}</td><td>{html.escape(i['finding'])}</td><td class='sub'>{html.escape(i['why_it_matters'])}</td></tr>"
         for i in res["insights"]) + "</table>")
