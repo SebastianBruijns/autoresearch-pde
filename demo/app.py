@@ -995,8 +995,167 @@ def v3_home():
             st.markdown(f"<div class='cardn'>{html.escape(name)}</div>", unsafe_allow_html=True)
             st.page_link(page, label="Open →", width="stretch")
     st.write("")
+    _, mid, _ = st.columns([1, 1.2, 1])
+    with mid:
+        if st.button("⬆  Try it on your own data", type="primary", width="stretch"):
+            st.switch_page(V3_PAGES["yours"])
     with st.expander("How we keep it honest"):
         st.markdown(f"{PROTOCOL}\n\n🔒 marks anything that uses the hidden future or the true law: eqdisc never sees it.")
+
+
+def _slim(a, verdict=None):
+    """Assessment -> what the verdict/next/check widgets need."""
+    a = a or {}
+    from eqdisc import insights
+    ex = a.get("experiments") or {}
+    return {"verdict": verdict or (insights.verdict(a) if a.get("confidence") else {}), "terms": a.get("terms"),
+            "missing": a.get("missing_term_evidence") or a.get("missing"), "validation": a.get("validation"),
+            "experiments": (ex.get("ranked") if isinstance(ex, dict) else ex) or [],
+            "data_advice": a.get("data_advice"), "model_ambiguity": a.get("model_ambiguity")}
+
+
+def _yourdata_result(job):
+    res = job.result
+    uq = _slim(res.get("assessment"), res.get("verdict"))
+    if res["kind"] == "dynamics":
+        kind, png = "ode", None
+        if res.get("dataset_path") and res.get("final_model"):
+            kind, png = _model_figure(res["dataset_path"], json.dumps(res["final_model"]),
+                                      str(Path(job.run_dir) / "demo_figs" / "model.png"))
+        left, right = st.columns([1.35, 1], gap="large")
+        with left:
+            ui.fig_title("Model vs your data")
+            if png:
+                st.image(png, width="stretch")
+        with right:
+            ui.fig_title("The verdict")
+            ui.verdict_box(uq)
+            ui.fig_title("The law it found")
+            ui.equations(ui.rhs_latex(res.get("final_model") or {}, pde=kind == "pde"), small=True)
+            ui.next_box(uq)
+        story = res.get("story") or {}
+        with st.expander("🧠 How it got there"):
+            tool_chips([e["name"] for e in job.events if e.get("type") == "tool"], title="tools it used")
+            if story.get("headline"):
+                st.markdown(story["headline"])
+            for s_ in story.get("key_steps") or []:
+                st.markdown(f"- **{s_.get('observation', s_.get('decision', ''))}** → {s_.get('decision', s_.get('outcome', ''))}")
+    else:
+        from eqdisc.sr import evaluate_expr
+        names, target, expr = res["names"], res["target"], res.get("expr")
+        if not expr:
+            st.error("No law was found.")
+            return
+        df = pd.read_csv(res["csv"])
+        _, _, X, y, _, _ = live.static_task_arrays(df, target)
+        yh = evaluate_expr(expr, names, X)
+        left, right = st.columns([1.35, 1], gap="large")
+        with left:
+            ui.fig_title("Predicted vs measured")
+            show(_bigfont(viz.pred_vs_true(y, yh), 460), "yd_pvt")
+        with right:
+            ui.fig_title("The verdict")
+            ui.verdict_box(uq)
+            ui.fig_title("The law it found")
+            ui.equations([f"{ui.expr_latex(target, [target])} = {ui.expr_latex(expr, names)}"], small=True)
+            ui.next_box(uq)
+        with st.expander("🧠 How it got there"):
+            tool_chips([e["name"] for e in job.events if e.get("type") == "tool"], title="tools it used")
+            if (res.get("verdict") or {}).get("recommendation"):
+                st.markdown(res["verdict"]["recommendation"])
+    with st.expander("✅ The checks behind the verdict"):
+        st.markdown(ui.checks_md(uq) or "No checks available.")
+        f = ui.precision_fig(uq)
+        if f:
+            show(_bigfont(f), "yd_prec")
+    with st.expander("⬇️ Downloads"):
+        rp = Path(res["report"]) if res.get("report") else None
+        if rp and rp.exists():
+            st.download_button("Full report (HTML)", rp.read_bytes(), rp.name, "text/html")
+        st.download_button("Result (JSON)", json.dumps(res, default=str, indent=1), "result.json")
+        if res.get("rehearsal_note"):
+            st.caption(res["rehearsal_note"])
+
+
+def v3_yourdata():
+    ui.page_title("Your Data", "Upload measurements → the equation, how sure it is, and where to measure next")
+    env_fake = os.environ.get("EQDISC_DEMO_FAKE", "") not in ("", "0", "false")
+    job = st.session_state.get("job")
+    running = job is not None and not job.done
+    c1, c2 = st.columns([1.35, 1], gap="large")
+    with c1:
+        ui.fig_title("Data")
+        src = st.radio("Data", ["Upload a CSV"] + list(EXAMPLES), horizontal=True, disabled=running, key="src",
+                       label_visibility="collapsed")
+        df, fname = None, None
+        if src == "Upload a CSV":
+            up = st.file_uploader("A time column plus one column per variable, or one row per measurement",
+                                  type=["csv", "tsv", "txt"], disabled=running)
+            if up is not None:
+                df, fname = pd.read_csv(up, sep=None, engine="python"), Path(up.name).stem
+        else:
+            path, _ = EXAMPLES[src]
+            if path.exists():
+                df, fname = pd.read_csv(path), path.stem
+        if df is not None:
+            st.dataframe(df.head(6), hide_index=True, width="stretch")
+    with c2:
+        ui.fig_title("Settings")
+        mode = st.segmented_control("Kind of law", ["Auto", "Dynamics", "Static y = f(x)"], default="Auto",
+                                    disabled=running, key="mode") or "Auto"
+        resolved = mode
+        if df is not None and mode == "Auto":
+            resolved = "Dynamics" if live.detect_mode(df) == "dynamics" else "Static y = f(x)"
+        target = None
+        if df is not None and resolved.startswith("Static"):
+            num = list(df.select_dtypes("number").columns)
+            target = st.selectbox("Predict which column", num, index=len(num) - 1, disabled=running)
+        budget = st.segmented_control("Effort", ["Quick", "Full"], default="Quick", disabled=running, key="budget") or "Quick"
+        fake = st.checkbox("Rehearsal (replays a saved run, no API cost)", value=env_fake, disabled=running, key="fake")
+        go_btn = st.button("Discover", type="primary", disabled=running or df is None, width="stretch")
+        if df is not None:
+            st.caption(f"{df.shape[0]} rows × {df.shape[1]} columns · detected: {resolved}")
+    if go_btn and df is not None:
+        run_dir = live.RUNS / time.strftime("%Y%m%d-%H%M%S")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        csv_path = run_dir / f"{live.ident(fname or 'data')}.csv"
+        df.to_csv(csv_path, index=False)
+        quick = budget == "Quick"
+        if resolved.startswith("Dyn"):
+            job = live.Job(live.fake_dynamics if fake else live.run_dynamics, csv_path=str(csv_path),
+                           run_dir=str(run_dir), n_branches=2 if quick else 3, adversary=not quick, context="")
+        else:
+            job = live.Job(live.fake_static if fake else live.run_static, csv_path=str(csv_path), target=target,
+                           context="", n_sessions=2 if quick else 3)
+        job.run_dir = str(run_dir)
+        st.session_state.job = job.start()
+        running = True
+    job = st.session_state.get("job")
+    if job is None:
+        return
+    with st.status("The agents are working…" if not job.done else "Done", expanded=not job.done,
+                   state="running" if not job.done else ("error" if job.error else "complete")) as status:
+        timer = st.empty()
+        logph = st.container(height=260).empty()
+
+        def paint():
+            lines = [live.fmt_event(e).replace("$", "\\$") for e in job.events]
+            logph.markdown("\n\n".join(lines[-30:]) or "_starting…_", unsafe_allow_html=True)
+            timer.caption(f"{job.elapsed:.0f} s · {sum(e.get('type') == 'tool' for e in job.events)} steps")
+        while not job.done:
+            job.drain()
+            paint()
+            time.sleep(0.4)
+        job.drain()
+        paint()
+        status.update(label="Failed" if job.error else f"Done in {job.elapsed:.0f} s",
+                      state="error" if job.error else "complete", expanded=False)
+    if running:
+        st.rerun()
+    if job.error:
+        st.error(job.error)
+        return
+    _yourdata_result(job)
 
 
 V3_PAGES = {}
@@ -1011,6 +1170,7 @@ def main():
         "bulge": st.Page(v3_bulge, title="Big Bulge Orbit", url_path="big-bulge-orbit"),
         "chaos": st.Page(v3_chaos, title="Blind Chaos (KS)", url_path="blind-chaos"),
         "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", url_path="reaction-diffusion"),
+        "yours": st.Page(v3_yourdata, title="Your Data", url_path="your-data"),
     })
     nav = st.navigation(list(V3_PAGES.values()), position="top")
     nav.run()

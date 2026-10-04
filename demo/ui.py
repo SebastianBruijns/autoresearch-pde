@@ -330,8 +330,8 @@ CSS3 = """
 <style>
 html, body, p, div, span, li, label, button, a, input, textarea, h1, h2, h3, h4, h5, h6, summary,
 .stMarkdown, .stCaption {font-family: "Computer Modern Serif", "Latin Modern Roman", "CMU Serif", Georgia, serif !important;}
-[data-testid="stIconMaterial"], .material-symbols-rounded, [class*="material-symbols"]
-    {font-family: "Material Symbols Rounded" !important;}
+[data-testid="stIconMaterial"], [data-testid*="Icon"], [data-testid*="icon"], .material-symbols-rounded,
+[class*="material-symbols"], [class*="Icon"] span {font-family: "Material Symbols Rounded" !important;}
 .stMarkdown p, .stMarkdown li, .stCaption, [data-testid="stCaptionContainer"], details summary p,
 [data-testid="stExpander"] summary p, .vbox .s, .nbox .y {font-size: 1.12rem !important;}
 .block-container {padding-top: 4.6rem; max-width: 1500px;}
@@ -350,7 +350,8 @@ html, body, p, div, span, li, label, button, a, input, textarea, h1, h2, h3, h4,
 .law {font-size: 1.25rem; font-weight: 700; margin: .2rem 0;}
 .home-t {font-size: 3.6rem; font-weight: 900; letter-spacing: -0.035em; line-height: 1.05; margin: 1rem 0 .4rem 0;}
 .home-s {font-size: 1.3rem; opacity: .6; margin-bottom: 2rem;}
-.cardn {font-size: 1.12rem; font-weight: 850; text-align: center; margin: .5rem 0 .2rem 0; white-space: nowrap;}
+.cardn {font-size: 1.25rem; font-weight: 850; text-align: center; margin: .5rem 0 .2rem 0; min-height: 3.2em;
+         display: flex; align-items: center; justify-content: center; line-height: 1.25;}
 </style>
 """
 

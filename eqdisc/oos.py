@@ -557,9 +557,9 @@ def lageos_video(path, tt, truth, preds, days=3, colors=None, name="LAGEOS-1", t
     tracks = {k: dense(P) for k, P in preds.items()}
     off = {k: np.stack([np.sum((P - T) * A_, 1), np.sum((P - T) * N_, 1)], 1) * RE_E / 1e3 for k, P in tracks.items()}
     lim = 1.15 * max(np.abs(o).max() for o in off.values())
-    fig = plt.figure(figsize=(14, 7.4), facecolor="white")
-    ax = fig.add_axes([0.0, 0.0, 0.48, 0.80], projection="3d")
-    bx = fig.add_axes([0.58, 0.10, 0.38, 0.66])
+    fig = plt.figure(figsize=(15, 8.4), facecolor="white")
+    ax = fig.add_axes([0.0, 0.02, 0.36, 0.78], projection="3d")
+    bx = fig.add_axes([0.44, 0.10, 0.52, 0.76])
     u_, v_ = np.mgrid[0:2 * np.pi:40j, 0:np.pi:20j]
     ax.plot_surface(np.cos(u_) * np.sin(v_), np.sin(u_) * np.sin(v_), np.cos(v_), color="#3a6ea5", alpha=0.6, linewidth=0)
     rl = 1.05 * float(np.max(np.linalg.norm(T, axis=1)))       # fit the whole orbit
