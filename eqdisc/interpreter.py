@@ -13,6 +13,7 @@ run outputs, other sessions) except the workspace and the eqdisc package source,
 script runs from a temporary directory.
 """
 import json
+import os
 import pickle
 import subprocess
 import sys
@@ -35,29 +36,10 @@ import matplotlib.pyplot as plt
 from eqdisc import toolbox as tb, coordinates as co
 meta, data = pickle.loads(Path(sys.argv[1]).read_bytes())
 WORK = Path(sys.argv[2])
-
-def _guard(ROOT=Path(%r).resolve(), PKG=Path(%r).resolve(), WORK=WORK.resolve()):
-    import os
-    def inside(p, d):
-        try:
-            Path(p).resolve().relative_to(d)
-            return True
-        except Exception:
-            return False
-    def hook(event, args):
-        if event in ("subprocess.Popen", "os.system", "os.exec", "os.posix_spawn", "os.spawn", "os.fork"):
-            raise PermissionError("process spawning is disabled in run_python")
-        if event in ("open", "os.listdir", "os.scandir", "glob.glob", "os.chdir") and args:
-            p = args[0]
-            if isinstance(p, int) or p is None:
-                return
-            p = os.fsdecode(p) if isinstance(p, (str, bytes, os.PathLike)) else str(p)
-            if inside(p, ROOT) and not (inside(p, PKG) or inside(p, WORK)):
-                raise PermissionError("run_python may not read repository files; use the preloaded meta/data")
-    sys.addaudithook(hook)
-_guard()
-del _guard
 """
+# then (appended in run_code): the allow-list guard from eqdisc.guard -- the agent's code may read only its
+# workspace, its temp dir, the Python installation and the eqdisc package minus files holding reference equations;
+# hidden test data, ground truth and dataset caches are unreadable wherever they are on disk.
 
 
 def run_code(code, meta, data, workdir, timeout=150, max_output=6000):
@@ -68,7 +50,12 @@ def run_code(code, meta, data, workdir, timeout=150, max_output=6000):
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         (tmp / "in.pkl").write_bytes(pickle.dumps((meta, data)))
-        (tmp / "script.py").write_text(PRELUDE % (str(ROOT), str(ROOT), str(ROOT / "eqdisc")) + "\n" + code)
+        from .guard import allow_dirs, package_deny, prelude
+        pkg = str(ROOT / "eqdisc")
+        # inside bubblewrap the inputs are at /in, the workspace at /work and the venv at /opt/venv (eqdisc keeps its path)
+        inside = [sandbox.WORK, "/in", sandbox.VENV, "/tmp"] if sandbox.available() else [tmp, workdir]
+        guard = prelude(allow_dirs([*inside, pkg]), package_deny(pkg))
+        (tmp / "script.py").write_text(PRELUDE % str(ROOT) + guard + "\n" + code)
         t0 = time.time()
         if sandbox.available():      # only the eqdisc package, the inputs and the workspace are visible
             argv, env = sandbox.wrap([sys.executable, "/in/script.py", "/in/in.pkl", sandbox.WORK], workdir,
