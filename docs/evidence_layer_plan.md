@@ -187,3 +187,28 @@ WS0 ──► WS1 ─┐
 
 Imputation; noise-colour, timestamp-jitter and aliasing detectors; a literature or equation library; forcing repair
 beyond the stretch goal; 2-D PDEs.
+
+## Addendum: glitches vs real events (WS8)
+
+Finding (test on lorenz and burgers): the spike check could not tell a sensor glitch from a real event. On ODE data
+it flagged a lasting kick and a smooth 6-sample burst as outliers, and `despike` would have edited 13–14 samples of
+real dynamics. On PDE data a single 10-sd glitch was missed (the statistic is a fraction of samples). `despike`
+edits neighbours of a single bad sample. The benchmark's outlier type (scattered spikes) never tested this.
+
+Principle: **does the system remember it?** A glitch leaves no trace; a real event changes what happens next.
+
+1. Group flagged samples into events (connected in time, and in space for fields). Fire on events, so one strong
+   glitch can fire.
+2. Classify each event (deterministic, no LLM):
+   - `glitch`: ≤ 2 samples, no persistent offset after it, spatially isolated → remove only those samples.
+   - `external_shock`: the state jumps and stays shifted (post-event level differs from the pre-event extrapolation
+     beyond noise, persistently) → keep, split the record at the event (new initial condition), flag warn.
+   - `extreme_event`: multi-sample excursion that builds and decays, record continues normally → keep; info finding
+     listing event times for the model check.
+3. Model check (`audit/events.py`, in `audit_model`): roll the fitted model from just before each kept event over the
+   event window. Reproduced within noise → info (evidence for the model). Not reproduced → warn ("the model cannot
+   produce this event: missing term or external forcing").
+4. Benchmark: new corruptions `glitch` (a few large single-sample measurement spikes) and `kick` (a dynamical
+   impulse: perturb the state mid-simulation, keep integrating), written to `datasets/corrupt_events/` with their
+   own index. Pass criteria: glitches removed (and nothing else edited), kicks never removed.
+5. Calibrate new thresholds on dev seeds only; clean false-alarm rate re-checked; frozen set extended and documented.
