@@ -1,4 +1,4 @@
-"""Evidence-layer benchmark (WS6): score eqdisc arms on the corruption benchmark (datasets/corrupt/index.json).
+"""Evidence-layer benchmark: score eqdisc arms on the corruption benchmark (datasets/corrupt/index.json).
 
 Arms
   A  plain eqdisc: discover(n_branches=2, adversary=False) with EQDISC_EVIDENCE=0          (LLM cost)
@@ -45,6 +45,11 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+import numpy as np
+
+from .audit import fired
+from .corrupt import CORRUPTIONS
+
 REPO = Path(__file__).resolve().parent.parent
 ROOT = REPO / "runs" / "evidence_bench"
 INDEX = REPO / "datasets" / "corrupt" / "index.json"
@@ -72,14 +77,10 @@ def select(index, split=None, seeds=None, systems=None, corruptions=None):
 
 
 # ----------------------------------------------------------------------------- correctness
-def _cache_path():
-    return ROOT / "judge_cache.json"
-
-
 def _judge_cached(truth, cand, use_llm=True, client=None):
     from .judge import judge
     key = hashlib.sha256(json.dumps([truth, cand], sort_keys=True).encode()).hexdigest()[:24]
-    p = _cache_path()
+    p = ROOT / "judge_cache.json"
     with _LOCK:
         cache = json.loads(p.read_text()) if p.exists() else {}
     if key in cache:
@@ -92,11 +93,6 @@ def _judge_cached(truth, cand, use_llm=True, client=None):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(cache, indent=1))
     return j
-
-
-def _field_symbols(truth, names):
-    """Field variables and their derivatives (everything except coordinates t, x, y, z)."""
-    return {n for n in names if n not in ("t", "x", "y", "z")}
 
 
 def structural_right(truth_rhs, cand_rhs, names, mode, tol=COEF_TOL, fields=None):
@@ -165,7 +161,7 @@ def full_right(truth, full_rhs, cand_rhs, corruption, tol=COEF_TOL, freq_tol=FRE
         extra_true = {m: c for m, c in T.items() if m not in B}
         for m, c in extra_true.items():
             if corruption == "amp_term":
-                ok = m in C and np_sign(C[m]) == np_sign(c)
+                ok = m in C and np.sign(C[m]) == np.sign(c)
             else:
                 var = "t" if corruption == "forcing_time" else "x"
                 k = _trig_arg_coef(m, var)
@@ -173,10 +169,6 @@ def full_right(truth, full_rhs, cand_rhs, corruption, tol=COEF_TOL, freq_tol=FRE
                 ok = k is not None and any(kc is not None and abs(kc - k) <= freq_tol * k for kc in ks)
             present &= bool(ok)
     return present, dict(det, extra_term="present" if present else "missing (base-only / incomplete law)")
-
-
-def np_sign(x):
-    return (x > 0) - (x < 0)
 
 
 def correctness(truth, cand_rhs, corruption, use_llm=True, client=None, full_rhs=None):
@@ -190,21 +182,17 @@ def correctness(truth, cand_rhs, corruption, use_llm=True, client=None, full_rhs
     if not cand_rhs:
         return {"right": False, "right_base": False, "mode": "none", "how": "no model"}
     names = _names(truth)
-    if corruption in STRUCTURAL and full_rhs:
-        try:
-            ok_full, det_full = full_right(truth, full_rhs, cand_rhs, corruption)
-            ok_base, _ = structural_right(truth["rhs"], cand_rhs, names, STRUCTURAL[corruption],
-                                          fields=truth.get("variables"))
-        except Exception as e:  # noqa: BLE001
-            ok_full, ok_base, det_full = False, False, {"error": f"{type(e).__name__}: {e}"}
-        return {"right": ok_full, "right_base": ok_base, "mode": "full_equation", "how": det_full}
     if corruption in STRUCTURAL:
         try:
-            ok, det = structural_right(truth["rhs"], cand_rhs, names, STRUCTURAL[corruption],
-                                       fields=truth.get("variables"))
+            ok_base, det = structural_right(truth["rhs"], cand_rhs, names, STRUCTURAL[corruption],
+                                            fields=truth.get("variables"))
+            ok = ok_base
+            if full_rhs:
+                ok, det = full_right(truth, full_rhs, cand_rhs, corruption)
         except Exception as e:  # noqa: BLE001
-            ok, det = False, {"error": f"{type(e).__name__}: {e}"}
-        return {"right": ok, "right_base": ok, "mode": "base_only", "how": det}
+            ok = ok_base = False
+            det = {"error": f"{type(e).__name__}: {e}"}
+        return {"right": ok, "right_base": ok_base, "mode": "full_equation" if full_rhs else "base_only", "how": det}
     try:
         j = _judge_cached(truth["rhs"], cand_rhs, use_llm=use_llm, client=client)
     except Exception as e:  # noqa: BLE001
@@ -229,17 +217,13 @@ def is_confident(verdict):
     return str((verdict or {}).get("status", "")).startswith("CONFIDENT")
 
 
-def fired_warn(findings):
-    return [f for f in findings or [] if f.get("fired") and f.get("severity") in ("warn", "critical")]
-
-
 def is_flagged(verdict, findings):
     if is_confident(verdict):
         return False
     v = verdict or {}
     names_reason = bool(v.get("failed_checks")) or bool(str(v.get("headline", "")).strip()) and \
         v.get("headline") != "No assessment available."
-    return names_reason or bool(fired_warn(findings))
+    return names_reason or bool(fired(findings or [], "warn"))
 
 
 def classify(rec, base_view=False):
@@ -288,28 +272,29 @@ def _w_auto(path, out_dir):
     """Arm B: deterministic pipeline mirroring discover's evidence stages, with auto_fit in place of the agents."""
     from . import audit as _audit
     from .assess import assess
-    from .audit.repair import audit_and_repair, has_nan, repair_model
+    from .audit.repair import audit_and_repair
     from .autobase import auto_fit
     from .evaluate import evaluate, load
     from .insights import verdict
     t0 = time.time()
     out = Path(out_dir)
     meta, data = load(path)
-    meta, data, data_f, data_rep = audit_and_repair(meta, data)
-    res = {"dataset_path": str(path), "final_model": None, "evidence": {"data_findings": data_f, "data_repairs": data_rep}}
-    if has_nan(data) and _audit.enabled():
-        res["verdict"] = {"status": "INCONCLUSIVE", "headline": "values are missing in every part of the record; "
-                          "no gap-free window to fit (no imputation)", "recommendation": "", "abstained": True}
-        res["findings"] = data_f
-    else:
+    res = {"dataset_path": str(path), "final_model": None}
+    try:
+        meta, data, data_f, data_rep = audit_and_repair(meta, data)
+    except ValueError as e:         # no NaN-free window long enough to fit
+        res["verdict"] = {"status": "INCONCLUSIVE", "headline": f"{e} (no imputation)", "recommendation": "",
+                          "abstained": True}
+        data_f, data_rep = [], []
+    res["evidence"] = {"data_findings": data_f, "data_repairs": data_rep}
+    if "verdict" not in res:
         fit = auto_fit(meta, data)
         rhs = fit.get("rhs")
         res["final_model"] = rhs
         res["auto_config"] = fit.get("auto_config")
         model_f = _audit.audit_model(meta, data, rhs) if rhs else []
         res["evidence"]["final_findings"] = model_f
-        res["evidence"]["model_repairs"] = repair_model(meta, data, rhs, model_f) if rhs else []
-        a = assess(meta, data, rhs, findings=data_f + model_f) if rhs else None
+        a = assess(meta, data, rhs, data_findings=data_f) if rhs else None
         res["verdict"] = verdict(a)
         res["findings"] = (a or {}).get("findings", data_f + model_f)
         res["confidence"] = (a or {}).get("confidence")
@@ -427,7 +412,7 @@ def run_case(arm, e, force=False, timeout=None, use_llm_judge=True, prov=None):
                 report_error = _log_tail(ROOT / arm / f"{name}.reassess.log", 300)
             else:
                 res_file = out / "__missing__"
-    if not res_file.exists() or rc not in (0,):
+    if not res_file.exists() or rc != 0:
         err = f"rc={rc}: " + _log_tail(out / "log.txt" if arm != "C" else ROOT / arm / f"{name}.reassess.log")
         rec = _record(arm, e, None, crashed=True, error=err, wall=wall,
                       cost=_partial_cost(out) if arm in ("A", "D") else 0.0, prov=prov)
@@ -469,7 +454,7 @@ def _record(arm, e, res, crashed=False, error=None, wall=None, cost=None, use_ll
     bench = (res.get("benchmark") or {}).get("final") or {}
     rec.update({"crashed": False, "model": model, "verdict_status": v.get("status"), "headline": v.get("headline"),
                 "failed_checks": v.get("failed_checks"), "valid_range": v.get("valid_range"),
-                "fired": sorted({f["id"] for f in fired_warn(findings)}),
+                "fired": sorted({f["id"] for f in fired(findings or [], "warn")}),
                 "fired_critical": sorted({f["id"] for f in findings if f.get("fired") and f.get("severity") == "critical"}),
                 "right": corr["right"], "right_base": corr["right_base"], "right_mode": corr["mode"],
                 "right_how": corr["how"],
@@ -523,14 +508,15 @@ def append_outcome(rec, path=None):
 
 
 def load_outcomes(path=None):
-    """Latest record per (arm, case)."""
+    """Latest record per (arm, case); malformed lines are skipped."""
     path = Path(path or ROOT / "outcomes.jsonl")
     out = {}
-    if path.exists():
-        for line in path.read_text().splitlines():
-            if line.strip():
-                r = json.loads(line)
-                out[(r["arm"], r["case"])] = r
+    for line in path.read_text().splitlines() if path.exists() else []:
+        try:
+            r = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        out[(r["arm"], r["case"])] = r
     return list(out.values())
 
 
@@ -576,7 +562,6 @@ def _rate(n, d):
 GAPS = ("gaps_random", "gaps_state")
 SHORT = {"right+confident": "RC", "right+cautious": "Rc", "wrong+flagged": "WF", "wrong+confident": "WC",
          "incomplete+cautious": "IC", "wrong+unflagged": "WU", "crashed": "X"}
-ORDER = ("clean", "outliers", "gaps_random", "gaps_state", "forcing_time", "source_space", "traj_coeffs", "amp_term")
 
 
 def _counts(rs, key="category"):
@@ -605,7 +590,7 @@ def table(records):
             lines.append(f"| {arm} | {split} | {sub} | {len(rs)} | " + " | ".join(str(cnt[c]) for c in CATEGORIES)
                          + f" | {_rate(cnt['wrong+confident'], len(rs))} | {_rate(cnt['wrong+confident'], nc)} |")
     arms = sorted({r["arm"] for r in records})
-    corrs = [c for c in ORDER if any(r["corruption"] == c for r in records)]
+    corrs = [c for c in CORRUPTIONS if any(r["corruption"] == c for r in records)]
     legend = ", ".join(f"{v} = {k}" for k, v in SHORT.items())
     for title, key in (("Per corruption (headline definition; splits pooled)", "category"),
                        ("Per corruption, secondary base-only view (dynamic corruptions: right = base terms recovered)",

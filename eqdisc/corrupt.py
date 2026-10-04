@@ -1,11 +1,11 @@
-"""Corruption benchmark for the evidence layer (WS5).
+"""Corruption benchmark for the evidence layer.
 
 Each case is a normal eqdisc dataset directory (works with `evaluate.load` / `evaluate.evaluate`) built from one of
 four 1-D periodic base PDEs with 2% Gaussian noise and exactly one corruption:
 
     id            how                                                       expected detector(s)
     clean         none                                                      none
-    outliers      datagen.add_noise(kind="outliers")                        outliers
+    outliers      datagen.add_noise(kind="outliers")                        glitches
     gaps_random   whole frames NaN in random time windows (~10% of time)    gaps
     gaps_state    NaN where local amplitude is in the top ~20% (censoring)  gaps_state_dependent
     forcing_time  rhs + A*sin(w*t)                                          residual_time_only, slice_time
@@ -13,12 +13,12 @@ four 1-D periodic base PDEs with 2% Gaussian noise and exactly one corruption:
     traj_coeffs   each trajectory's coefficients perturbed (blind._perturb)  slice_trajectory
     amp_term      rhs + c*u**3, IC amplitudes so it matters on the largest   slice_amplitude, residual_amplitude
 
-Event corruptions (WS8, written to their own suite `datasets/corrupt_events/`, never mixed into the main suite):
+Event corruptions (written to their own suite `datasets/corrupt_events/`, never mixed into the main suite):
 
-    glitch        2-4 single-sample spikes per trajectory (single grid points) outliers (despike removes exactly them)
+    glitch        2-4 single-sample spikes per trajectory (single grid points) glitches (clips only them)
                   of 8-15 x the noise sd: measurement errors, no dynamics
-    kick          at t_k (40-60% of the run) a smooth localized bump is added    external_shock or nothing; never
-                  to the TRUE state and the same equation keeps integrating        outliers, nothing despiked
+    kick          at t_k (40-60% of the run) a smooth localized bump is added    none: real dynamics, never clipped
+                  to the TRUE state and the same equation keeps integrating        and never removed
                   (a dynamical impulse the system remembers)
 
 `hidden/truth.json` holds the BASE equation (what a correct discovery should recover). `hidden/corruption.json`
@@ -56,20 +56,20 @@ CORRUPTIONS = ("clean", "outliers", "gaps_random", "gaps_state", "forcing_time",
                "amp_term")
 EXPECTED = {
     "clean": [],
-    "outliers": ["outliers"],
+    "outliers": ["glitches"],
     "gaps_random": ["gaps"],
     "gaps_state": ["gaps_state_dependent"],
     "forcing_time": ["residual_time_only", "slice_time"],
     "source_space": ["residual_space_only", "slice_space"],
     "traj_coeffs": ["slice_trajectory"],
     "amp_term": ["slice_amplitude", "residual_amplitude"],
+    "glitch": ["glitches"],
+    "kick": [],
 }
 EVENT_CORRUPTIONS = ("glitch", "kick")
-EXPECTED.update({"glitch": ["outliers"], "kick": ["external_shock"]})
 # what a correct audit does with them (hidden/corruption.json["expected_handling"])
-HANDLING = {"glitch": {"outliers_fires": True, "despike_removes": "exactly the glitch samples"},
-            "kick": {"outliers_fires": False, "despike_removes": "nothing",
-                     "acceptable": ["external_shock", "nothing"]}}
+HANDLING = {"glitch": {"glitches_fires": True, "clipped": "only the glitch samples"},
+            "kick": {"glitches_fires": False, "clipped": "nothing", "rows_removed": "none"}}
 DYNAMIC = ("forcing_time", "source_space", "amp_term")       # hidden test uses the corrupted dynamics
 
 # Per-system corruption parameters. Forcing / source amplitudes are ~0.1-0.4 x rms of the base rhs (lower where the
@@ -287,7 +287,7 @@ def make_case(system, corruption, seed, noise=NOISE, out_root="datasets/corrupt"
     if corruption == "kick":
         diagnostics["kicks"] = kicks
     if nan_mask is not None:
-        diagnostics["nan_fraction"] = float(nan_mask.mean() if nan_mask.ndim == 3 else nan_mask.mean())
+        diagnostics["nan_fraction"] = float(nan_mask.mean())
         diagnostics["nan_fraction_per_traj"] = [float(m.mean()) for m in nan_mask]
 
     name = _case_name(system, corruption, seed, blind)
@@ -368,7 +368,7 @@ def main():
     p.add_argument("--systems", nargs="+", default=list(BASE_SYSTEMS), choices=BASE_SYSTEMS)
     p.add_argument("--corruptions", nargs="+", choices=CORRUPTIONS + EVENT_CORRUPTIONS)
     p.add_argument("--events", action="store_true",
-                   help="glitch / kick suite (WS8) into datasets/corrupt_events unless --out is given")
+                   help="glitch / kick suite into datasets/corrupt_events unless --out is given")
     p.add_argument("--workers", type=int)
     a = p.parse_args()
     if a.events and a.out == "datasets/corrupt":

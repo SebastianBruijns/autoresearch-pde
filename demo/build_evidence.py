@@ -39,10 +39,7 @@ INDEX = REPO / "datasets" / "corrupt" / "index.json"
 CALIB = REPO / "runs" / "calib"
 OUTCOMES = REPO / "runs" / "evidence_bench" / "outcomes.jsonl"
 
-CORRUPTIONS = ["clean", "outliers", "gaps_random", "gaps_state", "forcing_time", "source_space", "traj_coeffs", "amp_term"]
-EXPECTED = {"outliers": ["outliers"], "gaps_random": ["gaps"], "gaps_state": ["gaps_state_dependent"],
-            "forcing_time": ["residual_time_only", "slice_time"], "source_space": ["residual_space_only", "slice_space"],
-            "traj_coeffs": ["slice_trajectory"], "amp_term": ["slice_amplitude", "residual_amplitude"]}
+from eqdisc.corrupt import CORRUPTIONS, EXPECTED  # noqa: E402
 
 
 def _write(name, obj):
@@ -54,7 +51,7 @@ def _slim(f):
     """A Finding without its bulky details (keep the few numbers the page shows)."""
     d = f.get("details") or {}
     keep = {k: d[k] for k in ("nan_fraction", "variable", "amplitude_variable", "inconsistent_coefficients", "z",
-                              "mean_edge_percentile", "n_flagged", "n_tested", "excess_ratio") if k in d}
+                              "mean_edge_percentile", "fraction") if k in d}
     return {k: f.get(k) for k in ("id", "stage", "statistic", "threshold", "fired", "severity", "response", "scope",
                                   "message", "resolved", "repair")} | {"details": keep}
 
@@ -263,7 +260,7 @@ def _grid_one(e):
           spikes=e["corruption"] == "outliers")
     return e["corruption"], {"path": e["path"], "system": e["system"], "seed": e["seed"], "truth": truth["rhs"],
                              "findings": [_slim(f) for f in df + mf if f["fired"]],
-                             "repairs": [{"tool": a.get("tool"), "ok": bool(a.get("ok")), "note": a.get("note")}
+                             "repairs": [{"tool": a.get("tool"), "note": a.get("note")}
                                          for a in rep]}
 
 
@@ -340,15 +337,10 @@ def build_scoreboard():
         _write("scoreboard.json", {"available": False, "built": time.strftime("%Y-%m-%d %H:%M")})
         print("  outcomes.jsonl not found: placeholder written", flush=True)
         return
-    last = {}
-    for ln in OUTCOMES.read_text().splitlines():
-        try:
-            r = json.loads(ln)
-        except json.JSONDecodeError:
-            continue
-        last[(r.get("arm"), r.get("case") or r.get("path"))] = r          # re-scored rows replace older ones
+    from eqdisc.bench_evidence import load_outcomes
     counts = defaultdict(lambda: defaultdict(Counter))
-    for (arm, _), r in last.items():
+    for r in load_outcomes(OUTCOMES):
+        arm = r["arm"]
         cat = "crashed" if r.get("crashed") else r.get("category") or "crashed"
         for sp in (r.get("split") or "?", "all"):
             counts[sp][arm][cat] += 1

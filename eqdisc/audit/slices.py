@@ -1,7 +1,6 @@
-"""Slice consistency of a fitted model (WS2): a correct equation has the same coefficients on every slice of the data.
+"""Slice consistency of a fitted model: a correct equation has the same coefficients on every slice of the data.
 
     audit(meta, data, rhs) -> list[Finding]     ids: slice_trajectory, slice_time, slice_space, slice_amplitude
-    combined_intervals(findings) -> {"var:term": [lo, hi]}   widest random-effects interval over the slice findings
 
 The STRUCTURE of `rhs` is kept fixed; its linear coefficients are refitted separately on each slice of the data, in
 the weak form (integrals of the data against compactly supported test functions, reusing eqdisc/weakform.py), so no
@@ -44,7 +43,7 @@ from ..solvers import parse
 from ..uq import _structure
 
 Z90 = 1.6448536269514722
-JACKKNIFE = True
+P_TIME, MAX_DERIV = 4, 4    # test-function exponent in time; highest spatial derivative in the library
 X_MIN_DIV = 16             # spatial half-width >= nx/16: narrow test functions on noise-free data give
                            # amplitude-dependent quadrature bias in high-order derivative terms
 CAUSES = {
@@ -124,7 +123,7 @@ def _centres(n, m, periodic, stride):
     return c if c.size else np.array([n // 2])
 
 
-def weak_system(meta, data, struct, p_time=4, max_deriv=4, t_div=None, x_div=12, wf_t=None, debias=True):
+def weak_system(meta, data, struct):
     """Weak-form rows for every term of `struct` on a full strided grid of test-function centres.
     Returns dict(lhs (R, nv), cols {var: (R, k)}, traj, tc, xc (R,) centre indices, amp {name: (R,)}, m_t, m_x, ...)
     with non-finite rows removed."""
@@ -145,8 +144,9 @@ def weak_system(meta, data, struct, p_time=4, max_deriv=4, t_div=None, x_div=12,
     # PDEs: wider time windows than weak_sindy (factor 6, not 3): under-resolved fast features (KdV solitons at
     # dt = 0.1) otherwise bias coefficients by a few % in an amplitude-dependent way. ODEs: weak_sindy's choice
     # (local amplitude must stay local).
-    wf_t = wf_t or (6.0 if pde else 1.0)
-    t_div = t_div or (8 if pde else 16)
+    p_time, max_deriv, x_div = P_TIME, MAX_DERIV, 12
+    wf_t = 6.0 if pde else 1.0
+    t_div = 8 if pde else 16
     kt = wf._corner_k(U, 1, dt, False)
     m_t = wf._auto_halfwidth(kt, dt, p_time, nt, 3, 0.1, wf_t)
     m_t = int(max(3, min(m_t, nt // t_div)))
@@ -196,7 +196,8 @@ def weak_system(meta, data, struct, p_time=4, max_deriv=4, t_div=None, x_div=12,
     traj = np.repeat(np.arange(n_traj), per)
     # rows whose support touches a missing sample
     Sm = [(np.abs(M) > 0).astype(float) for M in mats(0, (0,))]
-    touched = np.concatenate([wf._project(bad[j].astype(float), Sm).ravel() for j in range(n_traj)]) > 0
+    touched = (np.concatenate([wf._project(bad[j].astype(float), Sm).ravel() for j in range(n_traj)]) > 0
+               if bad.any() else np.zeros(len(traj), bool))
     wsum = integ(np.ones(U.shape[:-1]))
 
     raw = {f: U[..., i] for i, f in enumerate(fields)}
@@ -238,8 +239,7 @@ def weak_system(meta, data, struct, p_time=4, max_deriv=4, t_div=None, x_div=12,
             if tm not in all_terms:
                 all_terms.append(tm)
     col, cnoise = {}, {}
-    var = {f: float(sig[i]) ** 2 if debias else 0.0 for i, f in enumerate(fields)}
-    var_n = {f: float(sig[i]) ** 2 for i, f in enumerate(fields)}
+    var = {f: float(sig[i]) ** 2 for i, f in enumerate(fields)}      # noise variance (Hermite debias + column noise)
 
     def pointwise_noise(expr, alpha=(0,)):
         """Per-row variance that measurement noise adds to the integral of expr(fields) (linearised)."""
@@ -247,7 +247,7 @@ def weak_system(meta, data, struct, p_time=4, max_deriv=4, t_div=None, x_div=12,
         for f in fields:
             if sp.Symbol(f) in expr.free_symbols:
                 dg = evalg(sp.diff(expr, sp.Symbol(f)), lambda f_: raw[f_])
-                tot = tot + var_n[f] * integ(dg ** 2, alpha=alpha, squared=True)
+                tot = tot + var[f] * integ(dg ** 2, alpha=alpha, squared=True)
         return tot
 
     if not pde:
@@ -276,21 +276,20 @@ def weak_system(meta, data, struct, p_time=4, max_deriv=4, t_div=None, x_div=12,
             gsyms = {str(s_) for s_ in g.free_symbols}
             if not gsyms:
                 col[tm] = (-1) ** order * float(g) * integ(raw[f], alpha=alpha)
-                cnoise[tm] = var_n[f] * float(g) ** 2 * integ(np.ones(U.shape[:-1]), alpha=alpha, squared=True)
+                cnoise[tm] = var[f] * float(g) ** 2 * integ(np.ones(U.shape[:-1]), alpha=alpha, squared=True)
                 continue
             gp = sp.Poly(g, sp.Symbol(f)) if gsyms == {f} else None
             if order == 1 and gp is not None and len(gp.terms()) == 1:
                 (pw,), cf = gp.terms()[0]
                 col[tm] = -integ(float(cf) * _hermite(raw[f], pw + 1, var[f]) / (pw + 1), alpha=alpha)
-                cnoise[tm] = var_n[f] * integ((float(cf) * raw[f] ** pw) ** 2, alpha=alpha, squared=True)
+                cnoise[tm] = var[f] * integ((float(cf) * raw[f] ** pw) ** 2, alpha=alpha, squared=True)
                 continue
             beta = wf._split_alpha(alpha, order // 2)
             gS = evalg(g, smoothed)
             rest = dfield(smoothed(f), tuple(a - b for a, b in zip(alpha, beta)))
             acc = 0.0
-            for gam in [(k,) for k in range(beta[0] + 1)]:
-                coef = math.comb(beta[0], gam[0])
-                acc = acc + coef * integ(dfield(gS, gam) * rest, alpha=(beta[0] - gam[0],))
+            for k in range(beta[0] + 1):
+                acc = acc + math.comb(beta[0], k) * integ(dfield(gS, (k,)) * rest, alpha=(beta[0] - k,))
             col[tm] = (-1) ** sum(beta) * acc
     cols = {v: (np.stack([col[tm] for tm, _ in struct.get(v, [])], 1) if struct.get(v) else
                 np.zeros((lhs.shape[0], 0))) for v in fields}
@@ -346,7 +345,7 @@ def _fit(A, y, cl, Nv=None):
     corr = g / max(g - 1, 1) * (n - 1) / max(n - k, 1)
     V = Gi @ meat @ Gi * corr
     se = np.sqrt(np.maximum(np.diag(V), 0))
-    if JACKKNIFE and g >= 3:
+    if g >= 3:
         # delete-one-cluster jackknife: robust to a few high-leverage clusters (e.g. a short transient carrying all
         # the information about a coefficient), where CR1 is badly anti-conservative
         XtX = np.zeros((g, k, k))
@@ -394,7 +393,7 @@ def _hetero(b, se):
             "sign_change": bool(np.any(b - 2 * se > 0) and np.any(b + 2 * se < 0))}
 
 
-def _slice_stats(sysw, struct, labels, slice_names, min_rows=None):
+def _slice_stats(sysw, struct, labels, slice_names):
     """Fit every variable on each slice (labels: (R,) ints, -1 = unused). Returns per-coefficient results."""
     variables = list(sysw["cols"])
     res = {}
@@ -411,7 +410,7 @@ def _slice_stats(sysw, struct, labels, slice_names, min_rows=None):
         EIV = np.full((len(slice_names), k), np.inf)
         for s in range(len(slice_names)):
             rows = np.where(labels == s)[0]
-            if rows.size < max(min_rows or 0, 3 * k + 3):
+            if rows.size < 3 * k + 3:
                 continue
             SNR[s] = np.sqrt(np.mean(sysw["lhs"][rows, v_i] ** 2)) / (sysw["lhs_noise"][v_i] + 1e-300)
             if SNR[s] < threshold("slice_min_snr", 3.0):
@@ -428,7 +427,7 @@ def _slice_stats(sysw, struct, labels, slice_names, min_rows=None):
     return res
 
 
-def _evaluate(fid, stats_, slice_names, full, n_extra_tests=1, extra=None):
+def _evaluate(fid, stats_, slice_names, full, n_extra_tests=1):
     """Fire decision + Finding for one slicing. `full`: whole-data fit (per coefficient b, se) that centres the
     random-effects interval: full estimate +- z sqrt(se_full^2 + tau^2)."""
     th = _thr(fid)
@@ -478,8 +477,6 @@ def _evaluate(fid, stats_, slice_names, full, n_extra_tests=1, extra=None):
                             for k, (h, r) in rows.items()},
         "inconsistent_coefficients": fired_keys, "n_tests": ntest, "thresholds": th,
     }
-    if extra:
-        details.update(extra)
     if fired:
         names = ", ".join(fired_keys[:4])
         msg = f"{CAUSES[fid]} (inconsistent across {len(slice_names)} slices: {names}; I2 up to {stat:.2f})."
@@ -535,8 +532,8 @@ def _space(sysw, struct):
         return None
     names = ["left half", "right half"]
     st = _slice_stats(sysw, struct, lab, names)
-    fired, stat, sev, det, msg, _ = _evaluate("slice_space", st, names, sysw["full"],
-                                              extra={"periodic": bool(sysw["periodic"])})
+    fired, stat, sev, det, msg, _ = _evaluate("slice_space", st, names, sysw["full"])
+    det["periodic"] = bool(sysw["periodic"])
     return finding("slice_space", "model", stat, _thr()["i2"], fired, sev if fired else "info",
                    response="widen" if fired else None, message=msg, details=det)
 
@@ -585,7 +582,7 @@ def _amplitude(sysw, struct, n_bins=3):
 
 
 # ----------------------------------------------------------------------------- entry points
-def audit(meta, data, rhs=None, slicings=("trajectory", "time", "space", "amplitude")):
+def audit(meta, data, rhs=None):
     """Slice-consistency findings for the fixed structure of `rhs` (dict var -> expression)."""
     if not rhs:
         return []
@@ -595,22 +592,12 @@ def audit(meta, data, rhs=None, slicings=("trajectory", "time", "space", "amplit
         return []
     sysw = weak_system(meta, data, struct)
     sysw["full"] = _slice_stats(sysw, struct, np.zeros(len(sysw["lhs"]), int), ["all"])
-    fns = {"trajectory": _trajectory, "time": _time, "space": _space, "amplitude": _amplitude}
     out = []
-    for s in slicings:
-        f = fns[s](sysw, struct)
+    for fn in (_trajectory, _time, _space, _amplitude):
+        f = fn(sysw, struct)
         if f is not None:
             f["details"]["n_rows"] = int(len(sysw["lhs"]))
             f["details"]["n_rows_dropped_nan"] = sysw["n_rows_dropped"]
             out.append(f)
     return out
 
-
-def combined_intervals(findings):
-    """Widest random-effects 90% interval per coefficient over the slice findings (for the grade)."""
-    out = {}
-    for f in findings:
-        for k, (lo, hi) in (f.get("details") or {}).get("re_intervals", {}).items():
-            if k not in out or hi - lo > out[k][1] - out[k][0]:
-                out[k] = [lo, hi]
-    return out

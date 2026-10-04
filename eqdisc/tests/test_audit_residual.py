@@ -1,4 +1,4 @@
-"""WS3 residual decomposition (eqdisc/audit/residual.py): fast checks on small generated cases.
+"""Residual decomposition (eqdisc/audit/residual.py): fast checks on small generated cases.
 
 Data are simulated here (own small integrators) so the tests do not depend on datasets/ or on solver changes:
   clean           the model given to audit is the true rhs

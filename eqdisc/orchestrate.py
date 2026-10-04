@@ -3,8 +3,8 @@
     python -m eqdisc.discover PATH [--branches 3] [--no-adversary] [--human] [--context "..."]
 
 Pipeline
-  0. EVIDENCE CHECKS on the data (eqdisc.audit): outliers, gaps, ...; data repairs (split at gaps, despike) are
-     applied before anything is fitted and the repaired dataset is saved as <out>/dataset_audited/,
+  0. EVIDENCE CHECKS on the data (eqdisc.audit): gaps, glitches, sampling, ...; the only data changes (split at NaN
+     gaps, clip isolated glitches when that does not change the fitted terms) are saved as <out>/dataset_audited/.
   1. ingest (any file -> dataset + data card), 2. intuition pre-analysis (hypotheses, recommended config),
   3. PARALLEL agent branches with different strategies seeded by the hypotheses,
   4. TOURNAMENT: branch models compared on public data (cross-validated error, BIC, rollout, parsimony),
@@ -24,7 +24,7 @@ from pathlib import Path
 from . import uq
 from . import audit as _audit
 from .audit import fired as fired_findings, summary as findings_summary
-from .audit.repair import audit_and_repair, has_nan, repair_model, save_dataset
+from .audit.repair import audit_and_repair, save_dataset
 from .ledger import Ledger
 from .agent import Usage, _jsonable, make_client, run_agent
 from .assess import assess, brief_markdown
@@ -89,6 +89,26 @@ def tournament(meta, data, candidates):
                                                                        "dbic", "z_vs_best")} for k in cmp["candidates"]}}
 
 
+def _data_evidence(meta, data, src, out, ledger):
+    """Audit + repair the data; save the repaired dataset under <out>/dataset_audited if anything changed.
+    Returns (meta, data, findings, repairs, audited_path or None). Raises ValueError if no window can be fitted."""
+    meta, data, findings, repairs = audit_and_repair(meta, data, ledger=ledger)
+    audited = None
+    if repairs:
+        audited = save_dataset(meta, data, Path(out) / "dataset_audited", repairs, source=src)
+        ledger.set_dataset(audited)
+        ledger.append("dataset", path=str(audited), note="repaired dataset used for every later stage")
+    return meta, data, findings, repairs, audited
+
+
+def _say_fired(say, findings, prefix):
+    """Print fired findings (any severity); returns them."""
+    fired = fired_findings(findings, "info")
+    for f in fired:
+        say(f"      {prefix}[{f['severity']}] {f['id']}: {(f.get('message') or '')[:130]}")
+    return fired
+
+
 def discover(path, n_branches=3, adversary=True, human=None, context=None, model="claude-opus-5-5", effort="high",
              max_tools=20, out_dir=None, workers=3, verbose=True, on_event=None):
     t0 = time.time()
@@ -115,26 +135,20 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
     ledger = Ledger(out, path, config={"n_branches": n_branches, "adversary": adversary, "model": model, "effort": effort,
                                        "max_tools": max_tools, "context": context})
     say("[1/7] evidence checks on the data")
-    meta, data, data_findings, data_repairs = audit_and_repair(meta, data, ledger=ledger)
-    if has_nan(data) and _audit.enabled():
-        msg = ("INCONCLUSIVE before fitting: values are missing in every part of the record, so no gap-free window is "
-               "long enough to estimate derivatives or weak-form integrals. Collect complete snapshots (or longer "
-               "gap-free stretches); eqdisc does not impute missing data.")
+    try:
+        meta, data, data_findings, data_repairs, audited = _data_evidence(meta, data, path, out, ledger)
+    except ValueError as e:         # no NaN-free window long enough to fit
+        msg = (f"INCONCLUSIVE before fitting: {e}. Collect complete snapshots (or longer gap-free stretches); eqdisc "
+               f"does not impute missing data.")
         ledger.append("verdict", status="INCONCLUSIVE", headline=msg)
         say("      " + msg)
-        raise ValueError(msg)
-    if any(a.get("ok") for a in data_repairs):
-        path = save_dataset(meta, data, out / "dataset_audited", data_repairs, source=original_path)
-        ledger.set_dataset(path)
-        ledger.append("dataset", path=str(path), note="repaired dataset used for every later stage")
-    for f in fired_findings(data_findings, "info"):
-        say(f"      [{f['severity']}] {f['id']}: {(f.get('message') or '')[:130]}")
+        raise ValueError(msg) from e
+    path = audited or path
+    _say_fired(say, data_findings, "") or say("      all data checks passed")
     for a in data_repairs:
-        say(f"      repair {a['tool']} for {a['finding']}: {a['note'][:120]}")
-    if not fired_findings(data_findings, "info"):
-        say("      all data checks passed")
+        say(f"      repair {a['tool']}: {a['note'][:120]}")
     evidence = {"data_findings": data_findings, "data_repairs": data_repairs,
-                "dataset_audited_path": str(path) if path != original_path else None}
+                "dataset_audited_path": str(audited) if audited else None}
 
     say(f"[2/7] intuition pre-analysis on {meta['name']}")
     intu = intuit(meta, data)
@@ -149,7 +163,8 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
         try:
             r = run_agent(path, model=model, effort=effort, max_tools=max_tools, client=client, verbose=False,
                           out_dir=out / f"branch_{name}", context=base_ctx + "\n\n" + STRATEGIES[name],
-                          final_assessment=False, report=True, human=None, on_event=on_event, tag=name)
+                          final_assessment=False, report=True, human=None, on_event=on_event, tag=name,
+                          data_findings=data_findings)
             say(f"      branch {name}: {json.dumps((r.get('submitted') or {}).get('rhs'))[:150]}  (${r['cost_usd']:.2f})")
             return name, r
         except Exception as e:  # noqa: BLE001
@@ -166,19 +181,17 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
     say(f"      winner: {incumbent}. {tour['verdict'][:200]}")
     ledger.append("tournament", stage="branches", winner=incumbent, verdict=tour.get("verdict"), ranking=tour.get("ranking"),
                   candidates=cands)
-    tour_findings = []
-    if incumbent and cands.get(incumbent):
-        tour_findings = _audit.audit_model(meta, data, cands[incumbent])
+    tour_findings = _audit.audit_model(meta, data, cands.get(incumbent)) if incumbent else []
+    if tour_findings:
         ledger.findings(tour_findings, "model audit (tournament winner)")
         evidence["tournament_findings"] = tour_findings
-        for f in fired_findings(tour_findings, "info"):
-            say(f"      check [{f['severity']}] {f['id']}: {(f.get('message') or '')[:130]}")
+        _say_fired(say, tour_findings, "check ")
 
     adv = None
     if adversary and incumbent:
         say("[5/7] adversary (red team) attacks the winner")
         a0 = assess(meta, data, cands[incumbent], {k: v for k, v in cands.items() if k != incumbent and v},
-                    findings=data_findings + tour_findings)
+                    data_findings=data_findings)
         prompt = ADVERSARY.format(incumbent=json.dumps(cands[incumbent]), assessment=json.dumps(a0["confidence"]),
                                   others=json.dumps({k: v for k, v in cands.items() if k != incumbent}))
         if fired_findings(tour_findings, "info"):
@@ -186,7 +199,7 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
         try:
             ra = run_agent(path, model=model, effort=effort, max_tools=max_tools, client=client, verbose=False,
                            out_dir=out / "adversary", context=base_ctx + "\n\n" + prompt, final_assessment=False, report=True,
-                           on_event=on_event, tag="adversary")
+                           on_event=on_event, tag="adversary", data_findings=data_findings)
             chal = (ra.get("submitted") or {}).get("rhs")
             adv = {"run": ra, "challenger": chal, "rationale": (ra.get("submitted") or {}).get("rationale", "")}
             if chal and chal != cands[incumbent]:
@@ -210,16 +223,12 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
     say("[6/7] assessment of the final model (with evidence checks)")
     assessment = None
     if final:
-        # deterministic checks: reuse the tournament winner's findings when the adversary did not replace it
-        final_findings = tour_findings if (tour_findings and final == cands.get(tour["winner"])) else \
-            _audit.audit_model(meta, data, final)
+        final_findings = _audit.audit_model(meta, data, final)        # cached when final is the tournament winner
         ledger.findings(final_findings, "model audit (final model)")
         evidence["final_findings"] = final_findings
-        evidence["model_repairs"] = repair_model(meta, data, final, final_findings, ledger=ledger)
-        for f in fired_findings(final_findings, "info"):
-            say(f"      check [{f['severity']}] {f['id']}: {(f.get('message') or '')[:130]}")
+        _say_fired(say, final_findings, "check ")
         assessment = assess(meta, data, final, {k: v for k, v in cands.items() if k != incumbent and v},
-                            findings=data_findings + final_findings)
+                            data_findings=data_findings)
     if human is not None and assessment:
         ans = human("FINAL MODEL: " + json.dumps(final) + "\n\n" + brief_markdown(assessment)
                     + "\n\nReply 'accept' or give feedback / domain knowledge (the system will record it).")
@@ -278,19 +287,15 @@ def reassess(run_dir):
     src = Path(res["dataset_path"])
     ledger = Ledger(run_dir, src, config={"reassess": True})
     meta, data = load(src)
-    meta, data, data_findings, data_repairs = audit_and_repair(meta, data, ledger=ledger)
-    if any(a.get("ok") for a in data_repairs):
-        p = save_dataset(meta, data, run_dir / "dataset_audited", data_repairs, source=src)
-        ledger.set_dataset(p)
+    meta, data, data_findings, data_repairs, audited = _data_evidence(meta, data, src, run_dir, ledger)
     final = res.get("final_model")
-    final_findings = _audit.audit_model(meta, data, final) if final else []
+    final_findings = _audit.audit_model(meta, data, final)
     ledger.findings(final_findings, "model audit (reassess)")
     res["evidence"] = {"data_findings": data_findings, "data_repairs": data_repairs, "final_findings": final_findings,
-                       "model_repairs": repair_model(meta, data, final, final_findings, ledger=ledger) if final else [],
-                       "dataset_audited_path": str(run_dir / "dataset_audited") if any(a.get("ok") for a in data_repairs) else None,
+                       "dataset_audited_path": str(audited) if audited else None,
                        "reassessed": time.strftime("%Y-%m-%dT%H:%M:%S")}
     alts = {k: b["model"] for k, b in res.get("branches", {}).items() if b.get("model") and b["model"] != final}
-    res["assessment"] = assess(meta, data, final, alts, findings=data_findings + final_findings) if final else None
+    res["assessment"] = assess(meta, data, final, alts, data_findings=data_findings) if final else None
     res["brief"] = brief_markdown(res["assessment"]) if res["assessment"] else None
     res["verdict"] = verdict(res["assessment"])
     ledger.append("verdict", phase="reassess", status=res["verdict"]["status"], headline=res["verdict"]["headline"],

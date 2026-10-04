@@ -109,8 +109,7 @@ def verdict(assessment):
         v["failed_checks"] = [f["id"] for f in crit]
     # Warnings: two independent model checks against the model, or one plus a low grade, also rule out confidence.
     # (residual_white is excluded: it restates the noise-floor ratio the grade already uses.)
-    warns = [f for f in unresolved(findings, "warn") if f.get("severity") == "warn" and f.get("stage") == "model"
-             and f.get("id") != "residual_white"]
+    warns = [f for f in unresolved(findings, "warn") if f.get("stage") == "model" and f.get("id") != "residual_white"]
     level = (assessment.get("confidence") or {}).get("level")
     if v["status"].startswith("CONFIDENT") and (len(warns) >= 2 or (warns and level == "low")):
         names = "; ".join(f"{f['id']}: {f.get('message') or 'warning'}" for f in warns[:2])

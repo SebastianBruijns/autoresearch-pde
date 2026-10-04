@@ -1,9 +1,9 @@
 {
-  "_frozen": "2026-10-04, calibrated on dev seeds only (WS1 seeds 100-120 own corruptions; WS2/WS3 own dev generators; official dev suite seeds 0-2: 0/12 clean fired, 12/12 per corruption). Do not tune on report or blind splits. WS8 (2026-10-04) added events_* / outliers_single_z keys, calibrated on dev only (corrupt dev seeds 0-2, corrupt_events dev seeds 0-2, own ODE seeds 0-9); existing values unchanged.",
-  "outliers": 0.0002,
-  "outliers_critical": 0.02,
-  "outliers_floor_rel": 0.001,
-  "gaps": 0.0,
+  "_frozen": "2026-10-04, calibrated on dev seeds only (own dev generators and official dev suite seeds 0-2). Do not tune on report or blind splits. glitch_z (2026-10-04): clean dev KS/Burgers/KdV/advection-diffusion at noise 0 and 0.02 clip nothing; injected 1% spikes are clipped with precision >= 0.99; kicks are never clipped.",
+  "glitch_z": 6.0,
+  "glitch_floor_rel": 0.001,
+  "gaps_keep_ok": 0.9,
+  "gaps_keep_critical": 0.75,
   "gaps_state_dependent": 3.0,
   "gaps_state_dependent_min_pct": 0.6,
   "coarse_sampling": 0.15,
@@ -26,11 +26,5 @@
   "residual_space_only_critical": 0.4,
   "residual_amplitude": 2.5,
   "residual_white": 1.5,
-  "re_I2_high": 0.5,
-  "events_z_cand": 5.5,
-  "outliers_single_z": 7.0,
-  "events_step_z": 6.0,
-  "events_step_min_sd": 3.0,
-  "events_explained_tol": 3.0,
-  "events_unexplained_warn": 0
+  "re_I2_high": 0.5
 }

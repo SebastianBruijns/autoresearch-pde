@@ -358,47 +358,22 @@ def _refit_disagreement(coefs):
     return max(gaps) if gaps else 0.0
 
 
-RE_I2_HIGH = 0.5          # I² above which a finding's random-effects interval replaces the bootstrap interval
-
-
-def evidence(meta, data, rhs, ledger=None):
-    """Data audit + data repair + model audit. Returns (meta, data, findings, data_repairs); never raises."""
-    from .audit import audit_model
-    from .audit.repair import audit_and_repair
-    try:
-        meta, data, findings, applied = audit_and_repair(meta, data, ledger=ledger)
-    except Exception as e:  # noqa: BLE001
-        findings, applied = [{"id": "data_audit_error", "stage": "data", "statistic": None, "threshold": None,
-                              "fired": False, "severity": "info", "response": None, "fix": None, "scope": None,
-                              "message": f"data checks could not run: {e}", "details": {}}], []
-    model_f = audit_model(meta, data, rhs) if rhs else []
-    if ledger:
-        ledger.findings(model_f, "model audit (assessment)")
-    return meta, data, findings + model_f, applied
-
-
 def _re_intervals(findings, names):
-    """{(var, normalised term): (lo, hi, I2, finding id)} from FIRED model findings that carry random-effects intervals
-    (details["re_intervals"] = {"var:term": [lo, hi]}), for terms whose I² (details["I2"] or ["i2"], scalar or per
-    "var:term") is high."""
+    """{(var, normalised term): (lo, hi, I2, finding id)} from FIRED slice findings (details["re_intervals"] =
+    {"var:term": [lo, hi]}, details["i2"] = {"var:term": I2}) for terms whose I2 exceeds re_I2_high: there the
+    random-effects interval replaces the bootstrap interval."""
     from .audit import threshold
-    thr = threshold("re_I2_high", RE_I2_HIGH)
+    thr = threshold("re_I2_high", 0.5)
     out = {}
     for f in findings or []:
         det = f.get("details") or {}
-        rei = det.get("re_intervals")
-        if not (f.get("fired") and isinstance(rei, dict)):        # the detector decides heterogeneity is real
+        if not (f.get("fired") and det.get("re_intervals")):        # the detector decides heterogeneity is real
             continue
-        i2 = det.get("I2", det.get("i2"))
-        for key, iv in rei.items():
-            try:
-                var, term = str(key).split(":", 1)
-                lo, hi = float(iv[0]), float(iv[1])
-            except Exception:  # noqa: BLE001
+        for key, (lo, hi) in det["re_intervals"].items():
+            k_i2 = (det.get("i2") or {}).get(key)
+            if k_i2 is None or k_i2 < thr:
                 continue
-            k_i2 = i2.get(key) if isinstance(i2, dict) else i2
-            if k_i2 is None or float(k_i2) < thr:
-                continue
+            var, term = key.split(":", 1)
             k = (var, _norm(term, names))
             if k not in out or (hi - lo) > (out[k][1] - out[k][0]):          # several slicings: keep the widest
                 out[k] = (lo, hi, float(k_i2), f["id"])
@@ -406,24 +381,14 @@ def _re_intervals(findings, names):
 
 
 # ----------------------------------------------------------------------------- main
-def assess(meta, data, rhs, alternatives=None, n_coef_draws=12, seed=0, basis="auto", findings=None, run_dir=None):
+def assess(meta, data, rhs, alternatives=None, n_coef_draws=12, seed=0, basis="auto", data_findings=()):
     """basis: 'auto' (weak form for PDEs / noisy / coarse data), 'weak' or 'strong' (derivative-based).
-    findings: evidence-layer findings (eqdisc.audit); None = compute them here (audit, repair gaps/outliers, re-audit,
-    model audit) and assess on the repaired data. run_dir: if given, findings are appended to <run_dir>/ledger.jsonl."""
+    data must be fit-ready (eqdisc.audit.repair.audit_and_repair already applied); data_findings are its findings.
+    The model checks (eqdisc.audit.audit_model, cached) are run here."""
+    from .audit import audit_model
     rng = np.random.default_rng(seed)
     names = tb.symbols(meta)
-    led = None
-    if run_dir is not None and findings is None:
-        from .ledger import Ledger
-        led = Ledger(run_dir, config={"assess": {"seed": seed, "basis": basis, "n_coef_draws": n_coef_draws}})
-    data_repairs = []
-    if findings is None:
-        meta, data, findings, data_repairs = evidence(meta, data, rhs, ledger=led)
-    else:
-        from .audit.repair import has_nan, repair_data
-        from .audit import enabled as _evidence_on
-        if _evidence_on() and has_nan(data):               # never fit on NaN (gaps): split first, no imputation
-            meta, data, data_repairs = repair_data(meta, data, findings)
+    findings = list(data_findings) + audit_model(meta, data, rhs)
     res = {"model": rhs}
     # 1. coefficient uncertainty + per-term necessity
     ws = None
@@ -560,9 +525,7 @@ def assess(meta, data, rhs, alternatives=None, n_coef_draws=12, seed=0, basis="a
     res["predictability"] = predictability(meta, data, models)
     res["coverage"] = coverage(meta, data)
     res["experiments"] = design_experiments(meta, data, models, coef_info=coefs)
-    res["findings"] = list(findings or [])
-    if data_repairs:
-        res["data_repairs"] = data_repairs
+    res["findings"] = list(findings)
     res["data_advice"] = data_advice(meta, data, res)
     res["confidence"] = grade(res)
     res["questions_for_human"] = questions(meta, res)
@@ -698,6 +661,7 @@ def questions(meta, res):
 
 
 def brief_markdown(res):
+    from .audit import describe
     c = res["confidence"]
     lines = [f"### Confidence: **{c['level'].upper()}**", *[f"- {r}" for r in c["reasons"]], "",
              "### Per-term evidence", "| eq | term | coef | 90% CI | significant | dBIC if removed |", "|---|---|---|---|---|---|"]
@@ -725,8 +689,7 @@ def brief_markdown(res):
     fired = [f for f in res.get("findings") or [] if f.get("fired")]
     if fired:
         lines += ["", "### Data and model checks",
-                  *[f"- [{f.get('severity')}{', resolved' if f.get('resolved') else ''}] {f.get('message') or f.get('id')}"
-                    for f in fired]]
+                  *[f"- {describe(f)}" for f in fired]]
     if res["data_advice"]:
         lines += ["", "### Data advice", *[f"- {a}" for a in res["data_advice"]]]
     if res["questions_for_human"]:

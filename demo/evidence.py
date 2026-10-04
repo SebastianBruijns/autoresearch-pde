@@ -11,10 +11,11 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import ui
+from viz import AQUA, BLUE, ORANGE
+from eqdisc.corrupt import EXPECTED
 
 DEMO = Path(__file__).resolve().parent
 EV = DEMO / "showcase" / "evidence"
-BLUE, ORANGE, AQUA, VIOLET = "#2a78d6", "#eb6834", "#1baf7a", "#4a3aa7"
 GOOD, CAUTION, WARN, BAD, MUTED = "#16a34a", "#0891b2", "#d97706", "#dc2626", "#94a3b8"
 PRINCIPLE = ("A correct equation has the same coefficients on every slice of the data, "
              "and leaves only noise behind.")
@@ -170,11 +171,8 @@ CARDS = {
     "amp_term": ("Extreme-only term", "a small u³ term that matters only at large values"),
 }
 INVISIBLE = {"forcing_time", "source_space", "traj_coeffs", "amp_term"}
-EXPECTED = {"outliers": ["outliers"], "gaps_random": ["gaps"], "gaps_state": ["gaps_state_dependent"],
-            "forcing_time": ["residual_time_only", "slice_time"], "source_space": ["residual_space_only", "slice_space"],
-            "traj_coeffs": ["slice_trajectory"], "amp_term": ["slice_amplitude", "residual_amplitude"]}
 CHECK_NAMES = {
-    "outliers": "isolated spikes", "gaps": "missing data", "gaps_state_dependent": "missing data at the extremes",
+    "glitches": "isolated spikes", "gaps": "missing data", "gaps_state_dependent": "missing data at the extremes",
     "slice_trajectory": "runs disagree", "slice_time": "early vs late disagree", "slice_space": "left vs right disagree",
     "slice_amplitude": "small vs large values disagree", "residual_time_only": "leftover follows the clock",
     "residual_space_only": "leftover follows position", "residual_amplitude": "leftover grows at extremes",
@@ -185,10 +183,12 @@ CHECK_NAMES = {
 def plain(f):
     d = f.get("details") or {}
     i = f["id"]
-    if i == "outliers":
-        n, tot = d.get("n_flagged"), d.get("n_tested")
-        pct = f"{100 * n / tot:.1g}% of points" if n and tot else "some points"
-        return f"{pct} are isolated spikes. Removed, then refitted."
+    if i == "glitches":
+        frac = d.get("fraction")
+        pct = f"{100 * frac:.1g}% of points" if frac else "some points"
+        return (f"{pct} are isolated spikes. Clipped: the fit is the same with or without them."
+                if f.get("resolved") else f"{pct} are isolated spikes, and the fit changes without them: kept, "
+                "result not trusted.")
     if i == "gaps":
         nf = d.get("nan_fraction")
         return (f"{nf:.0%} of the data are missing." if nf else "Data are missing.") + " Fit only on the complete pieces."
@@ -292,7 +292,6 @@ def section_grid():
         for col, cor in zip(cols, row):
             with col:
                 card(cor, cases[cor])
-    sys_ = next(iter(cases.values()))
     st.caption(f"Each card: Burgers' equation, 3 runs (colour = u over space → and time ↑), held-out reporting seed. "
                "This panel checks the TRUE base equation against each damaged data set, to show what each check sees "
                "on its own. Hover a check's sentence for its exact statistic.")
@@ -371,14 +370,14 @@ def section_how():
             "**Every check tests the principle**: the same coefficients on every slice, and only noise left behind. "
             "Checks are plain statistics (numpy/scipy); no AI is involved in the checks, the grade or the verdict.\n\n"
             "**Three responses**, in order:\n"
-            "1. **Repair**: apply a known fix (remove spikes, fit only on gap-free pieces, per-run coefficients) and "
-            "keep it only if it wins the model comparison on held-out data.\n"
+            "1. **Repair**: the only data changes: fit on gap-free pieces, and clip isolated spikes when the fit is "
+            "the same with or without them. Rows are never deleted otherwise.\n"
             "2. **Widen**: when coefficients differ between slices, widen their uncertainty by the between-slice "
             "spread (random effects), so the grade drops by itself.\n"
             "3. **Scope**: restrict the claim to where the data are (\"valid for |u| ≤ X\") and ask for data there.\n\n"
             "A critical failed check makes CONFIDENT impossible; the verdict names it.\n\n"
             "**The checks**\n"
-            "- *Before fitting*: isolated spikes (robust z against a smoothed signal); missing data and uneven "
+            "- *Before fitting*: isolated spikes (a sample that disagrees with its spatial neighbours at one time step); missing data and uneven "
             "sampling; missing data concentrated at the extremes (censored tails).\n"
             "- *Same coefficients on every slice*: refit on each run, early vs late, left vs right half, small vs "
             "large values; fire when the disagreement exceeds noise (Cochran's Q, I² > 0.75).\n"
@@ -386,7 +385,7 @@ def section_how():
             "growing at large values (missing term at the extremes), or simply larger than the noise floor.\n\n"
             "**Honesty.** Thresholds were frozen on development seeds of generated data only "
             "(`eqdisc/audit/thresholds.json`), never on the reporting seeds or the blinded set.\n\n"
-            "Docs: `docs/evidence_layer_plan.md`, `docs/evidence_results.md`, `docs/honest_oos.md` (section 1b). "
+            "Docs: `docs/evidence.md`, `docs/honest_oos.md` (section 1b). "
             "Code: `eqdisc/audit/`.")
 
 

@@ -234,7 +234,7 @@ def validate(meta, data, rhs, max_rollout_steps=6000, window=9, lowpass_frac=0.3
             f = make_ode_rhs(meta["variables"], rhs)(Us, t[None, :])
         elif legacy:
             x = np.arange(meta["nx"]) * meta["L"] / meta["nx"]
-            f = make_pde_rhs(meta["variables"], rhs, meta["L"])(Us, x)
+            f = make_pde_rhs(meta["variables"], rhs, meta["L"])(Us, x, t[None, :, None])
         else:   # 2-D and/or non-periodic; skip a boundary margin on non-periodic grids
             f = make_pde_rhs_general(meta["variables"], rhs, lay)(Us)
             if not periodic:

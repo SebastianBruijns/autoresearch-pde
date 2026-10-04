@@ -1,4 +1,4 @@
-"""WS3 residual decomposition: does the model leave only noise in its residual?
+"""Residual decomposition: does the model leave only noise in its residual?
 
     audit(meta, data, rhs) -> list[Finding]     (stage "model"; rhs coefficients are used as given)
 
@@ -7,7 +7,7 @@ m samples, r(t_c) = [-sum phi'(t - t_c) U(t) - sum phi(t - t_c) f(U(t))] / sum p
 noisy data is never taken and both sides see the same time filter (no Savitzky-Golay bias). For periodic 1-D PDEs the
 same is done in x with a bump whose width follows the resolved scale (weakform's corner wavenumber); spatial
 derivatives are spectral on the low-passed field as in uq._prepare. Rows with any non-finite value are dropped
-(NaN gaps remove the test functions that touch them). basis="strong" (uq._prepare residual) is kept for comparison.
+(NaN gaps remove the test functions that touch them). Records shorter than 12 steps use the strong form (uq._prepare).
 
 Every decomposition is a PARTIAL regression: the residual is first regressed on a modest candidate library L
 (toolbox.build_library: state polynomials, and for PDEs their products with u_x..u_xxxx, plus the model's own terms,
@@ -62,14 +62,13 @@ def _tfilter(A, w):
     return out
 
 
-def _prepare(meta, data, rhs, basis="weak", m=None):
+def _prepare(meta, data, rhs):
     """Residual, library and noise-surrogate residual on the fitting grid.
 
-    basis="weak" (default): weak form in time, strong in space. With a smooth compactly supported test function
-        phi of half-width m samples, r(t_c) = [-sum phi' U - sum phi f(U)] / sum phi, i.e. the time derivative is
-        moved onto phi and both sides see the same time filter, so no smoothing bias enters the residual;
-        spatial derivatives are spectral on the low-passed field (as in uq._prepare).
-    basis="strong": uq._prepare (Savitzky-Golay derivative minus f(smoothed U))."""
+    Weak form in time, strong in space. With a smooth compactly supported test function phi of half-width m samples,
+    r(t_c) = [-sum phi' U - sum phi f(U)] / sum phi, i.e. the time derivative is moved onto phi and both sides see the
+    same time filter, so no smoothing bias enters the residual; spatial derivatives are spectral on the low-passed
+    field (as in uq._prepare). Records shorter than 12 steps: uq._prepare (Savitzky-Golay derivative minus f)."""
     from .. import uq
     from ..baselines import lowpass
     from ..solvers import is_legacy_pde, smooth_space
@@ -116,7 +115,8 @@ def _prepare(meta, data, rhs, basis="weak", m=None):
         return [np.broadcast_to(c, grid).astype(float) for c in eval_exprs(terms_list, feats, names)]
 
     deg = 3 if (not pde and nv <= 3) or (pde and nv == 1) else 2
-    if basis == "strong" or nt < 12:
+    basis = "strong" if nt < 12 else "weak"
+    if basis == "strong":
         prep = uq._prepare(meta, data)
         grid = prep["grid"]
         cols = uq._structure_columns(prep, struct)
@@ -144,7 +144,7 @@ def _prepare(meta, data, rhs, basis="weak", m=None):
             dN = lowpass(dN, lp_frac) if np.isfinite(dN).all() else dN
         RN = dN.reshape(-1, nv)
     else:
-        m = m or int(np.clip(nt // 40, 4, 8))
+        m = int(np.clip(nt // 40, 4, 8))
         phi, dphi = _bump(m)
         w, wd = phi / phi.sum(), dphi / phi.sum() / float(t[1] - t[0])
         Ul = lp(U)
@@ -227,19 +227,18 @@ def _orth(A):
     return Uq[:, keep]
 
 
-def _partial(QL, B, y):
-    """(R2 of L, partial R2 of B given L, fitted B-part on the rows) for a single response y."""
+def _basis_beyond(QL, B):
+    """Orthonormal basis of the part of B's column space that the library L does not already explain."""
+    return _orth(B - QL @ (QL.T @ B))
+
+
+def _partial(QL, QB, y):
+    """(R2 of L, partial R2 of B given L, fitted B-part on the rows) for a single response y; QB = _basis_beyond."""
     yy = float(y @ y) + 1e-300
     e = y - QL @ (QL.T @ y)
     rss_l = float(e @ e)
-    Bp = B - QL @ (QL.T @ B)
-    QB = _orth(Bp)
     fit_b = QB @ (QB.T @ e)
     return 1 - rss_l / yy, float(fit_b @ fit_b) / (rss_l + 1e-300), fit_b
-
-
-def _r2(Q, y):
-    return float(np.sum((Q.T @ y) ** 2)) / (float(y @ y) + 1e-300)
 
 
 def _bspline_basis(x, lo, hi, n_int):
@@ -284,21 +283,19 @@ def _time_stats(P):
     n_int_pt = int(np.clip(nt // 30, 4, 12))
     Bt = _bspline_basis(te[ti], te[0], te[-1], n_int_pt)
     B_pt = np.concatenate([Bt * (traj == j)[:, None] for j in range(n_traj)], 1) if n_traj > 1 else None
-    QL = _orth(P["Lib"])
-    missing = [j for j, tm in enumerate(P["terms"]) if tm not in P["model_terms"]]
-    QLm = _orth(P["Lib"][:, missing]) if missing else None
-    QB = _orth(B_shared)
+    QL = P["QL"]
+    QB = _basis_beyond(QL, B_shared)
+    QB_pt = _basis_beyond(QL, B_pt) if B_pt is not None else None
     out = {}
     for i, v in enumerate(P["variables"]):
         r, rn = P["R"][:, i], P["RN"][:, i]
-        r2_lib, part, fit = _partial(QL, B_shared, r)
-        _, part_null, _ = _partial(QL, B_shared, rn)
+        r2_lib, part, fit = _partial(QL, QB, r)
+        _, part_null, _ = _partial(QL, QB, rn)
         rec = {"partial_r2": part, "partial_r2_null": part_null, "excess": part - part_null, "r2_lib": r2_lib,
-               "r2_time_alone": _r2(QB, r), "r2_missing_lib_alone": _r2(QLm, r) if QLm is not None else 0.0,
                "fit": fit}
-        if B_pt is not None:
-            _, ppt, _ = _partial(QL, B_pt, r)
-            _, ppt0, _ = _partial(QL, B_pt, rn)
+        if QB_pt is not None:
+            _, ppt, _ = _partial(QL, QB_pt, r)
+            _, ppt0, _ = _partial(QL, QB_pt, rn)
             rec["per_traj_excess"] = ppt - ppt0
         out[v] = rec
     return out, n_int
@@ -316,12 +313,13 @@ def _space_stats(P):
         B = _fourier_basis(xr - g["x0"], g["L"], kmax)
     else:
         B = _bspline_basis(xr, x[0], x[-1], 2 * kmax)
-    QL = _orth(P["Lib"])
+    QL = P["QL"]
+    QB = _basis_beyond(QL, B)
     out = {}
     for i, v in enumerate(P["variables"]):
         r, rn = P["R"][:, i], P["RN"][:, i]
-        r2_lib, part, fit = _partial(QL, B, r)
-        _, part_null, _ = _partial(QL, B, rn)
+        r2_lib, part, fit = _partial(QL, QB, r)
+        _, part_null, _ = _partial(QL, QB, rn)
         out[v] = {"partial_r2": part, "partial_r2_null": part_null, "excess": part - part_null, "r2_lib": r2_lib,
                   "fit": fit}
     return out, x, kmax
@@ -400,9 +398,9 @@ def _weak_white(meta, data, rhs):
     return out
 
 
-def stats(meta, data, rhs, basis="weak"):
-    """Raw statistics (for calibration and tests)."""
-    P = _prepare(meta, data, rhs, basis)
+def stats(meta, data, rhs):
+    P = _prepare(meta, data, rhs)
+    P["QL"] = _orth(P["Lib"])                 # library basis, shared by the time and space decompositions
     out = {"P": P, "time": _time_stats(P), "amp": _amp_stats(P), "white": _white_stats(P)}
     if meta["kind"] == "pde" and P["xi"] is not None:
         out["space"] = _space_stats(P)
@@ -410,8 +408,8 @@ def stats(meta, data, rhs, basis="weak"):
 
 
 # ----------------------------------------------------------------------------- findings
-def audit(meta, data, rhs, basis="weak"):
-    S = stats(meta, data, rhs, basis)
+def audit(meta, data, rhs):
+    S = stats(meta, data, rhs)
     P = S["P"]
     pde = meta["kind"] == "pde"
     out = []

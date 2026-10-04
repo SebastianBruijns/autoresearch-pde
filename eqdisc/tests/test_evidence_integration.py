@@ -1,4 +1,4 @@
-"""Integration of the evidence layer (WS4): findings -> grade, verdict, repair, ledger, reassess. No API calls.
+"""Integration of the evidence layer: findings -> grade, verdict, repair, ledger, reassess. No API calls.
 
 Synthetic findings are injected by monkeypatching `eqdisc.audit.audit_data` / `audit_model`, so these tests do not
 depend on detector calibration.
@@ -14,7 +14,7 @@ import pytest
 from eqdisc import audit
 from eqdisc.assess import _re_intervals, assess, grade
 from eqdisc.audit import finding
-from eqdisc.audit.repair import audit_and_repair, has_nan, repair_data, repair_model, save_dataset
+from eqdisc.audit.repair import audit_and_repair, has_nan, save_dataset
 from eqdisc.datagen import generate
 from eqdisc.evaluate import load
 from eqdisc.insights import verdict
@@ -30,7 +30,12 @@ def clean(tmp_path_factory):
     d = generate("pendulum", out_root=root, noise=0.01, plot=False)
     meta, data = load(d)
     rhs = json.loads((Path(d) / "hidden" / "truth.json").read_text())["rhs"]
-    base = assess(meta, data, rhs, findings=[])
+    import os
+    os.environ["EQDISC_EVIDENCE"] = "0"            # baseline: no checks at all
+    try:
+        base = assess(meta, data, rhs)
+    finally:
+        os.environ.pop("EQDISC_EVIDENCE")
     return {"dir": Path(d), "meta": meta, "data": data, "rhs": rhs, "base": base, "root": root}
 
 
@@ -45,7 +50,7 @@ def _warn():
 
 
 def _quiet():
-    return [finding("outliers", "data", 0.0, 1e-3, False, "info", message="no spikes"),
+    return [finding("glitches", "data", 0.0, 6.0, False, "info", message="no isolated glitches"),
             finding("slice_trajectory", "model", 0.1, 0.75, False, "info", message="consistent")]
 
 
@@ -122,28 +127,19 @@ def test_re_interval_helper():
     assert _re_intervals([dict(f, fired=False)], ["theta", "omega", "t"]) == {}
 
 
-def test_assess_computes_findings_uses_re_intervals_and_writes_ledger(clean, monkeypatch, tmp_path):
+def test_assess_computes_model_findings_and_uses_re_intervals(clean, monkeypatch):
     re_f = finding("slice_trajectory", "model", 0.95, 0.75, True, "warn", "repair", fix={"tool": "per_trajectory", "args": {}},
                    message="hidden parameter varies between runs",
-                   details={"re_intervals": {"omega:omega": [-0.3, 0.1]}, "I2": 0.95,
+                   details={"re_intervals": {"omega:omega": [-0.3, 0.1]}, "i2": {"omega:omega": 0.95},
                             "per_trajectory": {"omega:omega": [-0.05, -0.15]}})
-    monkeypatch.setattr(audit, "audit_data", lambda meta, data: _quiet()[:1])
     monkeypatch.setattr(audit, "audit_model", lambda meta, data, rhs: [_crit(), re_f])
-    a = assess(clean["meta"], clean["data"], clean["rhs"], run_dir=tmp_path)
-    assert {f["id"] for f in a["findings"]} == {"outliers", "residual_time_only", "slice_trajectory"}
+    a = assess(clean["meta"], clean["data"], clean["rhs"])
+    assert {f["id"] for f in a["findings"]} == {"residual_time_only", "slice_trajectory"}
     t = next(t for t in a["terms"] if t["var"] == "omega" and t["term"].replace(" ", "") in ("omega", "1.0*omega"))
     assert t["interval_used"].startswith("random-effects") and t["significant"] is False
     assert all(x["interval_used"] == "bootstrap" for x in a["terms"] if x is not t)
     v = verdict(a)
     assert not v["status"].startswith("CONFIDENT") and "residual_time_only" in v["headline"]
-    lines = read(tmp_path)
-    assert lines and all(isinstance(l, dict) and l["dataset_hash"] is None and l["config_hash"] for l in lines)
-    for raw in (tmp_path / "ledger.jsonl").read_text().splitlines():
-        json.loads(raw)
-    forcing = dict(_crit(), fix={"tool": "add_forcing", "args": {"basis": "time"}})
-    rep = repair_model(clean["meta"], clean["data"], clean["rhs"], [re_f, forcing])
-    assert rep[0]["kind"] == "reporting" and rep[0]["coefficients"] == {"omega:omega": [-0.05, -0.15]}
-    assert rep[1]["ok"] is False
 
 
 def test_real_detectors_on_clean_data_keep_verdict(clean):
@@ -173,21 +169,35 @@ def test_repair_data_removes_gaps_and_pipeline_runs(clean, tmp_path):
     assert has_nan(data)
     led = Ledger(tmp_path, config={"test": 1})
     m2, d2, findings, applied = audit_and_repair(meta, data, ledger=led)
-    assert not has_nan(d2) and any(a["ok"] and a["tool"] == "split_at_gaps" for a in applied)
+    assert not has_nan(d2) and any(a["tool"] == "split_at_gaps" for a in applied)
     assert m2["shape"] == list(d2["U"].shape) and d2["U"].shape[1] == len(d2["t"])
-    # unknown tools are skipped and recorded
-    _, _, app = repair_data(m2, d2, [finding("x", "data", 1, 0, True, "warn", "repair", fix={"tool": "nope", "args": {}})])
-    assert app == [{"finding": "x", "tool": "nope", "ok": False, "note": "skipped: not a data repair tool"}]
+    gaps = next(f for f in findings if f["id"] == "gaps")
+    kept = applied[0]["kept"]
+    assert f"kept {kept:.0%}" in gaps["message"] and gaps["resolved"] == (kept >= 0.9)
     out = save_dataset(m2, d2, tmp_path / "dataset_audited", applied)
     m3, d3 = load(out)
     assert not has_nan(d3)
     assert intuit(m3, d3)["hypotheses"]
     s = tb.run_sindy(m3, d3, poly_degree=1, include_trig=True)
     assert s.get("rhs")
-    a = assess(meta, data, clean["rhs"])               # assess on gapped data repairs before fitting
-    assert a["data_repairs"] and a["confidence"]["level"] in ("high", "medium", "low")
+    a = assess(m2, d2, clean["rhs"], data_findings=findings)
+    assert a["confidence"]["level"] in ("high", "medium", "low")
     for raw in (tmp_path / "ledger.jsonl").read_text().splitlines():
-        assert json.loads(raw)["kind"] in ("finding", "repair", "reaudit")
+        assert json.loads(raw)["kind"] in ("finding", "repair")
+
+
+def test_glitches_that_change_the_fit_are_kept_and_block_confidence(clean, monkeypatch):
+    from eqdisc.audit import data as D
+    meta, data = clean["meta"], {k: np.array(v) for k, v in clean["data"].items()}
+    data["U"] = data["U"].astype(float)
+    data["U"][0, 100, 0] += 50 * data["U"][..., 0].std()
+    fits = iter([({"theta": "omega"}, {"theta": {"omega"}}), ({"theta": "1"}, {"theta": {"1"}})])
+    monkeypatch.setattr(D, "_terms", lambda m, d: next(fits))
+    _, d2, findings, applied = audit_and_repair(meta, data)
+    g = next(f for f in findings if f["id"] == "glitches")
+    assert g["fired"] and g["severity"] == "critical" and not applied
+    assert np.array_equal(d2["U"], data["U"])                  # raw data kept
+    assert not verdict(_with(clean["base"], [g]))["status"].startswith("CONFIDENT")
 
 
 def test_reassess_fake_run_dir(clean, tmp_path, monkeypatch):
