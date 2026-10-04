@@ -1,0 +1,15 @@
+# Keyframe test for datasets/double-pendulum/double-pendulum.mov: each point given at several frames
+# (original pixels, read off zoomed crops of the original frames, accuracy about 3-5 px).
+# 1: centre of the upper metal bolt. 2: centre of the lower metal bolt.
+point,frame,x,y
+1,60,759,344
+1,100,764,337
+1,150,783,350
+1,200,770,348
+1,250,801,380
+1,350,808,326
+2,60,663,425
+2,150,749,473
+2,200,746,467
+2,250,706,436
+2,350,736,414

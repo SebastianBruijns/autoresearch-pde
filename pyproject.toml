@@ -25,6 +25,7 @@ hdf5 = ["h5py"]                      # .h5 / MATLAB v7.3 ingestion
 notebooks = ["jupyter", "nbformat", "ipykernel"]
 demo = ["streamlit>=1.30", "plotly>=5"]
 bench = ["huggingface_hub", "h5py", "zss"]   # The Well streaming, SRSD NED
+tracker = ["trackpy", "opencv-python-headless"]   # tracker/track_video.py: point tracks from video
 all = ["pysr>=1.0", "h5py", "jupyter", "nbformat", "ipykernel", "streamlit>=1.30", "plotly>=5", "huggingface_hub", "zss"]
 
 [project.scripts]
