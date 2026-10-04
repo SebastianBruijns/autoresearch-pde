@@ -1,6 +1,7 @@
 """Repairs for fired findings (no LLM calls).
 
-    repair_data(meta, data, findings)  -> (meta, data, applied)   data-stage fixes (split_at_gaps, despike)
+    repair_data(meta, data, findings)  -> (meta, data, applied)   data-stage fixes (split_at_gaps, split_at_events,
+                                                                  despike)
     audit_and_repair(meta, data)       -> (meta, data, findings, applied)   audit, repair (<= 2 rounds), re-audit, merge
     repair_model(meta, data, rhs, findings) -> applied             model-stage fixes (v1: reporting only)
     save_dataset(meta, data, out_dir)  -> out_dir                  standard meta.json + data.npz layout
@@ -14,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 # data-stage tools, in the order they must run (gaps first: other tools cannot work on NaN)
-DATA_ORDER = ("split_at_gaps", "despike")
+DATA_ORDER = ("split_at_gaps", "split_at_events", "despike")
 
 
 def has_nan(data):
@@ -79,6 +80,17 @@ def _run(tool, meta, data, args):
             return _sync_meta(m2, d2), d2, "split at gaps (detector tool)"
         m2, d2 = _split_fallback(meta, data, **{k: v for k, v in args.items() if k == "min_len"})
         return m2, d2, "split at gaps (fallback splitter)"
+    if tool == "split_at_events":
+        fn = _tool("split_at_events")
+        if fn is None:
+            raise LookupError("split_at_events is not available")
+        args = dict(args)
+        if args.pop("_redetect", False):        # an earlier split renumbered trajectories / time rows
+            args["cuts"] = _tool("shock_cuts")(meta, data)
+        if not args.get("cuts"):
+            return meta, data, "no shock left to split at"
+        m2, d2 = fn(meta, data, **args)
+        return _sync_meta(m2, d2), d2, f"split at {len(args['cuts'])} shock(s) into {m2['n_traj']} piece(s)"
     if tool == "despike":
         fn = _tool("despike")
         if fn is None:
@@ -91,6 +103,7 @@ def _run(tool, meta, data, args):
 def repair_data(meta, data, findings):
     """Apply the fixes of fired data-stage findings (gaps before outliers). Returns (meta, data, applied)."""
     applied, todo = [], {}
+    shape0 = list(np.asarray(data["U"]).shape)
     for f in findings or []:
         if not (f.get("fired") and f.get("stage") == "data" and f.get("fix")):
             continue
@@ -105,6 +118,8 @@ def repair_data(meta, data, findings):
         if tool not in todo:
             continue
         fid, args = todo[tool]
+        if tool == "split_at_events" and list(np.asarray(data["U"]).shape) != shape0:
+            args = dict(args, _redetect=True)
         try:
             meta, data, note = _run(tool, meta, data, dict(args))
             applied.append({"finding": fid, "tool": tool, "args": args, "ok": True, "note": note,
