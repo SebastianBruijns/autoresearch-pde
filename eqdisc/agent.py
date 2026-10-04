@@ -34,6 +34,23 @@ from .systems import SYSTEMS
 from .datagen import add_noise
 
 PLAYBOOK = Path(__file__).with_name("playbook.md")
+SKILLS_DIR = None   # no built-in skills (upstream rule: data only); a run may pass its own folder (skills_dir)
+LOAD_SKILL_TOOL = {"name": "load_skill", "description": "Load one of the skills listed in the system prompt.",
+                   "input_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"],
+                                    "additionalProperties": False}}
+
+
+def list_skills(skills_dir=None):
+    """{name: description} of the skill .md files in skills_dir; {} when no folder is given."""
+    d = skills_dir or SKILLS_DIR
+    out = {}
+    if not d or not Path(d).is_dir():
+        return out
+    for f in sorted(Path(d).glob("*.md")):
+        txt = f.read_text()
+        desc = next((l.split(":", 1)[1].strip() for l in txt.splitlines() if l.startswith("description:")), "")
+        out[f.stem] = desc
+    return out
 
 SYSTEM = """You are an autonomous research agent that discovers governing equations (ODEs / PDEs) from noisy
 measurement data. You work only through the tools. Each tool call that fits a model returns the model and
@@ -223,7 +240,7 @@ def _jsonable(o):
 
 class Session:
     def __init__(self, dataset, experiments=0, seed=123, workdir=None, critic=None, human=None, human_rounds=3,
-                 data_findings=None):
+                 data_findings=None, skills_dir=None):
         """data_findings: findings of a data audit already applied to `dataset` (discover); None = audit here."""
         self.dataset = Path(dataset)
         self.meta, self.data = load(dataset)
@@ -242,6 +259,7 @@ class Session:
         self.budget_left = 10 ** 9      # updated by run_agent; the critic is skipped when the budget is nearly spent
         self.human = human              # callable(prompt: str) -> str, or None (fully autonomous)
         self.human_rounds = human_rounds
+        self.skills_dir = Path(skills_dir) if skills_dir else SKILLS_DIR
         self.human_log = []
         self.assessment = None
         self.cache = {}
@@ -331,6 +349,18 @@ class Session:
                 "initial_state_summary": {"min": float(U[0].min()), "max": float(U[0].max())}}
 
     def call(self, name, args):
+        cap = self.meta.get("max_deriv_cap") or (2 if len(self.meta.get("spatial_dims") or []) >= 3 else None)
+        if cap and name in ("run_sindy", "weak_sindy", "ensemble_sindy", "equivariant_sindy"):
+            asked = args.get("max_deriv")
+            args = {**args, "max_deriv": min(int(asked or cap), int(cap))}
+            if asked and int(asked) > int(cap):
+                out = self._call_cached(name, args)
+                if isinstance(out, dict):
+                    out = {**out, "note": f"max_deriv capped at {cap} for this dataset (library size)"}
+                return out
+        return self._call_cached(name, args)
+
+    def _call_cached(self, name, args):
         key = json.dumps([name, args, self.active, int(self.data["U"].shape[0])], sort_keys=True, default=str)
         if name not in ("submit", "request_experiment", "transform", "set_coordinates") and key in self.cache:
             out = dict(self.cache[key]) if isinstance(self.cache[key], dict) else {"result": self.cache[key]}
@@ -378,6 +408,12 @@ class Session:
             path = self.workdir / f"model_{len(self.cache)}.png"
             plots.plot_model(self.meta, self.data, rhs, path)
             return {"ok": True, "rhs_original": rhs if mapped else None, "_images": [str(path)]}
+        if name == "load_skill":
+            if not self.skills_dir:
+                return {"error": "no skills in this session"}
+            f = Path(self.skills_dir) / f"{Path(args['name']).name}.md"
+            return {"skill": f.read_text()} if f.exists() else \
+                {"error": f"unknown skill; available: {list(list_skills(self.skills_dir))}"}
         if name == "fit_flow":
             from .flow import fit_flow
             if m["kind"] != "ode":
@@ -491,28 +527,32 @@ def make_client():
 
 PRICES = {"claude-opus-5-5": (4.0, 20.0), "claude-sonnet-5-5": (2.0, 10.0), "claude-fable-5-1": (10.0, 50.0),
           "claude-haiku-4-5": (1.0, 5.0)}
+CACHE_READ = {"claude-opus-5-5": 0.20, "claude-sonnet-5-5": 0.20, "claude-fable-5-1": 0.25, "claude-haiku-4-5": 0.10}
 
 
 class Usage:
     def __init__(self, model):
-        self.model, self.inp, self.out, self.cache_read, self.calls = model, 0, 0, 0, 0
+        self.model, self.inp, self.out, self.cache_read, self.cache_write, self.calls = model, 0, 0, 0, 0, 0
 
     def add(self, resp):
         u = getattr(resp, "usage", None)
         if u is None:
             return
         self.calls += 1
-        self.inp += (getattr(u, "input_tokens", 0) or 0) + (getattr(u, "cache_creation_input_tokens", 0) or 0)
+        self.inp += getattr(u, "input_tokens", 0) or 0
+        self.cache_write += getattr(u, "cache_creation_input_tokens", 0) or 0
         self.cache_read += getattr(u, "cache_read_input_tokens", 0) or 0
         self.out += getattr(u, "output_tokens", 0) or 0
 
     def cost(self):
         pi, po = PRICES.get(self.model, (4.0, 20.0))
-        return (self.inp * pi + self.cache_read * pi * 0.05 + self.out * po) / 1e6
+        cr = CACHE_READ.get(self.model, pi * 0.1)
+        # cache writes (5-minute TTL) are billed at 1.25x the input price
+        return (self.inp * pi + self.cache_write * pi * 1.25 + self.cache_read * cr + self.out * po) / 1e6
 
     def as_dict(self):
-        return {"llm_calls": self.calls, "input_tokens": self.inp, "cache_read_tokens": self.cache_read,
-                "output_tokens": self.out, "cost_usd": round(self.cost(), 3)}
+        return {"llm_calls": self.calls, "input_tokens": self.inp, "cache_write_tokens": self.cache_write,
+                "cache_read_tokens": self.cache_read, "output_tokens": self.out, "cost_usd": round(self.cost(), 3)}
 
 
 def _text(resp):
@@ -563,10 +603,9 @@ def make_critic(client, model, usage):
                                       rhs=json.dumps(rhs), val=json.dumps(_jsonable(val)),
                                       tried=json.dumps(_jsonable(tried[:8]), default=str)[:3000],
                                       rep=json.dumps(_jsonable(rep), default=str)[:2500])
-        resp = client.beta.messages.create(model=model, max_tokens=8000, thinking={"type": "adaptive"},
-                                           output_config={"effort": "medium"},
-                                           betas=["server-side-fallback-2026-07-01"], fallbacks="default",
-                                           messages=[{"role": "user", "content": prompt}])
+        from .llm import request_opts
+        resp = client.beta.messages.create(model=model, max_tokens=16000, messages=[{"role": "user", "content": prompt}],
+                                           **request_opts(model, "medium", summarized=False))
         usage.add(resp)
         return _json_from(_text(resp), {"verdict": "accept", "issues": ["critic output unparseable"]})
     return critic
@@ -585,11 +624,21 @@ def _tool_result_content(out_s, images):
     return blocks
 
 
+def _request_opts(model, effort):
+    from .llm import request_opts
+    return request_opts(model, effort)
+
+
 def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", max_tools=25, experiments=0,
               out_dir=None, verbose=True, client=None, critic=True, learn=False, use_memory=True, report=True,
-              judge_llm=True, human=None, context=None, final_assessment=True, on_event=None, tag="", data_findings=None):
+              judge_llm=True, human=None, context=None, final_assessment=True, on_event=None, tag="", data_findings=None,
+              max_cost_usd=None, max_wall_s=None, skills_dir=None):
     """Run one discovery session. Returns {"submitted", "hidden_eval", "usage", "out_dir", ...}.
-    `dataset` is a dataset directory, or a raw data file (npz/mat/csv/h5...) that is ingested first."""
+    `dataset` is a dataset directory, or a raw data file (npz/mat/csv/h5...) that is ingested first.
+    max_cost_usd: once the session's API cost reaches it, every tool result tells the agent to submit; at 1.2x the
+    session stops (submitted stays None if the agent never submitted). max_wall_s: same for wall-clock time (asked to
+    submit from 75%, stopped at 100%; a running tool call is not interrupted). skills_dir: folder of skill .md files
+    for load_skill; None (default) = no skills and no load_skill tool, per the data-only rule. Held per session."""
     client = client or make_client()
     usage = Usage(model)
     dataset = Path(dataset)
@@ -601,16 +650,25 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
     out_dir = Path(out_dir or f"runs/agent_{dataset.name}_{time.strftime('%H%M%S')}")
     out_dir.mkdir(parents=True, exist_ok=True)
     sess = Session(dataset, experiments, workdir=out_dir / "work",
-                   critic=make_critic(client, model, usage) if critic else None, human=human, data_findings=data_findings)
+                   critic=make_critic(client, model, usage) if critic else None, human=human, data_findings=data_findings,
+                   skills_dir=skills_dir)
     playbook = playbook if playbook is not None else PLAYBOOK.read_text()
     lessons = mem.retrieve(sess.meta, tb.diagnose(sess.meta, sess.data)) if use_memory else []
     lessons_txt = ("Lessons from previous sessions (use judgement; they may not apply):\n"
                    + "\n".join(f"- {l}" for l in lessons)) if lessons else ""
+    skills = list_skills(sess.skills_dir) if sess.skills_dir else {}
     system = (SYSTEM.replace("{budget}", str(max_tools)).replace("{playbook}", playbook)
               .replace("{lessons}", lessons_txt))
+    if skills:   # opt-in only (run_bench --skills-dir); plain runs follow the data-only rule
+        system += ("\n\nSkills you can load with load_skill:\n" + "\n".join(f"- {k}: {v}" for k, v in skills.items()))
     tools = TOOLS if (experiments > 0 and sess.truth is not None) else [t for t in TOOLS if t["name"] != "request_experiment"]
     if human is None:
         tools = [t for t in tools if t["name"] != "ask_human"]
+    if skills:
+        tools = tools + [LOAD_SKILL_TOOL]
+    if len(sess.meta.get("spatial_dims") or []) >= 3:   # 1-D/2-D-only tools (incl. coordinate transforms): hide
+        tools = [t for t in tools if t["name"] not in ("detect_symmetries", "equivariant_sindy", "find_invariants",
+                                                       "transform", "set_coordinates")]
     # the dataset name can reveal the system (e.g. blind_strogatz_glider_...), which would defeat blinding
     meta_public = {k: v for k, v in sess.meta.items() if k not in ("system", "name")}
     intro = f"Dataset metadata:\n{json.dumps(meta_public, indent=2)}\n"
@@ -626,16 +684,28 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
     say = (lambda *a: print(*a, flush=True)) if verbose else (lambda *a: None)
     emit = (lambda ev: on_event({**ev, "branch": tag})) if on_event else (lambda ev: None)
     n_tools, t0 = 0, time.time()
+    stop = None
 
     while sess.submitted is None:
+        if max_wall_s and time.time() - t0 >= max_wall_s:
+            stop = "time cap"
+            say("  [agent] wall-time cap reached; stopping")
+            break
+        if max_cost_usd and usage.cost() >= 1.2 * max_cost_usd:
+            stop = "cost cap"
+            say("  [agent] cost cap reached; stopping")
+            break
         resp = client.beta.messages.create(
             model=model, max_tokens=16000, system=system, tools=tools, messages=messages,
-            thinking={"type": "adaptive"}, output_config={"effort": effort},
-            betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+            cache_control={"type": "ephemeral"},   # re-sent history is read from cache (~0.05x input price)
+            # per-model thinking/effort (readable reasoning summaries on Opus/Sonnet; token budget on Haiku 4.5)
+            **_request_opts(model, effort),
         )
         usage.add(resp)
         messages.append({"role": "assistant", "content": resp.content})
         for b in resp.content:
+            if b.type == "thinking" and (getattr(b, "thinking", "") or "").strip():
+                sess.log.append({"type": "thinking", "text": b.thinking})
             if b.type == "text" and b.text.strip():
                 say(f"  [agent] {b.text.strip()[:400]}")
                 emit({"type": "note", "text": b.text.strip()[:600]})
@@ -664,7 +734,10 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
             out_s = json.dumps(out, default=str)
             if len(out_s) > 12000:
                 out_s = out_s[:12000] + "...(truncated)"
-            note = f"\n[tool calls left: {left}]" + (" Submit now." if left <= 2 else "")
+            over = bool(max_cost_usd and usage.cost() >= max_cost_usd) or \
+                bool(max_wall_s and time.time() - t0 >= 0.75 * max_wall_s)
+            note = f"\n[tool calls left: {left}]" + (" Submit now." if left <= 2 or over else "") + \
+                (" Cost or time budget nearly used." if over else "")
             results.append({"type": "tool_result", "tool_use_id": u.id,
                             "content": _tool_result_content(out_s + note, images),
                             **({"is_error": True} if "error" in out else {})})
@@ -685,7 +758,7 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
         # budget ran out after a review sent the model back: keep the last proposal rather than nothing
         sess.submitted = {**sess.last_proposal, "not_accepted_by_review": True}
     result = {"dataset": sess.dataset.name, "dataset_path": str(sess.dataset), "submitted": sess.submitted,
-              "n_tool_calls": n_tools, "wall_s": round(time.time() - t0, 1), "critic": sess.critic_notes,
+              "n_tool_calls": n_tools, "wall_s": round(time.time() - t0, 1), "critic": sess.critic_notes, "stop": stop,
               "self_validation": tb.validate(sess.meta, sess.data, sess.submitted["rhs"]) if sess.submitted else None}
     if sess.truth is not None:
         if sess.submitted:

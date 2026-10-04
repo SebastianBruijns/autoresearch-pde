@@ -50,4 +50,5 @@ NED uses the official srsd-benchmark algorithm, reimplemented without torch.
 
 **Caveat: this is mostly recall.** Feynman equations are the most memorised formulas there are, and the agent
 visibly recognised physical constants: it wrote `x1/299792458` (the speed of light), and in one problem hard-coded
-vacuum permittivity where it is actually an input variable. The full 50-problem run was not done.
+vacuum permittivity where it is actually an input variable. The full runs (all 50 problems; 3 seeds × 30; Haiku,
+Sonnet and Opus; harness vs bare Claude) are in [`benchmarks/feynman_srsd_hard.md`](benchmarks/feynman_srsd_hard.md).
