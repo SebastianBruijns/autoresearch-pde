@@ -658,6 +658,8 @@ def grade(res):
         elif sev == "critical":
             reasons.append(f"{tag} FAILED (critical): {f.get('message', '')}")
             score -= 3
+        elif sev == "warn" and f.get("id") == "residual_white" and ratio is not None:
+            reasons.append(f"{tag} (warning, already counted in the noise-floor ratio): {f.get('message', '')}")
         elif sev == "warn":
             reasons.append(f"{tag} (warning): {f.get('message', '')}")
             score -= 1
