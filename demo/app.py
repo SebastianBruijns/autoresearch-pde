@@ -1016,6 +1016,10 @@ def _slim(a, verdict=None):
 
 def _yourdata_result(job):
     res = job.result
+    if getattr(job, "prompt", ""):
+        st.caption(f"Prompt used: “{job.prompt}”")
+    else:
+        st.caption("Blind run: no prompt, data only.")
     uq = _slim(res.get("assessment"), res.get("verdict"))
     if res["kind"] == "dynamics":
         kind, png = "ode", None
@@ -1099,6 +1103,14 @@ def v3_yourdata():
                 df, fname = pd.read_csv(path), path.stem
         if df is not None:
             st.dataframe(df.head(6), hide_index=True, width="stretch")
+        ui.fig_title("Tell it about your data")
+        prompt = st.text_area(
+            "Prompt", key=f"prompt_{src}", height=130, disabled=running, label_visibility="collapsed",
+            placeholder="Optional. e.g. ‘Positions and velocities of a pendulum, released from 4 angles. Angle in "
+                        "radians. Is there damping?’  Leave empty for a blind, data-only run.")
+        if prompt.strip():
+            st.caption("The agents treat this as a strong hint and check it against the data; the result will say "
+                       "a prompt was used.")
     with c2:
         ui.fig_title("Settings")
         mode = st.segmented_control("Kind of law", ["Auto", "Dynamics", "Static y = f(x)"], default="Auto",
@@ -1123,11 +1135,12 @@ def v3_yourdata():
         quick = budget == "Quick"
         if resolved.startswith("Dyn"):
             job = live.Job(live.fake_dynamics if fake else live.run_dynamics, csv_path=str(csv_path),
-                           run_dir=str(run_dir), n_branches=2 if quick else 3, adversary=not quick, context="")
+                           run_dir=str(run_dir), n_branches=2 if quick else 3, adversary=not quick, context=prompt.strip())
         else:
             job = live.Job(live.fake_static if fake else live.run_static, csv_path=str(csv_path), target=target,
-                           context="", n_sessions=2 if quick else 3)
+                           context=prompt.strip(), n_sessions=2 if quick else 3)
         job.run_dir = str(run_dir)
+        job.prompt = prompt.strip()
         st.session_state.job = job.start()
         running = True
     job = st.session_state.get("job")
