@@ -11,9 +11,9 @@ VERDICT = {  # status -> (colour, label)
     "CONFIDENT IN PREDICTIONS": ("#0891b2", "✓ CONFIDENT IN PREDICTIONS"),
     "COLLECT MORE DATA": ("#d97706", "◐ COLLECT MORE DATA"),
     "INCONCLUSIVE": ("#dc2626", "? INCONCLUSIVE"),
-    "VALIDATED": ("#16a34a", "✓ FORECASTS UNSEEN DATA"),
+    "VALIDATED": ("#16a34a", "🔒 PASSED THE HIDDEN-FUTURE TEST"),
     "PENDING": ("#64748b", "… RESULTS PENDING"),
-    "NOT RECOVERED": ("#dc2626", "✗ NOT RECOVERED"),
+    "NOT RECOVERED": ("#dc2626", "🔒 FAILED THE HIDDEN-FUTURE TEST"),
     "RESULT": ("#475569", "RESULT"),
 }
 
@@ -69,6 +69,14 @@ def header(title, sub):
 def section(n, title, sub=None):
     st.markdown(f"<div class='sec'><span class='sec-n'>{n}</span><span class='sec-t'>{html.escape(title)}</span>"
                 + (f"<span class='sec-s'>{html.escape(sub)}</span>" if sub else "") + "</div>", unsafe_allow_html=True)
+
+
+def benchmark_section(n):
+    section(n, "🔒 Benchmark check", "how it really did")
+    st.markdown("<div class='protocol' style='border-color:rgba(100,116,139,.45);background:rgba(100,116,139,.08)'>"
+                "🔒 Everything below compares with the <b>hidden future</b> (and, where shown, the true law). eqdisc "
+                "never sees these; a real user would not have them. They are here to prove the steps above work."
+                "</div>", unsafe_allow_html=True)
 
 
 def label(text):
@@ -223,7 +231,14 @@ def _checks(a):
     out.append(("Nothing obvious is missing", not strong_add,
                 "no extra term improves the fit enough to justify itself" if not strong_add
                 else "data favour adding " + ", ".join(m["term"] for m in strong_add[:2])))
-    if val:
+    amb = (a.get("model_ambiguity") or {}).get("indistinguishable") or []
+    if amb:
+        out.append(("Only one version of the law fits", len(amb) <= 1,
+                    "no rival version fits as well" if len(amb) <= 1
+                    else f"{len(amb) - 1} slightly different versions fit the data equally well"))
+    if val and val.get("rollout_timed_out"):
+        out.append(("Forecasts data it was not fitted to", None, "not checked: too slow on this grid"))
+    elif val:
         frac = (val.get("rollout_valid_time") or 0) / (val.get("rollout_horizon") or 1)
         crit = f" ({val['criterion']})" if val.get("criterion") else ""
         out.append(("Forecasts data it was not fitted to", bool(ok_roll),
@@ -245,13 +260,21 @@ def confidence_panel(a, key, names=None):
     import plotly.graph_objects as go
     names = names or {}
     v = (a.get("verdict") or {})
-    color, label, sub = PLAIN_VERDICT.get(v.get("status"), PLAIN_VERDICT["INCONCLUSIVE"])
+    status = v.get("status")
+    val = a.get("validation") or {}
+    failed = bool(val) and not val.get("rollout_timed_out") and (
+        val.get("rollout_blew_up") or (val.get("rollout_valid_time") or 0) < 0.7 * (val.get("rollout_horizon") or 1))
+    if status == "INCONCLUSIVE" and not failed:      # ambiguity, not failure: the remedy is more data
+        status = "COLLECT MORE DATA"
+    color, label, sub = PLAIN_VERDICT.get(status, PLAIN_VERDICT["INCONCLUSIVE"])
+    if status == "INCONCLUSIVE" and failed:
+        sub = "The law fails its own checks: do not use it yet."
     c1, c2, c3 = st.columns([1.05, 1, 1], gap="large")
     with c1:
         st.markdown(f"<div class='verdict-big' style='background:{color}'>{html.escape(label)}</div>"
                     f"<div class='small' style='margin:8px 0 6px'>{html.escape(sub)}</div>", unsafe_allow_html=True)
         for name, ok, detail in _checks(a):
-            st.markdown(f"<div class='check'><span class='ic'>{'✅' if ok else '⚠️'}</span><div>"
+            st.markdown(f"<div class='check'><span class='ic'>{'✅' if ok else ('➖' if ok is None else '⚠️')}</span><div>"
                         f"<div class='t'>{html.escape(name)}</div><div class='d'>{html.escape(detail)}</div></div></div>",
                         unsafe_allow_html=True)
     with c2:
@@ -286,7 +309,16 @@ def confidence_panel(a, key, names=None):
             st.markdown(f"<div class='next'><div class='h'>📍 Measure next</div><div class='w'>{html.escape(str(what))}</div>"
                         + (f"<div class='small' style='margin-top:.4rem'>{html.escape(why)}</div>" if why else "")
                         + "</div>", unsafe_allow_html=True)
-        for adv in (a.get("data_advice") or [])[:1]:
+        elif a.get("data_advice"):
+            amb = (a.get("model_ambiguity") or {}).get("indistinguishable") or []
+            adv = a["data_advice"][0]
+            what = ("Record more runs, started from new patterns" if "independent runs" in adv or "trajector" in adv
+                    else adv)
+            why = (f"{len(amb) - 1} versions of the law fit the existing runs equally well; new runs from different "
+                   "starting conditions are the cheapest way to tell them apart." if len(amb) > 1 else adv)
+            st.markdown(f"<div class='next'><div class='h'>📍 Measure next</div><div class='w'>{html.escape(what)}</div>"
+                        f"<div class='small' style='margin-top:.4rem'>{html.escape(why)}</div></div>", unsafe_allow_html=True)
+        for adv in (a.get("data_advice") or [])[:1] if ex else []:
             st.markdown(f"<div class='small' style='margin-top:8px'>💡 {html.escape(adv)}</div>", unsafe_allow_html=True)
-        if v.get("recommendation") and not ex:
+        if v.get("recommendation") and not ex and not a.get("data_advice"):
             st.markdown(f"<div class='small'>{html.escape(v['recommendation'])}</div>", unsafe_allow_html=True)

@@ -146,53 +146,52 @@ def page_lageos():
     n = lageos_numbers(info)
     ag = info.get("agent") or {}
     pe_ag = ag.get("position_error_km") or {}
-    ui.header("🛰️ A real satellite", "LAGEOS-1: one year of hourly positions in → its law of motion out → a month of forecast")
-    ui.section(1, "What it found", "and how its forecast compares")
-    left, right = st.columns([1.15, 1], gap="large")
-    with left:
-        hero_video("lageos")
-        st.caption("First 3 unseen days. Right: each forecast seen from the real satellite.")
-    with right:
-        if pe_ag:
-            ok = pe_ag["30d"] < min(n["N"], n["K"])
-            ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED")
-            ui.equations(lageos_latex(lageos_agent_rhs(ag)), small=True)
-            st.caption("The law it found from six unnamed columns in random units (r² = u1² + u2² + u3²): "
-                       "Newton's gravity plus Earth's equatorial bulge.")
-            ui.tiles([
-                {"label": "Agent: 30-day error", "value": km(pe_ag["30d"]), "delta": f"1 day: {km(pe_ag['1d'])}",
-                 "help": "Position error after 30 days of forecasting from the last training state."},
-                {"label": "Neural net (MLP)", "value": km(n["N"]), "delta": "same data"},
-                {"label": "Round-Earth gravity", "value": km(n["K"]), "delta": "textbook ellipse (Kepler)"},
-                {"label": "Agent cost", "value": f"${ag.get('cost_usd', 0):.2f}",
-                 "delta": f"{ag.get('n_tool_calls', '?')} tool calls"},
-            ])
-            tool_chips(ag.get("tools"))
-        else:
-            ui.verdict_chip("PENDING", "data-only agent run in progress")
-            st.caption("Physics reference (hand-built Kepler + J₂, *not* discovered by the agent):")
-            ui.equations([r"\ddot{\mathbf r} = -\frac{\mathbf r}{r^{3}}\left[1 + \tfrac{3}{2}J_2\,r^{-2}"
-                          r"\left(1 - \tfrac{5z^{2}}{r^{2}}\right)\right]"], small=True)
-            ui.tiles([{"label": "Reference: 30-day error", "value": km(n["J"]), "delta": f"Kepler {km(n['K'])}"},
-                      {"label": "Neural net (MLP)", "value": km(n["N"]), "delta": "same data"}])
-    errs = {m: a[f"err{i}"] for i, m in enumerate(info["models"])}
-    if "err_agent" in a:
-        errs["agent"] = a["err_agent"]
-    ui.section(2, "The data, and the month it never saw")
-    c1, c2 = st.columns([1, 1.15], gap="large")
+    ui.header("🛰️ A real satellite", "LAGEOS-1: one year of hourly positions in → its law of motion out")
+    ui.section(1, "What it found", "from the data alone")
+    c1, c2 = st.columns([1, 1.1], gap="large")
     with c1:
         ui.label("The data it was given: 2017, hourly")
         if "train_orbits" in a:
             show(viz.lageos_training(a["train_orbits"], info["train_dates"]), "lageos_train")
-            st.caption("Real LAGEOS-1 positions, one orbit every two weeks (hourly samples, drawn smooth). Press ▶: "
-                       "the orbit plane turns about Earth's axis over the year. The agent saw only six unnamed columns.")
+            st.caption("One orbit every two weeks. Press ▶: the orbit plane slowly turns over the year. "
+                       "The agent saw only six unnamed columns of numbers.")
     with c2:
+        ui.label("The law it found")
+        if ag.get("submitted"):
+            ui.equations(lageos_latex(lageos_agent_rhs(ag)), small=True)
+            st.markdown("<div style='font-size:1.1rem;margin:.4rem 0 .8rem'>In words: <b>Newton's gravity plus a "
+                        "correction for Earth's equatorial bulge</b>, inferred from unnamed numbers in random units "
+                        "(r² = u1² + u2² + u3²).</div>", unsafe_allow_html=True)
+            tool_chips(ag.get("tools"))
+            st.caption(f"{ag.get('n_tool_calls', '?')} tool calls, ${ag.get('cost_usd', 0):.2f}")
+    if info.get("uq"):
+        ui.section(2, "How sure are we, and what next?", "computed from the training data only")
+        ui.confidence_panel(info["uq"], "lageos")
+    ui.benchmark_section(3)
+    left, right = st.columns([1.15, 1], gap="large")
+    with left:
+        hero_video("lageos")
+        st.caption("The first 3 unseen days. Right: each forecast seen from the real satellite.")
+    with right:
+        if pe_ag:
+            ok = pe_ag["30d"] < min(n["N"], n["K"])
+            ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED")
+            ui.tiles([
+                {"label": "eqdisc: 30-day error", "value": km(pe_ag["30d"]), "delta": f"1 day: {km(pe_ag['1d'])}"},
+                {"label": "Neural net, same data", "value": km(n["N"]), "delta": "30 days"},
+                {"label": "Round-Earth gravity", "value": km(n["K"]), "delta": "30 days"},
+                {"label": "Hand-built textbook law", "value": km(n["J"]), "delta": "30 days (reference)"},
+            ])
+        errs = {m: a[f"err{i}"] for i, m in enumerate(info["models"])}
+        if "err_agent" in a:
+            errs["agent"] = a["err_agent"]
         ui.label("Forecast error over the unseen month")
         show(viz.lageos_errors(a["days"], errs), "lageos_err")
     st.markdown(LEGEND_ORBIT, unsafe_allow_html=True)
-    if info.get("uq"):
-        ui.section(3, "How sure are we, and what next?")
-        ui.confidence_panel(info["uq"], "lageos")
+    lageos_details(info, n, ag, pe_ag)
+
+
+def lageos_details(info, n, ag, pe_ag):
     with st.expander("Details & caveats"):
         pe = info["results"]["position_error_km"]
         rows = {("physics reference (Kepler + J2)" if k == "Kepler + J2" else k): v for k, v in pe.items()}
@@ -240,65 +239,65 @@ def page_orbit():
     pe = r["position_error_km"]
     ag = info.get("agent") or {}
     pa = pe.get("data-only agent")
-    ui.header("🌍 A planet with a huge bulge", "Synthetic satellite: 3 noisy days in → law → next 3 days. An honest failure.")
-    ui.section(1, "What it found", "and how its forecast compares")
+    ui.header("🌍 A planet with a huge bulge", "Synthetic satellite: 3 noisy days in → a law out. Here eqdisc gets it wrong, and says so.")
+    ui.section(1, "What it found", "from the data alone")
+    c1, c2 = st.columns([1, 1.1], gap="large")
+    with c1:
+        ui.label("The data it was given: 3 noisy days")
+        show(viz.orbit_animation(a["t_train"], a["U_train"]), "orbit_anim")
+        st.caption("Press ▶ to fly the first orbits. The faint tangle is all 3 days: the orbit never closes on itself.")
+    with c2:
+        ui.label("The law it found")
+        n_c = len((ag.get("refit") or {}).get("refit_constants") or [])
+        st.markdown(f"<div style='font-size:1.1rem;margin:.4rem 0 .8rem'><b>acceleration = position × (a polynomial in "
+                    f"distances and speeds)</b>, with {n_c} fitted constants.</div>", unsafe_allow_html=True)
+        tool_chips(ag.get("tools"))
+        st.caption(f"{ag.get('n_tool_calls', '?')} tool calls, ${ag.get('cost_usd', 0):.2f}. Full law in the details.")
+    if info.get("uq") and not info["uq"].get("error"):
+        ui.section(2, "How sure are we, and what next?", "computed from the training data only")
+        ui.confidence_panel(info["uq"], "orbit")
+        st.caption("The ‘missing term’ check tries the same short menu of generic extra terms for any position-and-velocity "
+                   "data (an inverse-square pull, drag, an extra radial power); it was not chosen knowing the answer.")
+    ui.benchmark_section(3)
     left, right = st.columns([1.15, 1], gap="large")
     with left:
         hero_video("orbit")
-        st.caption("First unseen day. Bulge 500× Earth's. Right: each forecast seen from the real satellite.")
+        st.caption("The first unseen day. Right: each forecast seen from the real satellite.")
     with right:
         if pa:
             ok = pa["24h"] < min(pe["neural step model (MLP)"]["24h"], pe["Kepler"]["24h"])
             ui.verdict_chip("VALIDATED" if ok else "NOT RECOVERED")
-            if ok:
-                ui.equations(lageos_latex(lageos_agent_rhs(ag)), small=True)
-            else:
-                n_c = len((ag.get("refit") or {}).get("refit_constants") or [])
-                st.markdown(f"<div style='font-size:1.15rem;margin:.6rem 0'>It found: <b>acceleration = position × "
-                            f"(a polynomial in distances and speeds)</b>, with {n_c} constants.<br>"
-                            "Missing: <b>Newton's 1/r² pull</b> and the bulge term.</div>", unsafe_allow_html=True)
             ui.tiles([
                 {"label": "eqdisc: error after 1 day", "value": km(pa["24h"]), "delta": f"after 3 days: {km(pa['72h'])}"},
                 {"label": "Neural network", "value": km(pe["neural step model (MLP)"]["24h"]), "delta": "after 1 day"},
                 {"label": "Round-Earth gravity", "value": km(pe["Kepler"]["24h"]), "delta": "after 1 day"},
                 {"label": "True law (best possible)", "value": km(pe["Kepler + J2"]["24h"]), "delta": "after 1 day"},
             ])
-            tool_chips(ag.get("tools"))
-        else:
-            ui.verdict_chip("PENDING", "data-only agent run in progress")
-        if pa and not ok:
-            st.markdown("<div class='small'><b>Why it failed.</b> The agent found the kinematics and the rotational "
-                        "symmetry (conserved L<sub>z</sub>) but fitted a polynomial in r², z², v² instead of inverse-"
-                        "square gravity plus a bulge term, and submitted it. The confidence checks below (run "
-                        "afterwards, on the training data only) catch it: they flag a missing inverse-square pull and "
-                        "a failed hold-out forecast, and say <i>not established</i>.</div>",
-                        unsafe_allow_html=True)
-    ui.section(2, "The data, and what it needed to find")
+            if not ok:
+                st.markdown("<div class='small'>🔒 <b>What it missed</b> (known only because we generated the data): "
+                            "Newton's 1/r² pull and the bulge term. This matches what the checks above flagged.</div>",
+                            unsafe_allow_html=True)
     c1, c2 = st.columns(2, gap="large")
     with c1:
-        ui.label("The data it was given: 3 noisy days")
-        show(viz.orbit_animation(a["t_train"], a["U_train"]), "orbit_anim")
-        st.caption("Press ▶ to fly the first orbits. The faint tangle is all 3 training days: the orbit never closes on "
-                   "itself, because the bulge keeps turning it.")
-    with c2:
         if "kj_t" in a:
-            ui.label("Why the bulge matters: same start, two laws")
+            ui.label("🔒 The true law: why the bulge matters")
             show(viz.orbit_kepler_vs_j2(a["kj_t"], a["kj_disc"], a["kj_kep"]), "orbit_kj")
-            st.caption("Round-Earth gravity (orange) repeats one ellipse in a fixed plane. The true law (blue) swings the "
-                       "plane around the polar axis, as the data do. This is what the agent needed to find.")
+            st.caption("Same start, two laws: round-Earth gravity stays in one plane; the true law swings the plane around.")
+    with c2:
+        errs = {m: a[f"err{i}"] for i, m in enumerate(info["models"])}
+        errs = {("agent" if m == "data-only agent" else m): v for m, v in errs.items()}
+        ui.label("Forecast error over the unseen 3 days")
+        show(viz.lageos_errors((a["hrs"] - a["hrs"][0]) / 24, errs, xlabel="days into the unseen second half"), "orbit_err")
     if "raan_disc" in a:
         ui.label("The tell-tale drift: measured vs forecast")
         show(viz.orbit_elements(a["el_hrs"], a["raan_data"], a["argp_data"], a["hrs"], a["raan_disc"], a["argp_disc"],
                                 a["raan_kep"], a["argp_kep"]), "orbit_el")
-    errs = {m: a[f"err{i}"] for i, m in enumerate(info["models"])}
-    errs = {("agent" if m == "data-only agent" else m): v for m, v in errs.items()}
-    ui.label("Forecast error over the unseen 3 days")
-    show(viz.lageos_errors((a["hrs"] - a["hrs"][0]) / 24, errs, xlabel="days into the unseen second half"), "orbit_err")
     st.markdown(LEGEND_ORBIT.replace("Earth's equatorial bulge", "the planet's equatorial bulge").replace(
         "fitted by us; shown for reference only", "here the exact law that generated the data"), unsafe_allow_html=True)
-    if info.get("uq") and not info["uq"].get("error"):
-        ui.section(3, "How sure are we, and what next?")
-        ui.confidence_panel(info["uq"], "orbit")
+    orbit_details(info, pe, ag)
+
+
+def orbit_details(info, pe, ag):
     with st.expander("Details & caveats"):
         st.dataframe(pd.DataFrame({PLAIN_ROW.get(k, k): v for k, v in pe.items()}).T.map(lambda v: f"{v:,.3g}"),
                      width="content")
@@ -349,38 +348,44 @@ def page_ks():
         rows.append({"term": c["term"], "truth": tv, "refit": c["refit"], "90% CI": c["ci90"],
                      "inside": tv is not None and c["ci90"][0] <= tv <= c["ci90"][1]})
     n_in = sum(x["inside"] for x in rows)
-    ui.header("🔥 Chaos", "A blinded chaotic PDE with 2% noise: how long can the found equation forecast?")
-    ui.section(1, "What it found", "and how long the forecast stays useful")
+    ui.header("🔥 Chaos", "A chaotic field with 2% noise in → its equation out. How long can it forecast?")
+    ui.section(1, "What it found", "from the data alone")
+    c1, c2 = st.columns([1, 1.1], gap="large")
+    with c1:
+        ui.label("The data it was given")
+        st.markdown("<div style='font-size:1.1rem'>One unnamed field u(x, t): 1,024 points × 400 snapshots, "
+                    "2% noise, rescaled so no textbook coefficient applies.</div>", unsafe_allow_html=True)
+    with c2:
+        ui.label("The equation it found")
+        ui.equations(ui.rhs_latex(ag["refit"] if isinstance(ag["refit"], dict) else {"u": ag["refit"]}, pde=True, digits=5))
+        tool_chips(info.get("tools"))
+    if info.get("uq"):
+        ui.section(2, "How sure are we, and what next?", "computed from the training data only")
+        ui.confidence_panel(info["uq"], "ks", names={"u_xx": "u_xx (anti-diffusion)", "u_xxxx": "u_xxxx (hyper-diffusion)",
+                                                       "u*u_x": "u·u_x (steepening)"})
+    ui.benchmark_section(3)
     left, right = st.columns([1.15, 1], gap="large")
     with left:
         hero_video("ks")
-        st.caption("Space (vertical) vs time (horizontal), revealed as the unseen future unfolds: truth, eqdisc's "
-                   "equation, and a neural operator. The dark rows below show where each forecast is wrong; dashed "
-                   "lines mark when it stops being useful. Chaos defeats every forecast eventually.")
+        st.caption("The unseen future unfolding left to right: truth, eqdisc's equation, a neural operator; the dark rows "
+                   "show where each is wrong. Chaos defeats every forecast eventually.")
     with right:
-        v = info.get("verdict") or ag.get("verdict") or {}
-        ui.verdict_chip(v.get("status"))
-        ui.equations(ui.rhs_latex(ag["refit"] if isinstance(ag["refit"], dict) else {"u": ag["refit"]}, pde=True, digits=5), small=True)
-        st.caption("hidden truth: " + ", ".join(f"{x['truth']:.4g} {x['term'].replace('*', '·')}" for x in rows
-                                                 if x["truth"] is not None))
         ui.tiles([
-            {"label": "Agent forecast", "value": f"{vt['eqdisc agent (refit)']:.2f} λ",
-             "delta": f"true PDE {vt['true PDE from noisy state']:.2f}",
-             "help": "Lyapunov times until relative error exceeds 0.5. The true PDE itself cannot do better from a noisy state."},
-            {"label": "FNO forecast", "value": f"{vt['FNO (same noisy data)']:.2f} λ", "delta": "same noisy data",
-             "help": "Fourier neural operator trained on the same noisy window. λ = Lyapunov times."},
-            {"label": "Truth in 90% CI", "value": f"{n_in}/{len(rows)}", "delta": "refitted coefficients"},
+            {"label": "eqdisc forecast", "value": f"{vt['eqdisc agent (refit)']:.2f} λ",
+             "delta": f"true equation: {vt['true PDE from noisy state']:.2f}",
+             "help": "Lyapunov times until the relative error exceeds 0.5."},
+            {"label": "Neural operator", "value": f"{vt['FNO (same noisy data)']:.2f} λ", "delta": "same noisy data"},
+            {"label": "True numbers inside its ± ranges", "value": f"{n_in}/{len(rows)}", "delta": "from section 2"},
             {"label": "Agent cost", "value": f"${info.get('cost_usd') or 0:.2f}",
              "delta": f"{(info.get('wall_s') or 0) / 60:.0f} min" if info.get("wall_s") else None},
         ])
-        tool_chips(info.get("tools"))
-    errs = {lab: a[f"err{i}"] for i, lab in enumerate(info["labels"]) if i > 0}
-    ui.section(2, "Forecast error", "measured in Lyapunov times: how fast chaos destroys any forecast")
-    show(viz.ks_errors(a["t_lyap"], errs), "ks_err")
-    if info.get("uq"):
-        ui.section(3, "How sure are we, and what next?")
-        ui.confidence_panel(info["uq"], "ks", names={"u_xx": "u_xx (anti-diffusion)", "u_xxxx": "u_xxxx (hyper-diffusion)",
-                                                       "u*u_x": "u·u_x (steepening)"})
+        errs = {lab: a[f"err{i}"] for i, lab in enumerate(info["labels"]) if i > 0}
+        ui.label("Forecast error, in Lyapunov times")
+        show(viz.ks_errors(a["t_lyap"], errs), "ks_err")
+    ks_details(info, r, rows)
+
+
+def ks_details(info, r, rows):
     with st.expander("Details & caveats"):
         st.dataframe(pd.DataFrame([{**x, "90% CI": f"[{x['90% CI'][0]:.4g}, {x['90% CI'][1]:.4g}]"} for x in rows]),
                      hide_index=True)
@@ -412,57 +417,51 @@ def page_gs():
     res = info.get("results")
     vr = (res or {}).get("vrmse") or {}
     agent = (res or {}).get("agent")
-    ui.header("🌀 Patterns", "Gray–Scott reaction–diffusion (The Well): two noisy movies in → equation → forecast a new run")
-    ui.section(1, "What it found", "and where each forecast goes wrong")
-    left, right = st.columns([1.15, 1], gap="large")
-    with left:
-        if info.get("has_video") and hero_video("gray_scott"):
-            st.caption(f"Held-out trajectory ('{info['regime']}' regime) vs forecasts from its noisy first frame.")
-        elif "fb_data" in a:
-            show(viz.gs_animation(a["fb_t"], a["fb_data"], a["fb_model"], GS_PENDING), "gs_anim")
-            st.caption("Press ▶. Forecast video appears when the out-of-sample run finishes.")
-    with right:
+    ui.header("🌀 Patterns", "Two noisy movies of a reacting, diffusing pair of chemicals in → their equations out")
+    ui.section(1, "What it found", "from the data alone")
+    c1, c2 = st.columns([1, 1.1], gap="large")
+    with c1:
+        ui.label("The data it was given")
+        st.markdown("<div style='font-size:1.1rem'>Two unnamed fields A, B on a 128 × 128 grid: two runs × 60 frames, "
+                    "5% noise. (Data: The Well, Gray–Scott.)</div>", unsafe_allow_html=True)
+    with c2:
+        ui.label("The equations it found")
         if agent:
-            ui.verdict_chip("VALIDATED")
             ui.equations(ui.rhs_latex(agent["refit"], pde=True, digits=3), small=True)
-        else:
-            ui.verdict_chip("PENDING", "data-only agent run in progress · true law shown")
-            ui.equations([r"\partial_t A = d_A \nabla^2 A - A B^2 + F(1-A)",
-                          r"\partial_t B = d_B \nabla^2 B + A B^2 - (F+k)B"])
-        best = "eqdisc agent (refit)" if "eqdisc agent (refit)" in vr else "weak SINDy (no LLM)"
-        if vr:
-            t = []
-            for lab in (best, "FNO (same noisy data)", "true PDE from noisy frame"):
-                if lab in vr:
-                    t.append({"label": f"{SHORT.get(lab, lab)} VRMSE", "value": f"{vr[lab]['6-12']:.3g}",
-                              "delta": f"steps 13–30: {vr[lab]['13-30']:.3g}", "help": f"{lab}; rollout steps 6–12"})
-            t.append({"label": "Well paper best", "value": "0.29", "delta": "steps 13–30: 7.62",
-                      "help": "CNextU-net in The Well paper, trained on hundreds of trajectories"})
-            ui.tiles(t[:4])
-        else:
-            ui.tiles([{"label": "Training data", "value": "2 movies", "delta": "60 frames, 5% noise"},
-                      {"label": "Test", "value": "held-out", "delta": "unseen trajectory"},
-                      {"label": "Well paper best", "value": "0.29", "delta": "VRMSE, steps 6–12"},
-                      {"label": "Our forecast", "value": "pending", "delta": "run in progress"}])
-        if agent:
             tool_chips(info.get("tools"))
-        else:
-            ui.chips(["2 noisy training movies", "forecast held-out trajectory", "VRMSE as in The Well",
-                      "FNO on same data"], title="protocol")
-    if vr:
-        ui.section(2, "Forecast error", "lower is better; dashed lines: published neural surrogates")
-        show(viz.gs_vrmse(vr), "gs_vrmse")
     if info.get("uq") and not info["uq"].get("error"):
-        ui.section(3, "How sure are we, and what next?")
+        ui.section(2, "How sure are we, and what next?", "computed from the training data only")
         ui.confidence_panel(info["uq"], "gs", names={"A_xx": "diffusion of A (x)", "A_yy": "diffusion of A (y)",
                                                       "B_xx": "diffusion of B (x)", "B_yy": "diffusion of B (y)",
                                                       "A*B**2": "reaction A·B²", "A": "decay of A", "B": "decay of B",
                                                       "1": "feed (constant)"})
-    else:
-        gal = {k[4:]: v for k, v in a.items() if k.startswith("gal_")}
-        if gal:
-            show(viz.gs_gallery(gal, info["regimes"]), "gs_gal")
-            st.caption("Six pattern regimes from one two-term reaction law (only F and k change).")
+    ui.benchmark_section(3)
+    left, right = st.columns([1.15, 1], gap="large")
+    with left:
+        if info.get("has_video") and hero_video("gray_scott"):
+            st.caption("A third run it never saw, forecast from its noisy first frame. Bottom row: where each forecast is wrong.")
+    with right:
+        if agent:
+            ui.verdict_chip("VALIDATED")
+        if vr:
+            best = "eqdisc agent (refit)" if "eqdisc agent (refit)" in vr else "weak SINDy (no LLM)"
+            t = []
+            for lab in (best, "FNO (same noisy data)", "true PDE from noisy frame"):
+                if lab in vr:
+                    t.append({"label": f"{SHORT.get(lab, lab)}: error", "value": f"{vr[lab]['6-12']:.3g}",
+                              "delta": f"later steps: {vr[lab]['13-30']:.3g}", "help": "VRMSE, rollout steps 6–12"})
+            t.append({"label": "Best published neural net", "value": "0.29", "delta": "trained on 100s of runs"})
+            ui.tiles(t[:4])
+            ui.label("Forecast error (lower is better)")
+            show(viz.gs_vrmse(vr), "gs_vrmse")
+        if info.get("uq"):
+            st.markdown("<div class='small'>🔒 Its equations are in fact the true ones, and forecast as well as the true "
+                        "equations do. Section 2 could not know that: with two noisy runs, close rival versions fit "
+                        "equally well, so ‘collect more data’ was the right call.</div>", unsafe_allow_html=True)
+    gs_details(info, agent, vr)
+
+
+def gs_details(info, agent, vr):
     with st.expander("Details & caveats"):
         if agent and agent.get("coefficients"):
             st.dataframe(pd.DataFrame(agent["coefficients"]), hide_index=True)
@@ -499,6 +498,7 @@ def page_home():
     st.markdown("Give it measurements; Claude agents return the governing equation, how sure they are, and what to "
                 "measure next.")
     st.markdown(f"<div class='protocol'>✅ {PROTOCOL}</div>", unsafe_allow_html=True)
+    st.caption("🔒 Card numbers are benchmark scores against the hidden future, which eqdisc never sees.")
     cards = []
     info, _ = load_case("lageos")
     if info:
@@ -518,8 +518,8 @@ def page_home():
             cards.append(("🌍 Orbit with a big bulge (synthetic)", f"{km(ag_)} vs {km(nn_)}",
                           "1-day forecast error: data-only agent vs neural net", "orbit", PAGES[6]))
         else:
-            cards.append(("🌍 Orbit with a big bulge (synthetic)", "✗ not recovered",
-                          f"an honest failure: after 1 day the agent is {km(ag_)} off, the neural net {km(nn_)}",
+            cards.append(("🌍 Orbit with a big bulge (synthetic)", "✗ flags its own law",
+                          f"its checks say ‘not established’; 🔒 rightly: after 1 day it is {km(ag_)} off",
                           "orbit", PAGES[6]))
     info, _ = load_case("ks")
     if info:
