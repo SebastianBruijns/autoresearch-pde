@@ -386,10 +386,10 @@ def _status(a):
     return status, failed
 
 
-SHORT_VERDICT = {"CONFIDENT": ("#15803d", "Very likely the law", "every check passed"),
-                 "CONFIDENT IN PREDICTIONS": ("#0e7490", "Predictions trustworthy", "rival forms predict the same"),
-                 "COLLECT MORE DATA": ("#b45309", "Not sure yet", "rival versions fit equally well"),
-                 "INCONCLUSIVE": ("#b91c1c", "Don't trust this law", "it fails its own checks")}
+SHORT_VERDICT = {"CONFIDENT": ("#15803d", "✓ Very likely the law", "every check passed"),
+                 "CONFIDENT IN PREDICTIONS": ("#0e7490", "✓ Predictions trustworthy", "rival forms predict the same"),
+                 "COLLECT MORE DATA": ("#b45309", "? Not sure yet", "rival versions fit equally well"),
+                 "INCONCLUSIVE": ("#b91c1c", "✕ Don't trust this law", "it fails its own checks")}   # never colour alone
 
 
 def verdict_box(a):
@@ -427,16 +427,23 @@ def precision_fig(a, names=None):
     if not terms:
         return None
     lab = [names.get(t["term"], t["term"]) for t in terms]
+    dup = {x for x in lab if lab.count(x) > 1}   # the same term in two equations gets its equation named
+    lab = [f"{x} (in ∂ₜ{t.get('var', '?')})" if x in dup else x for x, t in zip(lab, terms)]
     pct = [100 * float(t.get("rel_uncertainty") or 0) for t in terms]
-    col = ["#16a34a" if (t.get("significant") and p < 10) else "#d97706" if t.get("significant") else "#dc2626"
-           for t, p in zip(terms, pct)]
+    col = ["#1d1f22" if (t.get("significant") and p < 10) else "#b45309" if t.get("significant") else "#b91c1c"
+           for t, p in zip(terms, pct)]   # ink when well pinned down; status colours only for warnings
     txt = [f"±{p:.2g}%" if p >= 0.01 else f"1 part in {100 / p:,.0f}" for p in pct]
-    fig = go.Figure(go.Bar(x=pct, y=lab, orientation="h", marker_color=col, text=txt,
-                           textposition="outside", textfont=dict(size=16), hovertemplate="%{y}: ±%{x:.3g}%<extra></extra>"))
     dec = _decades(pct)
-    fig.update_layout(height=max(260, 70 + 40 * len(terms)), margin=dict(l=10, r=60, t=10, b=10), font=dict(size=15),
-                      xaxis=dict(type="log", tickvals=dec, ticktext=[f"{v:g}%" for v in dec],
-                                 range=[np.log10(dec[0]), np.log10(dec[-1]) + 0.35]),
+    base = [dec[0]] * len(pct)   # thin stems from the axis to a dot: the value is the dot, not a heavy block
+    fig = go.Figure([go.Bar(x=[p - b for p, b in zip(pct, base)], base=base, y=lab, orientation="h", width=0.08,
+                            marker_color="#d6d6d1", hoverinfo="skip"),
+                     go.Scatter(x=pct, y=lab, mode="markers+text", marker=dict(size=13, color=col), text=txt,
+                                textposition="middle right", textfont=dict(size=15, color="#6b6f76"), cliponaxis=False,
+                                hovertemplate="%{y}: ±%{x:.3g}%<extra></extra>")])
+    fig.update_layout(height=max(260, 70 + 40 * len(terms)), margin=dict(l=10, r=110, t=10, b=10), font=dict(size=15),
+                      xaxis=dict(type="log", tickvals=dec, tickangle=0,
+                                 ticktext=[f"{v:g}%" if v >= 0.01 else f"10<sup>{np.log10(v):.0f}</sup>%" for v in dec],
+                                 range=[np.log10(dec[0]), np.log10(dec[-1]) + 0.9]),
                       yaxis=dict(autorange="reversed"), showlegend=False)
     return fig
 
