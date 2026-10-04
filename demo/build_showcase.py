@@ -345,18 +345,18 @@ def clean_thumbs():
         canvas.paste(im, ((W - w) // 2, (H - h) // 2))
         canvas.resize((560, 315)).save(path, quality=90)
 
-    def earth(ax):
+    def earth(ax, zoom=1.9):
         u_, v_ = np.mgrid[0:2 * np.pi:60j, 0:np.pi:30j]
         ax.plot_surface(np.cos(u_) * np.sin(v_), np.sin(u_) * np.sin(v_), np.cos(v_), color="#2f6db5", alpha=.9,
                         linewidth=0, shade=True)
-        ax.set_box_aspect((1, 1, 1))
+        ax.set_box_aspect((1, 1, 1), zoom=zoom)
         ax.set_axis_off()
 
     z = np.load(OUT / "lageos" / "arrays.npz")
     if "train_orbits" in z.files:
         fig = plt.figure(figsize=(5.6, 3.15))
-        ax = fig.add_subplot(111, projection="3d")
-        earth(ax)
+        ax = fig.add_axes([0, 0, 1, 1], projection="3d")
+        earth(ax, zoom=1.25)
         O = z["train_orbits"]
         for i, o in enumerate(O):
             ax.plot(o[:, 0], o[:, 1], o[:, 2], color=plt.cm.cool(i / len(O)), lw=0.8, alpha=.85)
@@ -366,7 +366,7 @@ def clean_thumbs():
         save(fig, "lageos")
     z = np.load(OUT / "orbit" / "arrays.npz")
     fig = plt.figure(figsize=(5.6, 3.15))
-    ax = fig.add_subplot(111, projection="3d")
+    ax = fig.add_axes([0, 0, 1, 1], projection="3d")
     earth(ax)
     U = z["U_train"]
     ax.plot(U[:, 0], U[:, 1], U[:, 2], color="#eb6834", lw=0.5, alpha=.8)

@@ -343,7 +343,7 @@ CSS3 = """
 .law {font-size: 1.25rem; font-weight: 700; margin: .2rem 0;}
 .home-t {font-size: 3.6rem; font-weight: 900; letter-spacing: -0.035em; line-height: 1.05; margin: 1rem 0 .4rem 0;}
 .home-s {font-size: 1.3rem; opacity: .6; margin-bottom: 2rem;}
-.cardn {font-size: 1.55rem; font-weight: 850; text-align: center; margin: .5rem 0 .2rem 0;}
+.cardn {font-size: 1.12rem; font-weight: 850; text-align: center; margin: .5rem 0 .2rem 0; white-space: nowrap;}
 </style>
 """
 
