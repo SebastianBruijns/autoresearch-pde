@@ -7,7 +7,7 @@
 | Blinded held-out systems recovered exactly, single agent ([protocol](docs/benchmark_v1.md)) | **10 / 12** | 1 / 12 (SINDy) |
 | LAGEOS-1 satellite, 30-day forecast from data alone ([details](docs/honest_oos.md)) | **12 km** | 3,170 km (neural net) |
 | Blinded chaotic KS, valid forecast horizon | **4.48 Lyapunov times** | 0.78 (FNO) |
-| Corrupted data sets that end confidently wrong (dev, [details](docs/evidence.md)) | **0 / 96** | n/a |
+| Corrupted data sets ending confidently wrong, no-LLM pipeline, dev seeds ([details](docs/evidence.md)) | **0 / 96** | — |
 
 The agent never sees the system's name, a description or meaningful variable names. It gets data only.
 
@@ -16,7 +16,6 @@ eqdisc-discover examples/data/KS_data.mat
 ```
 ```
 [1/7] evidence checks on the data
-      all data checks passed
 [2/7] intuition pre-analysis on KS_data
       [high]   the spatial mean of u is conserved: the right-hand side is a total derivative (flux form) ...
 [3/7] 3 parallel branches: ['structure-first', 'symbolic', 'sparse-regression']
@@ -28,6 +27,7 @@ eqdisc-discover examples/data/KS_data.mat
 CONFIDENT: We are confident this is your equation.        u_t = -1.00 u u_x - 1.00 u_xx - 1.00 u_xxxx
 report: runs/discover_KS_data/report.html  (cost $1.35, 451 s)
 ```
+<sub>Stages as in the current pipeline; verdict, cost and time from an earlier run on the same file.</sub>
 
 ---
 
@@ -49,7 +49,7 @@ flowchart LR
 ```
 
 - **Hypothesise.** A non-LLM pre-analysis reads the data's structure (conservation laws, symmetries, the dispersion relation, fixed points) and seeds three Claude agents. Each agent follows a different research strategy.
-- **Experiment.** The agents run real numerics through a shared toolbox ([docs/toolbox.md](docs/toolbox.md)): weak-form and ensemble SINDy, PySR, skeleton fits, forward-simulation fits, coordinate transforms, symmetry search, and their own analysis code and plots, run in a sandbox. The LLM never does the arithmetic.
+- **Experiment.** The agents run real numerics through a shared toolbox ([docs/toolbox.md](docs/toolbox.md)): weak-form and ensemble SINDy, PySR, skeleton fits, forward-simulation fits, coordinate transforms, symmetry search, and their own analysis code (sandboxed) and plots. The LLM never does the arithmetic.
 - **Select.** A statistical tournament picks the winner, not an LLM vote.
 - **Falsify.** A red-team agent attacks the winner, and a challenger is adopted only if it wins the same tournament.
 - **Diagnose and revise.** Deterministic checks ask two questions: does the law hold on every slice of the data, and is only noise left over? A failed check proposes a concrete fix, such as a forcing term, a source or a missing nonlinearity. The fix is kept only if it wins.
@@ -58,7 +58,7 @@ flowchart LR
 
 ## What makes it different
 
-- **Competition, not consensus.** Parallel agents follow different strategies. A held-out statistical tournament decides between them, and an adversary has to win that same tournament to replace the incumbent.
+- **Competition, not consensus.** Parallel agents follow different strategies. A cross-validated statistical tournament decides between them, and an adversary has to win that same tournament to replace the incumbent.
 - **It knows when not to trust itself.** Model checks can veto a confident verdict, and the checks never call an LLM:
   - coefficients must agree across runs, early vs late time, regions of space and amplitude;
   - the residual must be indistinguishable from noise.
@@ -85,7 +85,7 @@ flowchart LR
 - **Blinded Kuramoto–Sivashinsky.** Valid for 4.48 Lyapunov times; the true PDE gives 4.53 and an FNO 0.78. Weak SINDy alone matches the agent here.
 - **Gray–Scott (The Well, 5% noise).** Exact structure. VRMSE over steps 6–12 is 0.068, against 0.45 for an FNO on the same data.
 
-**Corrupted data** ([docs/evidence.md](docs/evidence.md)). 4 PDEs × 8 corruptions: outliers, gaps, censored tails, hidden forcing, hidden sources, run-to-run variation, extreme-value terms.
+**Corrupted data** ([docs/evidence.md](docs/evidence.md)). 4 PDEs × 8 conditions: clean, outliers, gaps, censored tails, hidden forcing, hidden sources, run-to-run variation, extreme-value terms.
 - The no-LLM pipeline is never confidently wrong: 0 of 96 dev cases, with 64 recovered exactly.
 - The revise step turns hidden-forcing cases from 0/12 to 6/12 recovered, and hidden-source cases from 0/12 to 4/12.
 - These are calibration seeds. Held-out seeds are next.
@@ -110,7 +110,7 @@ See `demo/README.md` for more.
 
 - **Cost.** A full run takes $1–3 and 2–8 minutes. Each agent branch costs about $0.3–0.5. For a cheap pass, use `--branches 2 --no-adversary`.
 - **Cheap checks.** Every check, the grade and the verdict are deterministic numpy/scipy, with no tokens. They add about 1% to an assessment, and model checks are cached per model.
-- **No wasted calls.** Identical repeated tool calls are blocked. The critic is skipped when only 2 or fewer tool calls remain in the budget.
+- **No wasted calls.** Identical repeated tool calls are blocked, and the critic stands aside when the tool budget is nearly spent.
 
 ## Run it
 
