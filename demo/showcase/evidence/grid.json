@@ -19,29 +19,26 @@
    },
    "findings": [
     {
-     "id": "outliers",
+     "id": "glitches",
      "stage": "data",
-     "statistic": 0.0077390491452991456,
-     "threshold": 0.0002,
+     "statistic": 0.008440868573797678,
+     "threshold": 0.0,
      "fired": true,
-     "severity": "warn",
+     "severity": "info",
      "response": "repair",
      "scope": null,
-     "message": "0.77% of samples are isolated spikes (|z| > 6 against their neighbours; Gaussian noise would give 2e-09), worst in u (0.77%): despike before fitting.",
+     "message": "1303 isolated single-sample glitch(es) (0.84% of samples) clipped to 3 noise sd; the cheap fit finds the same terms with and without clipping, so they do not affect the result.",
      "resolved": true,
-     "repair": "despike",
+     "repair": "clip_glitches",
      "details": {
-      "n_flagged": 1159,
-      "n_tested": 149760,
-      "excess_ratio": 3922129.5666050334
+      "fraction": 0.008440868573797678
      }
     }
    ],
    "repairs": [
     {
-     "tool": "despike",
-     "ok": true,
-     "note": "despiked 1472 point(s)"
+     "tool": "clip_glitches",
+     "note": "clipped 1303 sample(s)"
     }
    ]
   },
@@ -62,8 +59,8 @@
      "severity": "warn",
      "response": "repair",
      "scope": null,
-     "message": "10.0% of samples are missing (NaN): in 9 time window(s) (traj 0 t=[0.16, 0.28]; traj 0 t=[1.32, 1.44]; traj 0 t=[2.64, 2.74]; traj 1 t=[0.54, 0.66] and 5 more). Fit on NaN-free segments (split_at_gaps keeps 59% of the time rows in 6 windows of 59 steps) or with the weak form; no imputation.",
-     "resolved": true,
+     "message": "10.0% of samples are missing (NaN), touching 10% of time rows (traj 0 t=[0.16, 0.28]; traj 0 t=[1.32, 1.44]; traj 0 t=[2.64, 2.74]; traj 1 t=[0.54, 0.66] ...). The record is cut at those rows into NaN-free windows; no imputation. split at gaps: kept 85% of the NaN-free time rows in 17 windows.",
+     "resolved": false,
      "repair": "split_at_gaps",
      "details": {
       "nan_fraction": 0.09950248756218906
@@ -73,8 +70,7 @@
    "repairs": [
     {
      "tool": "split_at_gaps",
-     "ok": true,
-     "note": "split at gaps (detector tool)"
+     "note": "split at gaps: kept 85% of the NaN-free time rows in 17 windows"
     }
    ]
   },
@@ -95,8 +91,8 @@
      "severity": "warn",
      "response": "repair",
      "scope": null,
-     "message": "19.8% of samples are missing (NaN): NaNs touch 78% of time rows (78% only partly missing, i.e. holes in space). Fit on NaN-free segments (split_at_gaps keeps 15% of the time rows in 1 windows of 93 steps) or with the weak form; no imputation.",
-     "resolved": true,
+     "message": "19.8% of samples are missing (NaN), touching 78% of time rows (traj 0 t=[0.02, 3.6]; traj 1 t=[0.02, 2.14]; traj 2 t=[0.02, 3.7]). The record is cut at those rows into NaN-free windows; no imputation. split at gaps: kept 76% of the NaN-free time rows in 5 windows.",
+     "resolved": false,
      "repair": "split_at_gaps",
      "details": {
       "nan_fraction": 0.1978713204809287
@@ -118,7 +114,7 @@
       ]
      },
      "message": "Missing data are concentrated where |u| is large: observed samples next to the 9 gaps sit at percentile 0.97 of the observed values on average (z = 5.5), so high-amplitude behaviour is under-sampled (censored tail); trust the model only for u in [-0.584, 0.531] and collect data at larger amplitudes.",
-     "resolved": false,
+     "resolved": null,
      "repair": null,
      "details": {
       "variable": "u",
@@ -130,8 +126,7 @@
    "repairs": [
     {
      "tool": "split_at_gaps",
-     "ok": true,
-     "note": "split at gaps (detector tool)"
+     "note": "split at gaps: kept 76% of the NaN-free time rows in 5 windows"
     }
    ]
   },
@@ -395,7 +390,7 @@
    },
    "outliers": {
     "n": 36,
-    "hit": 36,
+    "hit": 0,
     "errors": 0
    },
    "gaps_random": {
@@ -430,5 +425,5 @@
    }
   }
  },
- "built": "2026-10-04 09:43"
+ "built": "2026-10-04 12:43"
 }

@@ -29,7 +29,7 @@ Categories: right+confident, right+cautious, wrong+flagged, wrong+confident (hea
     python -m eqdisc.bench_evidence --arm B --split dev --seeds 0 1 2 [--systems burgers] [--corruptions clean]
     python -m eqdisc.bench_evidence --arm A --split report --seeds 10 --workers 4
     python -m eqdisc.bench_evidence --arm C --split report --seeds 10      # needs arm A run dirs
-    python -m eqdisc.bench_evidence --table [--md docs/evidence_results_table.md]
+    python -m eqdisc.bench_evidence --table [--md runs/evidence_bench/table.md]
 """
 import argparse
 import hashlib
