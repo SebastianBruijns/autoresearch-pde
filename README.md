@@ -1,7 +1,7 @@
-<p align="center"><img src="demo/brand/logo-leibniz.svg" alt="Leibniz" height="80"></p>
+<p align="center"><img src="demo/brand/logo-lorenz.svg" alt="Lorenz" height="80"></p>
 
 <p align="center"><b>An AI research lab that finds the equations behind your data, and tells you when not to trust them.</b><br>
-<sub>Project: Leibniz. Python package and command line: <code>eqdisc</code>.</sub></p>
+<sub>Project: Lorenz. Python package and command line: <code>eqdisc</code>.</sub></p>
 
 ## In 30 seconds
 
@@ -15,11 +15,11 @@
 Most of science and engineering runs on differential equations: orbits, weather, combustion, epidemics, batteries, chemistry. The equation is the most useful thing you can know about a system. It forecasts beyond the data it came from, it extrapolates to conditions nobody measured, and a person can read it, check it and build on it.
 
 For many systems nobody knows the equation. There are only measurements. Today there are three ways to get from measurements to predictions, and each has a gap:
-- **Neural surrogates** (neural nets, Fourier neural operators) fit the data but are black boxes and drift once they leave it. On the LAGEOS satellite, a neural net is 3,170 km off after 30 days. The equation Leibniz found is 12 km off.
+- **Neural surrogates** (neural nets, Fourier neural operators) fit the data but are black boxes and drift once they leave it. On the LAGEOS satellite, a neural net is 3,170 km off after 30 days. The equation Lorenz found is 12 km off.
 - **Equation-discovery tools** (SINDy, PySR) return readable equations, but an expert must pick the candidate terms, derivatives, noise handling and thresholds. They return a wrong equation as confidently as a right one. Plain SINDy recovers 1 of 12 blinded held-out systems.
 - **Asking an LLM** mostly recites textbook equations it has memorised. That is recall, not discovery, which is why the held-out benchmark is blinded.
 
-## Where Leibniz innovates
+## Where Lorenz innovates
 
 1. **It automates the whole scientific loop, not just the fit.** Hypothesise, experiment, select, falsify, diagnose, revise, and decide what to measure next, end to end from raw data. A single agent recovers 10 of 12 blinded systems, against 1 of 12 for SINDy.
 2. **It knows when not to trust itself.** Deterministic checks ask whether the law holds on every slice of the data and whether only noise is left over. A failed check vetoes a confident verdict and proposes a fix, which must win the tournament to be kept. On corrupted data the no-LLM pipeline is never confidently wrong (0 of 96 dev cases).
@@ -28,7 +28,7 @@ For many systems nobody knows the equation. There are only measurements. Today t
 
 ## Headline results
 
-|  | Leibniz | baseline |
+|  | Lorenz | baseline |
 |---|---|---|
 | Blinded held-out systems recovered exactly, single agent ([protocol](docs/benchmark_v1.md)) | **10 / 12** | 1 / 12 (SINDy) |
 | LAGEOS-1 satellite, 30-day forecast from data alone ([details](docs/honest_oos.md)) | **12 km** | 3,170 km (neural net) |
@@ -189,7 +189,7 @@ Static laws y = f(x) and the notebooks are covered in [docs/sr_mode.md](docs/sr_
 
 ## Next
 
-- Ablations against Claude alone: Claude with a code sandbox vs Leibniz vs Leibniz with evidence checks, on held-out seeds.
+- Ablations against Claude alone: Claude with a code sandbox vs Lorenz vs Lorenz with evidence checks, on held-out seeds.
 - Revision families that don't assume a shape: multi-frequency forcing, spline sources.
 - A partition test that decides whether a large coherent event is real dynamics or corrupt data.
 - Hidden variables and delay embeddings.
