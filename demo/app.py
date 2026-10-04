@@ -24,6 +24,7 @@ for p in (str(REPO), str(DEMO)):
 st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon=":material/function:", layout="wide",
                    initial_sidebar_state="collapsed")
 
+import evidence  # noqa: E402
 import live  # noqa: E402
 import ui  # noqa: E402
 import viz  # noqa: E402
@@ -55,7 +56,7 @@ def tool_chips(tools, title="what the agent did (from its log)"):
         ui.chips([f"{k} ×{n}" if n > 1 else k for k, n in counts.items()], title=f"{title} · {len(tools)} tool calls")
 J2_ACCEPTED = 1.08263e-3
 PAGES = ["Home", "🛰️ LAGEOS-1 satellite", "🔥 Chaos (KS)", "🌀 Gray–Scott patterns", "⚡ Run on your data",
-         "⚙️ How it works", "🌍 Orbit with a big bulge"]
+         "⚙️ How it works", "🌍 Orbit with a big bulge", "🔎 When not to trust it"]
 
 
 @st.cache_data(show_spinner=False)
@@ -541,6 +542,9 @@ def page_home():
             sub = (f"VRMSE 6–12: FNO on same data {fno['6-12']:.2g}; The Well paper's best 0.29" if fno
                    else "forecast a held-out trajectory")
         cards.append(("🌀 Gray–Scott (The Well)", num, sub, "gray_scott", PAGES[3]))
+    ev = evidence.home_card()
+    if ev:
+        cards.append(("🔎 When not to trust it", ev[0], ev[1], "evidence", PAGES[7]))
     cols = st.columns(len(cards) or 1, gap="medium")
     for c, (name, num, sub, case, page) in zip(cols, cards):
         with c, st.container(border=True):
@@ -1438,6 +1442,8 @@ def main():
         "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", icon=":material/texture:",
                       url_path="reaction-diffusion"),
         "hidden": st.Page(v3_hidden, title="Hidden Oscillator", icon=":material/graphic_eq:", url_path="hidden-oscillator"),
+        "evidence": st.Page(evidence.page, title="When Not to Trust It", icon=":material/gpp_maybe:",
+                            url_path="when-not-to-trust-it"),
         "yours": st.Page(v3_yourdata, title="Your Data", icon=":material/upload_file:", url_path="your-data"),
 
         "home": st.Page(v3_home, title="Home", default=True),
@@ -1446,6 +1452,8 @@ def main():
         "chaos": st.Page(v3_chaos, title="Blind Chaos (KS)", url_path="blind-chaos"),
         "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", url_path="reaction-diffusion"),
         "lorenz": st.Page(v3_lorenz, title="Lorenz (In vs Out of Sample)", icon=":material/all_inclusive:", url_path="lorenz"),
+        "evidence": st.Page(evidence.page, title="When Not to Trust It", icon=":material/gpp_maybe:",
+                            url_path="when-not-to-trust-it"),
         "yours": st.Page(v3_yourdata, title="Your Data", url_path="your-data"),
     })
     nav = st.navigation(list(V3_PAGES.values()), position="top")

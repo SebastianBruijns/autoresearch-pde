@@ -222,9 +222,15 @@ def _jsonable(o):
 
 
 class Session:
-    def __init__(self, dataset, experiments=0, seed=123, workdir=None, critic=None, human=None, human_rounds=3):
+    def __init__(self, dataset, experiments=0, seed=123, workdir=None, critic=None, human=None, human_rounds=3,
+                 data_findings=None):
+        """data_findings: findings of a data audit already applied to `dataset` (discover); None = audit here."""
         self.dataset = Path(dataset)
         self.meta, self.data = load(dataset)
+        self.data_findings = data_findings
+        if data_findings is None:      # standalone session: split at NaN, clip immaterial glitches
+            from .audit.repair import audit_and_repair
+            self.meta, self.data, self.data_findings, _ = audit_and_repair(self.meta, self.data)
         tp = self.dataset / "hidden" / "truth.json"
         self.truth = json.loads(tp.read_text()) if tp.exists() else None   # None for real data
         self.workdir = Path(workdir or "runs/_work")
@@ -245,6 +251,9 @@ class Session:
         self.log = []
         self.coords = {}          # name -> coords dict from coordinates.make_coords
         self.active = "original"
+
+    def assess(self, rhs, alternatives=None):
+        return assess(self.meta, self.data, rhs, alternatives, data_findings=self.data_findings)
 
     def view(self):
         """(meta, data, coords) for the active coordinate system (recomputed so experiments propagate)."""
@@ -397,7 +406,7 @@ class Session:
         if name == "assess_model":
             rhs, mapped = self.to_original(args["rhs"])
             alts = {k: self.to_original(v)[0] for k, v in (args.get("alternatives") or {}).items()}
-            a = assess(self.meta, self.data, rhs, alts)
+            a = self.assess(rhs, alts)
             self.assessment = a
             return {**a, "brief": brief_markdown(a)}
         if name == "ask_human":
@@ -446,7 +455,7 @@ class Session:
                                            "model with a rationale saying why the critic is wrong."}
             if self.human is not None and self.human_rounds > 0:
                 self.human_rounds -= 1
-                a = assess(self.meta, self.data, rhs)
+                a = self.assess(rhs)
                 self.assessment = a
                 brief = (f"PROPOSED MODEL: {json.dumps(rhs)}\nRationale: {args.get('rationale', '')}\n\n"
                          + brief_markdown(a) + "\n\nReply 'accept', or give feedback for the agent "
@@ -578,7 +587,7 @@ def _tool_result_content(out_s, images):
 
 def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", max_tools=25, experiments=0,
               out_dir=None, verbose=True, client=None, critic=True, learn=False, use_memory=True, report=True,
-              judge_llm=True, human=None, context=None, final_assessment=True, on_event=None, tag=""):
+              judge_llm=True, human=None, context=None, final_assessment=True, on_event=None, tag="", data_findings=None):
     """Run one discovery session. Returns {"submitted", "hidden_eval", "usage", "out_dir", ...}.
     `dataset` is a dataset directory, or a raw data file (npz/mat/csv/h5...) that is ingested first."""
     client = client or make_client()
@@ -592,7 +601,7 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
     out_dir = Path(out_dir or f"runs/agent_{dataset.name}_{time.strftime('%H%M%S')}")
     out_dir.mkdir(parents=True, exist_ok=True)
     sess = Session(dataset, experiments, workdir=out_dir / "work",
-                   critic=make_critic(client, model, usage) if critic else None, human=human)
+                   critic=make_critic(client, model, usage) if critic else None, human=human, data_findings=data_findings)
     playbook = playbook if playbook is not None else PLAYBOOK.read_text()
     lessons = mem.retrieve(sess.meta, tb.diagnose(sess.meta, sess.data)) if use_memory else []
     lessons_txt = ("Lessons from previous sessions (use judgement; they may not apply):\n"
@@ -691,7 +700,7 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
     if sess.submitted and final_assessment:
         try:
             a = sess.assessment if (sess.assessment and sess.assessment.get("model") == sess.submitted["rhs"]) \
-                else assess(sess.meta, sess.data, sess.submitted["rhs"])
+                else sess.assess(sess.submitted["rhs"])
             result["assessment"] = a
             result["brief"] = brief_markdown(a)
         except Exception as e:  # noqa: BLE001

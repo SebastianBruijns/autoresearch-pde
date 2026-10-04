@@ -30,12 +30,30 @@ def _coef_close(a, b, tol):
     return len(fa) == len(fb) and all(abs(x - y) <= tol * max(abs(x), abs(y), 1e-12) for x, y in zip(fa, fb))
 
 
+def _terms(e):
+    """{monomial: coefficient} of an expanded expression, or None if a coefficient is not a number."""
+    out = {}
+    for t in sp.Add.make_args(sp.expand(e)):
+        k, m = t.as_coeff_Mul()
+        if not k.is_number:
+            return None
+        out[m] = out.get(m, 0.0) + float(k)
+    return out
+
+
 def sympy_check(t_str, c_str, names, tol=0.05):
     t = sp.nsimplify(parse(t_str, names), rational=False)
     c = parse(c_str, names)
     try:
         if sp.simplify(sp.expand(t - c)) == 0:
             return True, "exact"
+    except Exception:  # noqa: BLE001
+        pass
+    try:     # sums of monomials (the usual case): same terms, each coefficient within tol
+        tt, ct = _terms(t), _terms(c)
+        if tt is not None and ct is not None and tt.keys() == ct.keys() and all(
+                abs(tt[m] - ct[m]) <= tol * max(abs(tt[m]), abs(ct[m]), 1e-12) for m in tt):
+            return True, "terms+coefficients"
     except Exception:  # noqa: BLE001
         pass
     try:

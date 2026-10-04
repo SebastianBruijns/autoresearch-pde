@@ -1,0 +1,429 @@
+{
+ "cases": {
+  "clean": {
+   "path": "datasets/corrupt/report/case_aacea33c",
+   "system": "burgers",
+   "seed": 10,
+   "truth": {
+    "u": "-u*u_x + 0.05*u_xx"
+   },
+   "findings": [],
+   "repairs": []
+  },
+  "outliers": {
+   "path": "datasets/corrupt/report/case_9be62c36",
+   "system": "burgers",
+   "seed": 10,
+   "truth": {
+    "u": "-u*u_x + 0.05*u_xx"
+   },
+   "findings": [
+    {
+     "id": "glitches",
+     "stage": "data",
+     "statistic": 0.008440868573797678,
+     "threshold": 0.0,
+     "fired": true,
+     "severity": "info",
+     "response": "repair",
+     "scope": null,
+     "message": "1303 isolated single-sample glitch(es) (0.84% of samples) clipped to 3 noise sd; the cheap fit finds the same terms with and without clipping, so they do not affect the result.",
+     "resolved": true,
+     "repair": "clip_glitches",
+     "details": {
+      "fraction": 0.008440868573797678
+     }
+    }
+   ],
+   "repairs": [
+    {
+     "tool": "clip_glitches",
+     "note": "clipped 1303 sample(s)"
+    }
+   ]
+  },
+  "gaps_random": {
+   "path": "datasets/corrupt/report/case_0a18cc9f",
+   "system": "burgers",
+   "seed": 10,
+   "truth": {
+    "u": "-u*u_x + 0.05*u_xx"
+   },
+   "findings": [
+    {
+     "id": "gaps",
+     "stage": "data",
+     "statistic": 0.09950248756218906,
+     "threshold": 0.0,
+     "fired": true,
+     "severity": "warn",
+     "response": "repair",
+     "scope": null,
+     "message": "10.0% of samples are missing (NaN), touching 10% of time rows (traj 0 t=[0.16, 0.28]; traj 0 t=[1.32, 1.44]; traj 0 t=[2.64, 2.74]; traj 1 t=[0.54, 0.66] ...). The record is cut at those rows into NaN-free windows; no imputation. split at gaps: kept 85% of the NaN-free time rows in 17 windows.",
+     "resolved": false,
+     "repair": "split_at_gaps",
+     "details": {
+      "nan_fraction": 0.09950248756218906
+     }
+    }
+   ],
+   "repairs": [
+    {
+     "tool": "split_at_gaps",
+     "note": "split at gaps: kept 85% of the NaN-free time rows in 17 windows"
+    }
+   ]
+  },
+  "gaps_state": {
+   "path": "datasets/corrupt/report/case_703c6904",
+   "system": "burgers",
+   "seed": 10,
+   "truth": {
+    "u": "-u*u_x + 0.05*u_xx"
+   },
+   "findings": [
+    {
+     "id": "gaps",
+     "stage": "data",
+     "statistic": 0.1978713204809287,
+     "threshold": 0.0,
+     "fired": true,
+     "severity": "warn",
+     "response": "repair",
+     "scope": null,
+     "message": "19.8% of samples are missing (NaN), touching 78% of time rows (traj 0 t=[0.02, 3.6]; traj 1 t=[0.02, 2.14]; traj 2 t=[0.02, 3.7]). The record is cut at those rows into NaN-free windows; no imputation. split at gaps: kept 76% of the NaN-free time rows in 5 windows.",
+     "resolved": false,
+     "repair": "split_at_gaps",
+     "details": {
+      "nan_fraction": 0.1978713204809287
+     }
+    },
+    {
+     "id": "gaps_state_dependent",
+     "stage": "data",
+     "statistic": 5.49719881690816,
+     "threshold": 3.0,
+     "fired": true,
+     "severity": "critical",
+     "response": "scope",
+     "scope": {
+      "variable": "u",
+      "range": [
+       -0.584007817135958,
+       0.5306479799586419
+      ]
+     },
+     "message": "Missing data are concentrated where |u| is large: observed samples next to the 9 gaps sit at percentile 0.97 of the observed values on average (z = 5.5), so high-amplitude behaviour is under-sampled (censored tail); trust the model only for u in [-0.584, 0.531] and collect data at larger amplitudes.",
+     "resolved": null,
+     "repair": null,
+     "details": {
+      "variable": "u",
+      "z": 5.49719881690816,
+      "mean_edge_percentile": 0.9749908027687203
+     }
+    }
+   ],
+   "repairs": [
+    {
+     "tool": "split_at_gaps",
+     "note": "split at gaps: kept 76% of the NaN-free time rows in 5 windows"
+    }
+   ]
+  },
+  "forcing_time": {
+   "path": "datasets/corrupt/report/case_8fe4416b",
+   "system": "burgers",
+   "seed": 10,
+   "truth": {
+    "u": "-u*u_x + 0.05*u_xx"
+   },
+   "findings": [
+    {
+     "id": "residual_time_only",
+     "stage": "model",
+     "statistic": 0.7424618238220304,
+     "threshold": 0.06,
+     "fired": true,
+     "severity": "critical",
+     "response": "widen",
+     "scope": null,
+     "message": "residual follows a function of time only: unmodelled external forcing or drift",
+     "resolved": null,
+     "repair": null,
+     "details": {
+      "variable": "u"
+     }
+    },
+    {
+     "id": "residual_white",
+     "stage": "model",
+     "statistic": 22.304925737577598,
+     "threshold": 1.5,
+     "fired": true,
+     "severity": "warn",
+     "response": "widen",
+     "scope": null,
+     "message": "residual error is 22.3x the noise floor: systematic misfit remains",
+     "resolved": null,
+     "repair": null,
+     "details": {}
+    }
+   ],
+   "repairs": []
+  },
+  "source_space": {
+   "path": "datasets/corrupt/report/case_7c1c6177",
+   "system": "burgers",
+   "seed": 10,
+   "truth": {
+    "u": "-u*u_x + 0.05*u_xx"
+   },
+   "findings": [
+    {
+     "id": "slice_trajectory",
+     "stage": "model",
+     "statistic": 0.8443472144668697,
+     "threshold": 0.75,
+     "fired": true,
+     "severity": "warn",
+     "response": "repair",
+     "scope": null,
+     "message": "coefficients differ between runs: a hidden parameter varies between trajectories (inconsistent across 3 slices: u:u*u_x; I2 up to 0.84).",
+     "resolved": null,
+     "repair": null,
+     "details": {
+      "inconsistent_coefficients": [
+       "u:u*u_x"
+      ]
+     }
+    },
+    {
+     "id": "slice_space",
+     "stage": "model",
+     "statistic": 0.9531362035552305,
+     "threshold": 0.75,
+     "fired": true,
+     "severity": "warn",
+     "response": "widen",
+     "scope": null,
+     "message": "coefficients depend on position, or a boundary artefact (inconsistent across 2 slices: u:u*u_x; I2 up to 0.95).",
+     "resolved": null,
+     "repair": null,
+     "details": {
+      "inconsistent_coefficients": [
+       "u:u*u_x"
+      ]
+     }
+    },
+    {
+     "id": "residual_space_only",
+     "stage": "model",
+     "statistic": 0.7025319064146801,
+     "threshold": 0.08,
+     "fired": true,
+     "severity": "critical",
+     "response": "widen",
+     "scope": null,
+     "message": "residual follows a function of position only (in du/dt): spatial source term or uneven medium",
+     "resolved": null,
+     "repair": null,
+     "details": {
+      "variable": "u"
+     }
+    },
+    {
+     "id": "residual_white",
+     "stage": "model",
+     "statistic": 21.796065556961768,
+     "threshold": 1.5,
+     "fired": true,
+     "severity": "warn",
+     "response": "widen",
+     "scope": null,
+     "message": "residual error is 21.8x the noise floor: systematic misfit remains",
+     "resolved": null,
+     "repair": null,
+     "details": {}
+    }
+   ],
+   "repairs": []
+  },
+  "traj_coeffs": {
+   "path": "datasets/corrupt/report/case_cd33823b",
+   "system": "burgers",
+   "seed": 10,
+   "truth": {
+    "u": "-u*u_x + 0.05*u_xx"
+   },
+   "findings": [
+    {
+     "id": "slice_trajectory",
+     "stage": "model",
+     "statistic": 0.9999461613495002,
+     "threshold": 0.75,
+     "fired": true,
+     "severity": "warn",
+     "response": "repair",
+     "scope": null,
+     "message": "coefficients differ between runs: a hidden parameter varies between trajectories (inconsistent across 3 slices: u:u_xx, u:u*u_x; I2 up to 1.00).",
+     "resolved": null,
+     "repair": null,
+     "details": {
+      "inconsistent_coefficients": [
+       "u:u_xx",
+       "u:u*u_x"
+      ]
+     }
+    },
+    {
+     "id": "slice_space",
+     "stage": "model",
+     "statistic": 0.8771192456934994,
+     "threshold": 0.75,
+     "fired": true,
+     "severity": "warn",
+     "response": "widen",
+     "scope": null,
+     "message": "coefficients depend on position, or a boundary artefact (inconsistent across 2 slices: u:u_xx; I2 up to 0.88).",
+     "resolved": null,
+     "repair": null,
+     "details": {
+      "inconsistent_coefficients": [
+       "u:u_xx"
+      ]
+     }
+    },
+    {
+     "id": "residual_white",
+     "stage": "model",
+     "statistic": 6.3278574319040395,
+     "threshold": 1.5,
+     "fired": true,
+     "severity": "warn",
+     "response": "widen",
+     "scope": null,
+     "message": "residual error is 6.3x the noise floor: systematic misfit remains",
+     "resolved": null,
+     "repair": null,
+     "details": {}
+    }
+   ],
+   "repairs": []
+  },
+  "amp_term": {
+   "path": "datasets/corrupt/report/case_c40f28a3",
+   "system": "burgers",
+   "seed": 10,
+   "truth": {
+    "u": "-u*u_x + 0.05*u_xx"
+   },
+   "findings": [
+    {
+     "id": "slice_time",
+     "stage": "model",
+     "statistic": 0.890222728534509,
+     "threshold": 0.75,
+     "fired": true,
+     "severity": "warn",
+     "response": "widen",
+     "scope": null,
+     "message": "coefficients drift over time: forcing, drift or a missing variable (inconsistent across 2 slices: u:u_xx; I2 up to 0.89).",
+     "resolved": null,
+     "repair": null,
+     "details": {
+      "inconsistent_coefficients": [
+       "u:u_xx"
+      ]
+     }
+    },
+    {
+     "id": "residual_amplitude",
+     "stage": "model",
+     "statistic": 12.619825724595279,
+     "threshold": 2.5,
+     "fired": true,
+     "severity": "warn",
+     "response": "scope",
+     "scope": {
+      "variable": "u",
+      "range": [
+       0.0003113,
+       0.4324
+      ]
+     },
+     "message": "residual grows at large |u| (top amplitude decile 12.6x further above the noise floor than the median deciles): the model misses behaviour at extreme amplitudes; trust it only for u in [0.0003113, 0.4324]",
+     "resolved": null,
+     "repair": null,
+     "details": {
+      "variable": "u"
+     }
+    },
+    {
+     "id": "residual_white",
+     "stage": "model",
+     "statistic": 15.635976299720772,
+     "threshold": 1.5,
+     "fired": true,
+     "severity": "warn",
+     "response": "widen",
+     "scope": null,
+     "message": "residual error is 15.6x the noise floor: systematic misfit remains",
+     "resolved": null,
+     "repair": null,
+     "details": {}
+    }
+   ],
+   "repairs": []
+  }
+ },
+ "rates": {
+  "splits": [
+   "blind",
+   "dev",
+   "report"
+  ],
+  "per_corruption": {
+   "clean": {
+    "n": 36,
+    "hit": 0,
+    "errors": 0
+   },
+   "outliers": {
+    "n": 36,
+    "hit": 0,
+    "errors": 0
+   },
+   "gaps_random": {
+    "n": 36,
+    "hit": 36,
+    "errors": 0
+   },
+   "gaps_state": {
+    "n": 36,
+    "hit": 36,
+    "errors": 0
+   },
+   "forcing_time": {
+    "n": 36,
+    "hit": 36,
+    "errors": 0
+   },
+   "source_space": {
+    "n": 36,
+    "hit": 36,
+    "errors": 0
+   },
+   "traj_coeffs": {
+    "n": 36,
+    "hit": 36,
+    "errors": 0
+   },
+   "amp_term": {
+    "n": 36,
+    "hit": 36,
+    "errors": 0
+   }
+  }
+ },
+ "built": "2026-10-04 12:43"
+}

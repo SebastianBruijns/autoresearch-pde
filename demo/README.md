@@ -32,6 +32,37 @@ PYTHONPATH=. python demo/build_showcase.py lageos     # one case
 The experiments themselves are in `eqdisc/oos.py` (`lageos_case`, `orbit_case`, `ks_case`, `gs_case`); videos are
 re-rendered from saved forecasts with `lageos_video`, `spacetime_video`, `gs_video`.
 
+## 🔎 When not to trust it (evidence layer)
+One screen, built from `demo/showcase/evidence/` (no computation at view time):
+1. **Same data, two laws.** The Challenge1 orbit (3 days, 1% noise). Coefficients refitted on the closest, middle and
+   farthest third of the orbit: the true law's line up, the agent's submitted polynomial drifts. Under each, the
+   verdict eqdisc now gives (`assess.assess` → `insights.verdict`).
+2. **Seven ways data goes wrong.** One Burgers case per corruption type (reporting seed), checked against the true base
+   equation, with what fired and the response (repaired / widened / scoped). Detection rates over all calibration
+   splits come from `runs/calib/{dev,report,blind}.json`.
+3. **Scoreboard.** Confidently-wrong runs per benchmark arm, from `runs/evidence_bench/outcomes.jsonl`; shows
+   "results pending" until that file exists.
+
+```bash
+export PYTHONPATH=$PWD
+.venv/bin/python demo/build_evidence.py              # everything (the orbit part runs the full assessment: minutes)
+.venv/bin/python demo/build_evidence.py scoreboard   # refresh only the scoreboard once the benchmark finishes
+```
+Talk track (40 s): read the principle line; point at the two orbit panels ("same data; the wrong law's coefficients
+change with altitude, so it is refused"); sweep the grid ("each damage type is caught, clean data raise no alarm");
+end on the red segment of the scoreboard.
+
+## Files
+- `app.py`: the pages.
+- `ui.py`: verdict chip, tiles, chips and the LaTeX helpers.
+- `viz.py`: the one chart per case.
+- `live.py`: background jobs, the real backends (`orchestrate.discover`, `sr.solve`) and the scripted rehearsal backends.
+- `evidence.py` / `build_evidence.py`: the evidence-layer page and its precomputed artifacts.
+- `build_showcase.py`: copies the artifacts into `showcase/`, makes thumbnails and the error-curve arrays, and builds
+  the rehearsal data.
+- `examples/`: `pendulum.csv` and `ecoli_growth.csv`. The E. coli data is from the LLM-SR benchmark, MIT licence;
+  see `ECOLI_ATTRIBUTION.txt`.
+
 ## Talk track (about 5 minutes)
 1. Home: four examples; the agent only ever gets numbers.
 2. Satellite: play the video (green dot stays on the real satellite); point at the verdict and *measure next*.
