@@ -10,12 +10,18 @@ Responses to a fired finding, in order: "repair" (apply `fix`, keep only if it w
 (inflate coefficient intervals), "scope" (restrict the claim to a valid range and ask for data).
 """
 import json
+import os
 import traceback
 from pathlib import Path
 
 THRESHOLDS = Path(__file__).resolve().parent / "thresholds.json"
 SEVERITIES = ("info", "warn", "critical")
 RESPONSES = ("repair", "widen", "scope", None)
+
+
+def enabled():
+    """EQDISC_EVIDENCE=0 switches the evidence layer off (benchmark arm "plain eqdisc"): no findings, no repairs."""
+    return os.environ.get("EQDISC_EVIDENCE", "1") != "0"
 
 
 def threshold(name, default):
@@ -69,11 +75,15 @@ def _safe(stage, name, fn, *args):
 
 
 def audit_data(meta, data):
+    if not enabled():
+        return []
     from . import data as d
     return _safe("data", "data", d.audit, meta, data)
 
 
 def audit_model(meta, data, rhs):
+    if not enabled():
+        return []
     from . import residual, slices
     return _safe("model", "slices", slices.audit, meta, data, rhs) + \
         _safe("model", "residual", residual.audit, meta, data, rhs)

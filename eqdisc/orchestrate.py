@@ -116,7 +116,7 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
                                        "max_tools": max_tools, "context": context})
     say("[1/7] evidence checks on the data")
     meta, data, data_findings, data_repairs = audit_and_repair(meta, data, ledger=ledger)
-    if has_nan(data):
+    if has_nan(data) and _audit.enabled():
         msg = ("INCONCLUSIVE before fitting: values are missing in every part of the record, so no gap-free window is "
                "long enough to estimate derivatives or weak-form integrals. Collect complete snapshots (or longer "
                "gap-free stretches); eqdisc does not impute missing data.")

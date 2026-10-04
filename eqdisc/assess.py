@@ -421,7 +421,8 @@ def assess(meta, data, rhs, alternatives=None, n_coef_draws=12, seed=0, basis="a
         meta, data, findings, data_repairs = evidence(meta, data, rhs, ledger=led)
     else:
         from .audit.repair import has_nan, repair_data
-        if has_nan(data):                                  # never fit on NaN (gaps): split first, no imputation
+        from .audit import enabled as _evidence_on
+        if _evidence_on() and has_nan(data):               # never fit on NaN (gaps): split first, no imputation
             meta, data, data_repairs = repair_data(meta, data, findings)
     res = {"model": rhs}
     # 1. coefficient uncertainty + per-term necessity

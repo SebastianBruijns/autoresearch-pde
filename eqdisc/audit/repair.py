@@ -141,7 +141,9 @@ def _merge(before, after, applied):
 
 def audit_and_repair(meta, data, rounds=2, ledger=None):
     """Audit the data, apply data repairs (hard cap `rounds`), re-audit and merge. Returns (meta, data, findings, applied)."""
-    from . import audit_data
+    from . import audit_data, enabled
+    if not enabled():
+        return meta, data, [], []
     before = audit_data(meta, data)
     if ledger:
         ledger.findings(before, "data audit")

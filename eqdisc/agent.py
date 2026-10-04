@@ -214,7 +214,8 @@ class Session:
         self.dataset = Path(dataset)
         self.meta, self.data = load(dataset)
         self.data_findings = None
-        if np.isnan(np.asarray(self.data["U"], float)).any():   # gaps: split into NaN-free pieces (no imputation)
+        from .audit import enabled as _evidence_on
+        if _evidence_on() and np.isnan(np.asarray(self.data["U"], float)).any():   # gaps: split into NaN-free pieces (no imputation)
             from .audit.repair import audit_and_repair
             self.meta, self.data, self.data_findings, _ = audit_and_repair(self.meta, self.data)
             if np.isnan(np.asarray(self.data["U"], float)).any():
