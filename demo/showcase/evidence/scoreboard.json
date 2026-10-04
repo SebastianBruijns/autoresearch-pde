@@ -39,9 +39,10 @@
     "wrong+confident": 1
    },
    "C": {
-    "crashed": 21,
-    "wrong+flagged": 3,
-    "right+confident": 8
+    "crashed": 19,
+    "wrong+flagged": 4,
+    "right+confident": 8,
+    "right+cautious": 1
    }
   },
   "report": {
@@ -58,13 +59,14 @@
     "wrong+flagged": 39
    },
    "C": {
-    "crashed": 21,
-    "wrong+flagged": 3,
-    "right+confident": 8
+    "crashed": 19,
+    "wrong+flagged": 4,
+    "right+confident": 8,
+    "right+cautious": 1
    }
   }
  },
  "n_rows": 245,
- "built": "2026-10-04 10:43",
- "source_mtime": "2026-10-04 10:26"
+ "built": "2026-10-04 10:45",
+ "source_mtime": "2026-10-04 10:43"
 }

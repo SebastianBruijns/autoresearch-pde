@@ -184,3 +184,66 @@ export PYTHONPATH=$PWD
 .venv/bin/python -m eqdisc.bench_evidence --arm A --split report --seeds 10               # re-score only; attempted runs are not re-spent (--force to re-run)
 .venv/bin/python -m eqdisc.bench_evidence --rescore --table --md runs/evidence_bench/table.md
 ```
+
+
+## Final table (code at commit 056564b; arm C re-run after report/ledger fixes; arm B run before the glitch-vs-event change, which leaves all detector calibration rates unchanged)
+
+### Headline: outcomes per arm, split and subset
+
+| arm | split | subset | n | right+confident | right+cautious | wrong+flagged | wrong+confident | incomplete+cautious | wrong+unflagged | crashed | confident-wrong rate | confident-wrong (excl. crashed) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| A | dev | all | 2 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 0/2 (0%) | 0/1 (0%) |
+| A | dev | non-gap | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0/1 (0%) | 0/1 (0%) |
+| A | dev | gaps | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0/1 (0%) | - |
+| A | report | all | 19 | 8 | 1 | 3 | 1 | 0 | 0 | 6 | 1/19 (5%) | 1/13 (8%) |
+| A | report | non-gap | 13 | 8 | 1 | 3 | 1 | 0 | 0 | 0 | 1/13 (8%) | 1/13 (8%) |
+| A | report | gaps | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 6 | 0/6 (0%) | - |
+| B | dev | all | 96 | 47 | 10 | 39 | 0 | 0 | 0 | 0 | 0/96 (0%) | 0/96 (0%) |
+| B | dev | non-gap | 72 | 35 | 4 | 33 | 0 | 0 | 0 | 0 | 0/72 (0%) | 0/72 (0%) |
+| B | dev | gaps | 24 | 12 | 6 | 6 | 0 | 0 | 0 | 0 | 0/24 (0%) | 0/24 (0%) |
+| B | report | all | 96 | 47 | 10 | 39 | 0 | 0 | 0 | 0 | 0/96 (0%) | 0/96 (0%) |
+| B | report | non-gap | 72 | 35 | 1 | 36 | 0 | 0 | 0 | 0 | 0/72 (0%) | 0/72 (0%) |
+| B | report | gaps | 24 | 12 | 9 | 3 | 0 | 0 | 0 | 0 | 0/24 (0%) | 0/24 (0%) |
+| C | report | all | 19 | 8 | 1 | 4 | 0 | 0 | 0 | 6 | 0/19 (0%) | 0/13 (0%) |
+| C | report | non-gap | 13 | 8 | 1 | 4 | 0 | 0 | 0 | 0 | 0/13 (0%) | 0/13 (0%) |
+| C | report | gaps | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 6 | 0/6 (0%) | - |
+
+### Per corruption (headline definition; splits pooled)
+
+RC = right+confident, Rc = right+cautious, WF = wrong+flagged, WC = wrong+confident, IC = incomplete+cautious, WU = wrong+unflagged, X = crashed
+
+| corruption | arm A | arm B | arm C |
+|---|---|---|---|
+| clean | RC4 (n=4) | RC24 (n=24) | RC3 (n=3) |
+| outliers | RC2 (n=2) | RC22 Rc2 (n=24) | RC2 (n=2) |
+| gaps_random | X3 (n=3) | RC24 (n=24) | X2 (n=2) |
+| gaps_state | X4 (n=4) | Rc15 WF9 (n=24) | X4 (n=4) |
+| forcing_time | WF1 WC1 (n=2) | WF24 (n=24) | WF2 (n=2) |
+| source_space | RC2 (n=2) | WF24 (n=24) | RC2 (n=2) |
+| traj_coeffs | Rc1 WF1 (n=2) | Rc3 WF21 (n=24) | Rc1 WF1 (n=2) |
+| amp_term | RC1 WF1 (n=2) | RC24 (n=24) | RC1 WF1 (n=2) |
+
+### Per corruption, secondary base-only view (dynamic corruptions: right = base terms recovered)
+
+RC = right+confident, Rc = right+cautious, WF = wrong+flagged, WC = wrong+confident, IC = incomplete+cautious, WU = wrong+unflagged, X = crashed
+
+| corruption | arm A | arm B | arm C |
+|---|---|---|---|
+| clean | RC4 (n=4) | RC24 (n=24) | RC3 (n=3) |
+| outliers | RC2 (n=2) | RC22 Rc2 (n=24) | RC2 (n=2) |
+| gaps_random | X3 (n=3) | RC24 (n=24) | X2 (n=2) |
+| gaps_state | X4 (n=4) | Rc15 WF9 (n=24) | X4 (n=4) |
+| forcing_time | RC1 Rc1 (n=2) | Rc13 WF11 (n=24) | Rc2 (n=2) |
+| source_space | RC2 (n=2) | Rc3 WF21 (n=24) | RC2 (n=2) |
+| traj_coeffs | Rc1 WF1 (n=2) | Rc3 WF21 (n=24) | Rc1 WF1 (n=2) |
+| amp_term | RC1 Rc1 (n=2) | RC24 (n=24) | RC1 Rc1 (n=2) |
+
+### Secondary: right rates, term F1, cost, wall time
+
+| arm | split | n | right (headline) | right (base-only) | confident | mean term F1 | exact structure | total cost $ | median wall s |
+|---|---|---|---|---|---|---|---|---|---|
+| A | dev | 2 | 1 | 1 | 1 | 0.50 | 1 | 0.40 | 33 |
+| A | report | 19 | 9 | 12 | 9 | 0.65 | 10 | 18.78 | 104 |
+| B | dev | 96 | 57 | 65 | 47 | 0.86 | 59 | 0.00 | 27 |
+| B | report | 96 | 57 | 65 | 47 | 0.87 | 59 | 0.00 | 21 |
+| C | report | 19 | 9 | 12 | 8 | 0.65 | 10 | 0.00 | 15 |
