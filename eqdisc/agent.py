@@ -213,6 +213,13 @@ class Session:
     def __init__(self, dataset, experiments=0, seed=123, workdir=None, critic=None, human=None, human_rounds=3):
         self.dataset = Path(dataset)
         self.meta, self.data = load(dataset)
+        self.data_findings = None
+        if np.isnan(np.asarray(self.data["U"], float)).any():   # gaps: split into NaN-free pieces (no imputation)
+            from .audit.repair import audit_and_repair
+            self.meta, self.data, self.data_findings, _ = audit_and_repair(self.meta, self.data)
+            if np.isnan(np.asarray(self.data["U"], float)).any():
+                raise ValueError("values are missing in every part of the record; no gap-free window is long enough "
+                                 "to fit. Collect complete snapshots; eqdisc does not impute missing data.")
         tp = self.dataset / "hidden" / "truth.json"
         self.truth = json.loads(tp.read_text()) if tp.exists() else None   # None for real data
         self.workdir = Path(workdir or "runs/_work")

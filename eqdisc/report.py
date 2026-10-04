@@ -183,6 +183,42 @@ if __name__ == "__main__":
     print(build_report(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None))
 
 
+def _checks_card(res):
+    """'Data and model checks' card: fired evidence-layer findings in plain language, repairs, and the valid range."""
+    a = res.get("assessment") or {}
+    ev = res.get("evidence") or {}
+    findings = a.get("findings") if a.get("findings") is not None else \
+        (ev.get("data_findings") or []) + (ev.get("final_findings") or [])
+    fired = [f for f in findings if f.get("fired")]
+    rank = {"critical": 0, "warn": 1, "info": 2}
+    fired.sort(key=lambda f: (bool(f.get("resolved")), rank.get(f.get("severity"), 3)))
+    if not fired:
+        body = "<div class='good'><b>All checks passed.</b></div><div class='sub'>Data (outliers, gaps, sampling) and model " \
+               "(same coefficients on every slice, residual is only noise) checks found nothing.</div>"
+    else:
+        items = []
+        for f in fired:
+            sev = f.get("severity", "")
+            cls = "bad" if sev == "critical" and not f.get("resolved") else "sub" if f.get("resolved") or sev == "info" else ""
+            state = (f" (repaired with {html.escape(str(f.get('repair')))}" + (", resolved)" if f.get("resolved") else ", still present)")
+                     if f.get("repair") else "")
+            items.append(f"<li><b class='{cls}'>{html.escape(sev)}</b>{state}: {html.escape(f.get('message') or f.get('id', ''))}"
+                         f" <span class='sub'>[{html.escape(str(f.get('id')))}]</span></li>")
+        body = "<ul>" + "".join(items) + "</ul>"
+    for r in ev.get("data_repairs") or []:
+        if r.get("ok"):
+            body += f"<div class='sub'>Data repair applied before fitting: {html.escape(r.get('note', ''))}.</div>"
+    for r in ev.get("model_repairs") or []:
+        if r.get("ok") and r.get("kind") == "reporting":
+            body += (f"<div class='sub'>Per-trajectory coefficients ({html.escape(str(r.get('finding')))}): "
+                     f"<code>{html.escape(json.dumps(r.get('coefficients'), default=str)[:600])}</code></div>")
+    vr = (res.get("verdict") or {}).get("valid_range")
+    if vr:
+        body += "<div><b>Valid range.</b> " + html.escape("; ".join(
+            f"{v} in [{_fmt(lo)}, {_fmt(hi)}]" for v, (lo, hi) in vr.items())) + " (no data beyond).</div>"
+    return "<h2>Data and model checks</h2><div class='card'>" + body + "</div>"
+
+
 def build_discovery_report(out_dir, res, meta, data):
     """Top-level report for eqdisc.discover: verdict first, then the story, then the evidence."""
     out_dir = Path(out_dir)
@@ -198,6 +234,7 @@ def build_discovery_report(out_dir, res, meta, data):
              f"<div><b>Recommendation.</b> {html.escape(v['recommendation'])}</div></div>")
     if res.get("final_model"):
         P.append("<div class='card eq'>" + "".join(_latex(k, e, names) for k, e in res["final_model"].items()) + "</div>")
+    P.append(_checks_card(res))
     if st.get("headline"):
         P.append(f"<div class='card'><b>Summary.</b> {html.escape(st['headline'])}"
                  + (f"<br><br><b>Physical interpretation.</b> {html.escape(st.get('physical_interpretation', ''))}" if st.get("physical_interpretation") else "")

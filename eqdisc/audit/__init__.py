@@ -82,3 +82,48 @@ def audit_model(meta, data, rhs):
 def fired(findings, min_severity="warn"):
     rank = {s: i for i, s in enumerate(SEVERITIES)}
     return [f for f in findings if f["fired"] and rank[f["severity"]] >= rank[min_severity]]
+
+
+# ----------------------------------------------------------------------------- helpers for integration (WS4)
+def unresolved(findings, severity):
+    """Fired findings of exactly this severity that no data repair resolved."""
+    return [f for f in findings or [] if f.get("fired") and f.get("severity") == severity and not f.get("resolved")]
+
+
+def valid_range(findings):
+    """{variable: [lo, hi]} from fired scope findings (intersection when several restrict the same variable)."""
+    out = {}
+    for f in findings or []:
+        s = f.get("scope") or {}
+        if not (f.get("fired") and s.get("variable") and isinstance(s.get("range"), (list, tuple)) and len(s["range"]) == 2):
+            continue
+        lo, hi = (float(x) if x is not None else None for x in s["range"])
+        if s["variable"] in out:
+            plo, phi = out[s["variable"]]
+            lo = plo if lo is None else (lo if plo is None else max(lo, plo))
+            hi = phi if hi is None else (hi if phi is None else min(hi, phi))
+        out[s["variable"]] = [lo, hi]
+    return out
+
+
+def _fmt(x):
+    return "-inf" if x is None else f"{x:.3g}"
+
+
+def range_sentence(vr):
+    return " ".join(f"Valid for {v} in [{_fmt(lo)}, {_fmt(hi)}]; no data beyond." for v, (lo, hi) in vr.items())
+
+
+def summary(findings, title="Automatic data checks (deterministic, before any fitting)"):
+    """Short plain-language summary for an agent's context."""
+    fired_ = fired(findings, "info")
+    if not fired_:
+        return f"{title}: all checks passed."
+    lines = []
+    for f in fired_:
+        tag = f"[{f['severity']}]"
+        if f.get("repair"):
+            tag += f" (repaired with {f['repair']}" + (", resolved)" if f.get("resolved") else ", still present)")
+        lines.append(f"- {tag} {f.get('message') or f['id']}")
+    vr = valid_range(findings)
+    return f"{title}:\n" + "\n".join(lines) + (("\n" + range_sentence(vr)) if vr else "")

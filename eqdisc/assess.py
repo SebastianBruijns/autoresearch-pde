@@ -11,6 +11,7 @@
         "experiments": ranked next experiments where plausible models DISAGREE most (expected discrimination),
         "data_advice": sampling-rate / noise / duration recommendations,
         "questions_for_human": domain questions whose answers would settle the remaining ambiguity,
+        "findings":    evidence-layer checks (eqdisc.audit) on the data and on the model; they move the grade,
     }
 
 Public data only. The plausible-model set = the model with coefficients drawn from their bootstrap intervals
@@ -357,11 +358,71 @@ def _refit_disagreement(coefs):
     return max(gaps) if gaps else 0.0
 
 
+RE_I2_HIGH = 0.5          # I² above which a finding's random-effects interval replaces the bootstrap interval
+
+
+def evidence(meta, data, rhs, ledger=None):
+    """Data audit + data repair + model audit. Returns (meta, data, findings, data_repairs); never raises."""
+    from .audit import audit_model
+    from .audit.repair import audit_and_repair
+    try:
+        meta, data, findings, applied = audit_and_repair(meta, data, ledger=ledger)
+    except Exception as e:  # noqa: BLE001
+        findings, applied = [{"id": "data_audit_error", "stage": "data", "statistic": None, "threshold": None,
+                              "fired": False, "severity": "info", "response": None, "fix": None, "scope": None,
+                              "message": f"data checks could not run: {e}", "details": {}}], []
+    model_f = audit_model(meta, data, rhs) if rhs else []
+    if ledger:
+        ledger.findings(model_f, "model audit (assessment)")
+    return meta, data, findings + model_f, applied
+
+
+def _re_intervals(findings, names):
+    """{(var, normalised term): (lo, hi, I2, finding id)} from FIRED model findings that carry random-effects intervals
+    (details["re_intervals"] = {"var:term": [lo, hi]}), for terms whose I² (details["I2"] or ["i2"], scalar or per
+    "var:term") is high."""
+    from .audit import threshold
+    thr = threshold("re_I2_high", RE_I2_HIGH)
+    out = {}
+    for f in findings or []:
+        det = f.get("details") or {}
+        rei = det.get("re_intervals")
+        if not (f.get("fired") and isinstance(rei, dict)):        # the detector decides heterogeneity is real
+            continue
+        i2 = det.get("I2", det.get("i2"))
+        for key, iv in rei.items():
+            try:
+                var, term = str(key).split(":", 1)
+                lo, hi = float(iv[0]), float(iv[1])
+            except Exception:  # noqa: BLE001
+                continue
+            k_i2 = i2.get(key) if isinstance(i2, dict) else i2
+            if k_i2 is None or float(k_i2) < thr:
+                continue
+            k = (var, _norm(term, names))
+            if k not in out or (hi - lo) > (out[k][1] - out[k][0]):          # several slicings: keep the widest
+                out[k] = (lo, hi, float(k_i2), f["id"])
+    return out
+
+
 # ----------------------------------------------------------------------------- main
-def assess(meta, data, rhs, alternatives=None, n_coef_draws=12, seed=0, basis="auto"):
-    """basis: 'auto' (weak form for PDEs / noisy / coarse data), 'weak' or 'strong' (derivative-based)."""
+def assess(meta, data, rhs, alternatives=None, n_coef_draws=12, seed=0, basis="auto", findings=None, run_dir=None):
+    """basis: 'auto' (weak form for PDEs / noisy / coarse data), 'weak' or 'strong' (derivative-based).
+    findings: evidence-layer findings (eqdisc.audit); None = compute them here (audit, repair gaps/outliers, re-audit,
+    model audit) and assess on the repaired data. run_dir: if given, findings are appended to <run_dir>/ledger.jsonl."""
     rng = np.random.default_rng(seed)
     names = tb.symbols(meta)
+    led = None
+    if run_dir is not None and findings is None:
+        from .ledger import Ledger
+        led = Ledger(run_dir, config={"assess": {"seed": seed, "basis": basis, "n_coef_draws": n_coef_draws}})
+    data_repairs = []
+    if findings is None:
+        meta, data, findings, data_repairs = evidence(meta, data, rhs, ledger=led)
+    else:
+        from .audit.repair import has_nan, repair_data
+        if has_nan(data):                                  # never fit on NaN (gaps): split first, no imputation
+            meta, data, data_repairs = repair_data(meta, data, findings)
     res = {"model": rhs}
     # 1. coefficient uncertainty + per-term necessity
     ws = None
@@ -402,6 +463,15 @@ def assess(meta, data, rhs, alternatives=None, n_coef_draws=12, seed=0, basis="a
             terms.append({"var": v, "term": term, "coef": c["fit"], "submitted_coef": c.get("given"), "ci90": c.get("ci90"),
                           "rel_uncertainty": c.get("rel_ci_halfwidth"), "significant": c.get("sig"),
                           "dBIC_if_removed": _r(dbic) if dbic is not None else None})
+    re_iv = _re_intervals(findings, names)
+    for t in terms:
+        iv = re_iv.get((t["var"], _norm(t["term"], names)))
+        if iv is None:
+            t["interval_used"] = "bootstrap"
+            continue
+        t["ci90_re"] = [_r(iv[0]), _r(iv[1])]
+        t["significant"] = not (iv[0] <= 0 <= iv[1])
+        t["interval_used"] = f"random-effects ({iv[3]}, I2={iv[2]:.2f})"
     res["terms"] = terms
     adds = [e for e in rep["top_edits"] if e["edit"] == "add"]
     def _impr(e):
@@ -489,6 +559,9 @@ def assess(meta, data, rhs, alternatives=None, n_coef_draws=12, seed=0, basis="a
     res["predictability"] = predictability(meta, data, models)
     res["coverage"] = coverage(meta, data)
     res["experiments"] = design_experiments(meta, data, models, coef_info=coefs)
+    res["findings"] = list(findings or [])
+    if data_repairs:
+        res["data_repairs"] = data_repairs
     res["data_advice"] = data_advice(meta, data, res)
     res["confidence"] = grade(res)
     res["questions_for_human"] = questions(meta, res)
@@ -524,6 +597,10 @@ def data_advice(meta, data, res):
     if data["U"].shape[0] < 3:
         adv.append("Only %d trajectory(ies): independent runs from different initial conditions are the cheapest "
                    "way to separate competing models." % data["U"].shape[0])
+    from .audit import valid_range
+    for v, (lo, hi) in valid_range(res.get("findings")).items():
+        adv.append(f"The data support the model only for {v} in [{_r(lo)}, {_r(hi)}]: collect data beyond this range "
+                   f"before using it there.")
     return adv
 
 
@@ -569,6 +646,22 @@ def grade(res):
         frac = v["rollout_valid_time"] / max(v["rollout_horizon"], 1e-12)
         reasons.append(f"held-out rollout stays within 30% error for {frac:.0%} of the horizon")
         score += 1 if frac > 0.8 else -1
+    # evidence layer: fired findings (info never changes points; a data repair that the re-audit confirms resolves one)
+    for f in res.get("findings") or []:
+        if not f.get("fired"):
+            continue
+        sev, done = f.get("severity"), f.get("resolved")
+        tag = "check " + str(f.get("id"))
+        if done:
+            reasons.append(f"{tag} (repaired with {f.get('repair')}): {f.get('message', '')}")
+        elif sev == "critical":
+            reasons.append(f"{tag} FAILED (critical): {f.get('message', '')}")
+            score -= 3
+        elif sev == "warn":
+            reasons.append(f"{tag} (warning): {f.get('message', '')}")
+            score -= 1
+        else:
+            reasons.append(f"{tag} (info): {f.get('message', '')}")
     level = "high" if score >= 3 else "medium" if score >= 1 else "low"
     return {"level": level, "points": score, "reasons": reasons}
 
@@ -626,6 +719,11 @@ def brief_markdown(res):
                 what = "start at (" + ", ".join(f"{x:.3g}" for x in what) + ")" + ("" if e.get("inside_data_range") else " *outside current data range*")
             pins = "; ".join(f"{c['coefficient']} (x{c['info_gain_vs_existing']})" for c in e.get("informs_coefficients", []))
             lines.append(f"| {i} | {what} | {e['score']} | {e.get('gain_vs_existing_data')} | {pins} | {e.get('most_separated') or ''} |")
+    fired = [f for f in res.get("findings") or [] if f.get("fired")]
+    if fired:
+        lines += ["", "### Data and model checks",
+                  *[f"- [{f.get('severity')}{', resolved' if f.get('resolved') else ''}] {f.get('message') or f.get('id')}"
+                    for f in fired]]
     if res["data_advice"]:
         lines += ["", "### Data advice", *[f"- {a}" for a in res["data_advice"]]]
     if res["questions_for_human"]:
