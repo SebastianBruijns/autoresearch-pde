@@ -758,8 +758,14 @@ digraph G { rankdir=LR; bgcolor="transparent"; node [shape=box, style="rounded,f
 
 # ============================================================================= main
 # ============================================================================= presentation pages (v3)
+CM_FONT = "Computer Modern Serif, Latin Modern Roman, CMU Serif, Georgia, serif"
+
+
 def _bigfont(fig, h=None):
-    fig.update_layout(font=dict(size=15), legend=dict(font=dict(size=13)))
+    """One font (LaTeX Computer Modern) and one size for every chart text: ticks, axis titles, legend."""
+    fig.update_layout(font=dict(size=16, family=CM_FONT), legend=dict(font=dict(size=16, family=CM_FONT)))
+    fig.update_xaxes(title_font=dict(size=16), tickfont=dict(size=16))
+    fig.update_yaxes(title_font=dict(size=16), tickfont=dict(size=16))
     if h:
         fig.update_layout(height=h)
     return fig
@@ -814,7 +820,7 @@ def v3_satellite():
         ui.fig_title("How precisely known")
         f = ui.precision_fig(uq, {"central pull (1/r²)": "gravity", "equatorial bulge (J₂)": "bulge (J₂)"})
         if f:
-            show(f, "sat_prec")
+            show(_bigfont(f), "sat_prec")
     with st.expander("🧠 How it got there"):
         _reasoning(info.get("rationale"), ag.get("tools"))
     with st.expander("🔭 What the equation means"):
@@ -873,7 +879,7 @@ def v3_bulge():
         st.markdown(ui.checks_md(uq))
         f = ui.precision_fig(uq)
         if f:
-            show(f, "bb_prec")
+            show(_bigfont(f), "bb_prec")
     with st.expander("🔒 Benchmark details"):
         if "raan_disc" in a:
             st.markdown("**The tell-tale drift: measured vs forecast**")
@@ -889,7 +895,7 @@ def v3_chaos():
     r = info["results"]
     ag = r["agent"]
     uq = info.get("uq") or {}
-    names = {"u_xx": "u_xx (anti-diffusion)", "u_xxxx": "u_xxxx (hyper-diffusion)", "u*u_x": "u·u_x (steepening)"}
+    names = {"u_xx": "anti-diffusion", "u_xxxx": "hyper-diffusion", "u*u_x": "steepening"}
     ui.page_title("Blind Chaos (KS)", "A chaotic field · rescaled so no textbook numbers apply · 2% noise")
     import re as _re
     for e in uq.get("experiments") or []:            # plain words for the audience
@@ -915,7 +921,7 @@ def v3_chaos():
         ui.fig_title("How precisely known")
         f = ui.precision_fig(uq, names)
         if f:
-            show(f, "ks_prec3")
+            show(_bigfont(f), "ks_prec3")
     with st.expander("🧠 How it got there"):
         story = info.get("story") or {}
         tool_chips(info.get("tools"), title="tools it used")
@@ -958,7 +964,7 @@ def v3_reaction():
         ui.fig_title("How precisely known")
         f = ui.precision_fig(uq, names)
         if f:
-            show(f, "gs_prec3")
+            show(_bigfont(f), "gs_prec3")
     with st.expander("🧠 How it got there"):
         _reasoning(info.get("rationale"), info.get("tools"))
     with st.expander("🔭 What the equations mean"):

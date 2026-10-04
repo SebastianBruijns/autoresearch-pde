@@ -326,7 +326,14 @@ def confidence_panel(a, key, names=None):
 
 # ----------------------------------------------------------------------------- presentation layout (v3)
 CSS3 = """
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/aaaakshat/cm-web-fonts@latest/fonts.css">
 <style>
+html, body, p, div, span, li, label, button, a, input, textarea, h1, h2, h3, h4, h5, h6, summary,
+.stMarkdown, .stCaption {font-family: "Computer Modern Serif", "Latin Modern Roman", "CMU Serif", Georgia, serif !important;}
+[data-testid="stIconMaterial"], .material-symbols-rounded, [class*="material-symbols"]
+    {font-family: "Material Symbols Rounded" !important;}
+.stMarkdown p, .stMarkdown li, .stCaption, [data-testid="stCaptionContainer"], details summary p,
+[data-testid="stExpander"] summary p, .vbox .s, .nbox .y {font-size: 1.12rem !important;}
 .block-container {padding-top: 4.6rem; max-width: 1500px;}
 .pt {font-size: 3.1rem; font-weight: 850; letter-spacing: -0.03em; line-height: 1.05; margin: 0 0 .25rem 0;}
 .ps {font-size: 1.15rem; opacity: .6; margin: 0 0 1.4rem 0;}
@@ -419,7 +426,7 @@ def precision_fig(a, names=None):
            for t, p in zip(terms, pct)]
     txt = [f"±{p:.2g}%" if p >= 0.01 else f"1 part in {100 / p:,.0f}" for p in pct]
     fig = go.Figure(go.Bar(x=pct, y=lab, orientation="h", marker_color=col, text=txt,
-                           textposition="outside", textfont=dict(size=14), hovertemplate="%{y}: ±%{x:.3g}%<extra></extra>"))
+                           textposition="outside", textfont=dict(size=16), hovertemplate="%{y}: ±%{x:.3g}%<extra></extra>"))
     dec = _decades(pct)
     fig.update_layout(height=max(260, 70 + 40 * len(terms)), margin=dict(l=10, r=60, t=10, b=10), font=dict(size=15),
                       xaxis=dict(type="log", tickvals=dec, ticktext=[f"{v:g}%" for v in dec],
