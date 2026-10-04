@@ -8,7 +8,7 @@ dist/
 datasets/
 runs/
 memory/
-outputs/
+
 .ipynb_checkpoints/
 .DS_Store
 CLAUDE.local.md
