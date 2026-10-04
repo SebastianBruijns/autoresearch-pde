@@ -1,4 +1,4 @@
-"""Generate the Leibniz logo: an abstract vortex, five swept rings narrowing down into a bending tail.
+"""Generate the Lorenz logo: an abstract vortex, five swept rings narrowing down into a bending tail.
 
 Each ring is the front of a funnel cross-section drawn as a comet stroke: a round head on the left, tapering as it
 sweeps right, so the stack reads as spinning. Run: python demo/brand/make_logo.py
@@ -100,6 +100,6 @@ if __name__ == "__main__":
     (OUT / "mark.svg").write_text(mark_svg(rings))
     (OUT / "mark-gradient.svg").write_text(mark_svg(rings, grad=True))
     (OUT / "icon.svg").write_text(mark_svg(vortex(wmax=0.22), "#fff", pad=0.2, bg=ACCENT))
-    (OUT / "logo-leibniz.svg").write_text(lockup_svg(vortex(wmax=0.23), "Leibniz", font))   # heavier beside text
+    (OUT / "logo-lorenz.svg").write_text(lockup_svg(vortex(wmax=0.23), "Lorenz", font))   # heavier beside text
     subprocess.run(["rsvg-convert", "-w", "64", str(OUT / "icon.svg"), "-o", str(OUT / "icon-64.png")], check=True)
     print("wrote", ", ".join(sorted(p.name for p in OUT.glob("*.svg"))))
