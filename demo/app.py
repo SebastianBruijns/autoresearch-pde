@@ -21,7 +21,8 @@ for p in (str(REPO), str(DEMO)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon=":material/function:", layout="wide",
+BRAND = DEMO / "brand"  # Leibniz logo: an abstract vortex (demo/brand/make_logo.py)
+st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon=str(BRAND / "icon-64.png"), layout="wide",
                    initial_sidebar_state="collapsed")
 
 import evidence  # noqa: E402
@@ -1433,6 +1434,7 @@ V3_PAGES = {}
 
 def main():
     ui.inject_css3()
+    st.logo(str(BRAND / "logo-leibniz.svg"), size="large")
     env_fake = os.environ.get("EQDISC_DEMO_FAKE", "") not in ("", "0", "false")
     V3_PAGES.update({
         "home": st.Page(v3_home, title="Home", icon=":material/home:", default=True),
@@ -1442,19 +1444,10 @@ def main():
         "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", icon=":material/texture:",
                       url_path="reaction-diffusion"),
         "hidden": st.Page(v3_hidden, title="Hidden Oscillator", icon=":material/graphic_eq:", url_path="hidden-oscillator"),
-        "evidence": st.Page(evidence.page, title="When Not to Trust It", icon=":material/gpp_maybe:",
-                            url_path="when-not-to-trust-it"),
-        "yours": st.Page(v3_yourdata, title="Your Data", icon=":material/upload_file:", url_path="your-data"),
-
-        "home": st.Page(v3_home, title="Home", default=True),
-        "sat": st.Page(v3_satellite, title="Satellite", url_path="satellite"),
-        "bulge": st.Page(v3_bulge, title="Big Bulge Orbit", url_path="big-bulge-orbit"),
-        "chaos": st.Page(v3_chaos, title="Blind Chaos (KS)", url_path="blind-chaos"),
-        "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", url_path="reaction-diffusion"),
         "lorenz": st.Page(v3_lorenz, title="Lorenz (In vs Out of Sample)", icon=":material/all_inclusive:", url_path="lorenz"),
         "evidence": st.Page(evidence.page, title="When Not to Trust It", icon=":material/gpp_maybe:",
                             url_path="when-not-to-trust-it"),
-        "yours": st.Page(v3_yourdata, title="Your Data", url_path="your-data"),
+        "yours": st.Page(v3_yourdata, title="Your Data", icon=":material/upload_file:", url_path="your-data"),
     })
     nav = st.navigation(list(V3_PAGES.values()), position="top")
     nav.run()
