@@ -48,7 +48,7 @@ def _load_hidden(d):
 
 def _names(truth):
     if truth["kind"] == "pde":
-        return derivative_symbols(truth["variables"], truth.get("spatial_dims") or ["x"], MAX_DERIV)
+        return derivative_symbols(truth["variables"], truth.get("spatial_dims") or ["x"], MAX_DERIV) + ["t"]
     return truth["variables"] + ["t"]
 
 
@@ -128,8 +128,8 @@ def evaluate(dataset, candidate, reveal=False):
             vf_axes, roll_axes = (0, 1), (1,)
         elif is_legacy_pde(_pde_meta(truth, test)):
             x = test["x"]
-            ft = make_pde_rhs(variables, truth["rhs"], truth["L"])(U, x)
-            fc = make_pde_rhs(variables, rhs, truth["L"])(U, x)
+            ft = make_pde_rhs(variables, truth["rhs"], truth["L"])(U, x, t[None, :, None])
+            fc = make_pde_rhs(variables, rhs, truth["L"])(U, x, t[None, :, None])
             roll = np.stack([integrate_pde(variables, rhs, truth["L"], u[0], th, truth["dt_sim"])
                              for u in U])
             vf_axes, roll_axes = (0, 1, 2), (1, 2)

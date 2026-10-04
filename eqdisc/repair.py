@@ -32,9 +32,16 @@ def default_pool(meta, degree=3, include_trig=True):
         if include_trig:
             pool += [f"{f}({x})" for x in v for f in ("sin", "cos")]
         return pool
-    base = [f"{f}_{'x' * k}" if k else f for f in v for k in range(0, 5)]
-    pool = list(base) + [f"{a}*{b}" for a in v for b in base] + [f"{a}*{a}*{b}" for a in v for b in base[:3]]
-    return pool
+    # every field and its derivatives in ALL spatial directions (was x-only, which missed y/z terms on 2-D/3-D
+    # grids); order up to 4 on 1-D grids, up to meta["max_deriv_cap"] (default 2) on 2-D/3-D grids
+    from .solvers import derivative_suffixes
+    dims = list(meta.get("spatial_dims") or ["x"])
+    order = 4 if len(dims) == 1 else int(meta.get("max_deriv_cap") or 2)
+    sufs = derivative_suffixes(dims, order)
+    base = [f if not s else f"{f}_{s}" for f in v for s in sufs]
+    first = [f"{f}_{d}" for f in v for d in dims]                     # first derivatives
+    pool = list(base) + [f"{a}*{b}" for a in v for b in base] + [f"{a}*{a}*{b}" for a in v for b in [a] + first]
+    return list(dict.fromkeys(pool))
 
 
 def _bic(err2, n, k):

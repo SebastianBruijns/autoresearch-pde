@@ -86,6 +86,44 @@ def extract_insights(log, assessment=None, data_card=None):
 
 
 def verdict(assessment):
+    """Verdict + recommendation. The evidence layer (assessment["findings"]) can only make it more cautious:
+    an unresolved fired critical finding rules out CONFIDENT / CONFIDENT IN PREDICTIONS and is named in the headline;
+    fired scope findings add `valid_range` and a sentence to the recommendation. No fired finding -> unchanged."""
+    v = _verdict(assessment)
+    if not assessment:
+        return v
+    from .audit import range_sentence, unresolved, valid_range
+    findings = assessment.get("findings") or []
+    crit = unresolved(findings, "critical")
+    if crit:
+        names = "; ".join(f"{f['id']}: {f.get('message') or 'failed'}" for f in crit[:2])
+        if v["status"].startswith("CONFIDENT"):
+            v = {"status": "COLLECT MORE DATA" if all(f.get("stage") == "data" or f.get("response") == "scope"
+                                                       for f in crit) else "INCONCLUSIVE",
+                 "headline": f"Not confident: a critical check failed ({names}). The model may still be the best "
+                             f"available, but this evidence contradicts it.",
+                 "recommendation": v["recommendation"] if v["status"] != "CONFIDENT" else
+                 "Do not use the model as confirmed until the failed check is explained or new data remove it."}
+        else:
+            v = dict(v, headline=v["headline"].rstrip(".") + f". Critical check failed: {names}.")
+        v["failed_checks"] = [f["id"] for f in crit]
+    # Warnings: two independent model checks against the model, or one plus a low grade, also rule out confidence.
+    # (residual_white is excluded: it restates the noise-floor ratio the grade already uses.)
+    warns = [f for f in unresolved(findings, "warn") if f.get("stage") == "model" and f.get("id") != "residual_white"]
+    level = (assessment.get("confidence") or {}).get("level")
+    if v["status"].startswith("CONFIDENT") and (len(warns) >= 2 or (warns and level == "low")):
+        names = "; ".join(f"{f['id']}: {f.get('message') or 'warning'}" for f in warns[:2])
+        v = {"status": "COLLECT MORE DATA",
+             "headline": f"Best current model, not confirmed: independent checks disagree with it ({names}).",
+             "recommendation": v["recommendation"], "failed_checks": [f["id"] for f in warns]}
+    vr = valid_range(findings)
+    if vr:
+        v["valid_range"] = vr
+        v["recommendation"] = (v["recommendation"] + " " + range_sentence(vr)).strip()
+    return v
+
+
+def _verdict(assessment):
     if not assessment or "confidence" not in assessment:
         return {"status": "INCONCLUSIVE", "headline": "No assessment available.", "recommendation": ""}
     c = assessment["confidence"]["level"]

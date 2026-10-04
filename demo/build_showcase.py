@@ -324,7 +324,298 @@ def build_rehearsal():
     (d / "ecoli.json").write_text(json.dumps({"expr": r.get("expr")}, indent=1))
 
 
-CASES = {"lageos": build_lageos, "orbit": build_orbit, "ks": build_ks, "gray_scott": build_gray_scott, "rehearsal": build_rehearsal}
+
+# ----------------------------------------------------------------------------- hidden oscillator (secret_test_1)
+HIDDEN_DATA = REPO / "datasets/secret_test_1_ingested"
+HIDDEN_RUN = sorted(REPO.glob("runs/discover_secret_test_1_ingested_*"))
+HIDDEN_BARE = REPO / "runs/secret1_bare_v2/secret_test_1_ingested/result.json"
+HIDDEN_COLORS = {"Reality": "#9ca3af", "Discovered law": "#16a34a", "Claude alone": "#ea580c", "True law": "#111827"}
+
+
+def hidden_truth_rhs(_, X):
+    """The generating law (never shown to the agent): polar dynamics about a hidden centre, seen through a tilt+stretch."""
+    c, th = np.array([-1.6947, 2.9225]), 1.1592
+    A = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]]) @ np.diag([1.8091, 0.7989])
+    p = np.linalg.solve(A, X[:2] - c)
+    r, ang = np.hypot(*p), np.arctan2(p[1], p[0])
+    rd, thd = r * (0.7029 - 0.8495 * r), 1.9022 + 0.5183 * r
+    pd = np.array([rd * np.cos(ang) - r * thd * np.sin(ang), rd * np.sin(ang) + r * thd * np.cos(ang)])
+    return np.concatenate([A @ pd, [-0.9497 * X[2] + 0.3493 * r]])
+
+
+def _time_avg(t, e):
+    """Average over time (frames are denser in the slow-motion part, so a plain mean would over-weight it)."""
+    return float(np.trapezoid(e, t) / (t[-1] - t[0]))
+
+
+def hidden_video(path, tf, t, data, ref, sims, train, fps=20, tail=1.6, slow_until=8.0):
+    """Phase plane of the held-out run (comet-tail lines), u2 over time, and distance from (smoothed) reality.
+    tf: frame times (dense early = slow motion); t, data: the noisy samples; ref: smoothed reality at tf."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.animation as anim
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as mt
+    import imageio_ffmpeg
+    from eqdisc.oos import _video_style
+    _video_style(plt)
+    plt.rcParams["animation.ffmpeg_path"] = imageio_ffmpeg.get_ffmpeg_exe()
+    fig = plt.figure(figsize=(16, 9), facecolor="white")
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.25, 1], left=0.03, right=0.98, bottom=0.1, top=0.86, wspace=0.12)
+    ax, ae = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])
+    allxy = np.concatenate([train[..., :2].reshape(-1, 2), data[:, :2]])
+    pad = 0.08 * np.ptp(allxy, axis=0)
+    ax.set_xlim(allxy[:, 0].min() - pad[0], allxy[:, 0].max() + pad[0])
+    ax.set_ylim(allxy[:, 1].min() - pad[1], allxy[:, 1].max() + pad[1])
+    for tr in train:                                     # training runs: faint context
+        ax.plot(tr[:, 0], tr[:, 1], color="#eceef1", lw=1.0, zorder=0)
+    ax.set_title("A run it never saw", pad=10)
+    ax.set_axis_off()                                    # unnamed variables: no axes, ticks or frame
+    scale = data.std(0)
+    err = {k: np.sqrt(np.mean(((S - ref) / scale) ** 2, axis=1)) for k, S in sims.items()}
+    top = max(float(np.nanmax(e)) for e in err.values())
+    ae.set_xlim(tf[0], tf[-1]); ae.set_yscale("log"); ae.set_ylim(2e-3, max(0.5, 1.6 * top))
+    ae.yaxis.set_major_locator(mt.FixedLocator([0.003, 0.01, 0.03, 0.1, 0.3, 1.0]))
+    ae.yaxis.set_major_formatter(mt.FuncFormatter(lambda v, _: f"{100 * v:g}%"))
+    ae.yaxis.set_minor_formatter(mt.NullFormatter())
+    ae.set_title("Distance from reality", pad=8); ae.set_xlabel("time")
+    ae.set_ylabel("error (relative to each variable's spread)")
+    ae.axvspan(tf[0], slow_until, color="#fef3c7", alpha=0.6, zorder=0, lw=0)
+    rd, = ax.plot([], [], "o", ms=4.5, color=HIDDEN_COLORS["Reality"], alpha=0.8, zorder=1, label="Reality (noisy)")
+    order = ["Discovered law", "Claude alone", "True law"]          # True law drawn last: thin dashed, on top
+    label = {"Discovered law": "Discovered law (eqdisc)", "Claude alone": "Claude alone (no tools)", "True law": "True law (hidden)"}
+    sty = {"True law": dict(ls=(0, (3, 2)), lw=2.2), "Discovered law": dict(lw=5.0), "Claude alone": dict(lw=5.0)}
+    zo = {"Claude alone": 4, "Discovered law": 5, "True law": 7}
+    faint, bold, head, eline = {}, {}, {}, {}
+    for k in order:
+        col = HIDDEN_COLORS[k]
+        faint[k], = ax.plot([], [], color=col, lw=1.3, alpha=0.3 if k != "True law" else 0.0, zorder=zo[k])
+        bold[k], = ax.plot([], [], color=col, solid_capstyle="round", zorder=zo[k] + 1, label=label[k], **sty[k])
+        head[k], = ax.plot([], [], "o", ms=14 if k != "True law" else 7, color=col, mec="white", mew=2.0, zorder=zo[k] + 2)
+        eline[k], = ae.plot([], [], color=col, lw=3.2 if k != "True law" else 2.0, ls=sty[k].get("ls", "-"), zorder=zo[k],
+                            label=f"{label[k].split(' (')[0]}   avg {100 * _time_avg(tf, err[k]):.1f}%")
+    ax.legend(loc="upper left", framealpha=0.95, handlelength=2.4)
+    fig.text(0.06, 0.955, "Hidden Oscillator: forecasting a new run from one noisy observation", ha="left", va="center")
+    clock = fig.text(0.98, 0.955, "", ha="right", va="center")
+    ae.legend(loc="upper right", framealpha=0.95, handlelength=2.2, title="average over the run", title_fontsize=15,
+              fontsize=15)
+    dt_tail = tail
+
+    def upd(i):
+        now = tf[i]
+        a = np.searchsorted(tf, now - dt_tail)
+        nd = np.searchsorted(t, now + 1e-9)
+        rd.set_data(data[:nd, 0], data[:nd, 1])
+        for k, S in sims.items():
+            faint[k].set_data(S[:i + 1, 0], S[:i + 1, 1]); bold[k].set_data(S[a:i + 1, 0], S[a:i + 1, 1])
+            head[k].set_data([S[i, 0]], [S[i, 1]])
+            eline[k].set_data(tf[:i + 1], np.maximum(err[k][:i + 1], 2.2e-3))
+        clock.set_text(("slow motion   " if now < slow_until else "") + f"t = {now:5.2f}")
+        return []
+    a = anim.FuncAnimation(fig, upd, frames=len(tf), interval=1000 / fps)
+    a.save(path, writer=anim.FFMpegWriter(fps=fps, bitrate=5000))
+    upd(int(np.searchsorted(tf, 1.2)))
+    fig.savefig(Path(path).with_name("still.png"), dpi=60)
+    plt.close(fig)
+    return err
+
+
+def _hidden_thumb(d, t, data, sims, train):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from PIL import Image
+    fig, ax = plt.subplots(figsize=(6.4, 3.6))
+    for tr in train:
+        ax.plot(tr[:, 0], tr[:, 1], color="#e5e7eb", lw=0.8)
+    ax.plot(data[:, 0], data[:, 1], ".", ms=2, color=HIDDEN_COLORS["Reality"])
+    for k in ("Claude alone", "Discovered law"):
+        ax.plot(sims[k][:, 0], sims[k][:, 1], color=HIDDEN_COLORS[k], lw=2.4)
+    ax.set_axis_off()
+    fig.savefig(d / "thumb.jpg", dpi=110, facecolor="white", bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
+    im = Image.open(d / "thumb.jpg").convert("RGB")
+    w, h = im.size
+    W, H = max(w, int(round(h * 16 / 9))), max(h, int(round(w * 9 / 16)))
+    canvas = Image.new("RGB", (W, H), "white")
+    canvas.paste(im, ((W - w) // 2, (H - h) // 2))
+    canvas.save(d / "thumb.jpg", quality=90)
+
+
+def build_hidden_oscillator():
+    """secret_test_1: 3 variables, 4 noisy runs; trained on runs 0-2, forecast run 3 from its first (noisy) sample."""
+    from scipy.integrate import solve_ivp
+    from eqdisc.evaluate import load
+    from eqdisc.solvers import integrate_ode
+    if not HIDDEN_RUN:
+        raise FileNotFoundError("no runs/discover_secret_test_1_ingested_* run")
+    run = HIDDEN_RUN[-1]
+    disc = _json(run / "discovery.json")
+    bare = _json(HIDDEN_BARE)
+    meta, data = load(HIDDEN_DATA)
+    U, t = data["U"], data["t"]
+    held, train = U[-1], U[:-1]
+    from scipy.signal import savgol_filter
+    x0 = held[0]                                         # one noisy observation: the honest starting point
+    slow = 8.0                                           # the models differ while the run settles: show it slowly
+    tf = np.unique(np.concatenate([np.arange(0, slow, 0.02), np.arange(slow, t[-1] + 1e-9, 0.1), [t[-1]]]))
+    sims = {"True law": solve_ivp(hidden_truth_rhs, (tf[0], tf[-1]), x0, t_eval=tf, rtol=1e-9, atol=1e-9).y.T,
+            "Discovered law": integrate_ode(meta["variables"], disc["final_model"], x0, tf, max_seconds=60),
+            "Claude alone": integrate_ode(meta["variables"], bare["submitted"]["rhs"], x0, tf, max_seconds=60)}
+    sm = savgol_filter(held, 21, 3, axis=0)              # reality without the measurement noise, for the distance
+    ref = np.stack([np.interp(tf, t, sm[:, j]) for j in range(held.shape[1])], 1)
+    d = _fresh("hidden_oscillator")
+    err = hidden_video(d / "video.mp4", tf, t, held, ref, sims, train, slow_until=slow)
+    _hidden_thumb(d, tf, held, sims, train)
+    t = tf
+    tools = {}
+    for f in sorted(run.glob("*/transcript.json")):
+        for e in json.loads(f.read_text()):
+            if e.get("type") == "tool" and e.get("name") not in ("submit",):
+                tools[e["name"]] = tools.get(e["name"], 0) + 1
+    import re
+    fm = disc.get("final_model") or {}
+    polar = {}
+    try:                                                 # read the polar-form constants off the submitted model
+        polar["growth"] = float(re.search(r"([\d.]+)\*\(1 - sqrt", fm["u1"]).group(1))
+        w = re.search(r"([\d.]+)\*sqrt\(.*?\) \+ ([\d.]+)\)", fm["u1"])
+        polar["omega1"], polar["omega0"] = float(w.group(1)), float(w.group(2))
+        z = re.search(r"-([\d.]+)\*u2 \+ ([\d.]+)\*sqrt", fm["u2"])
+        polar["decay"], polar["drive"] = float(z.group(1)), float(z.group(2))
+    except Exception:  # noqa: BLE001
+        polar = {}
+    a = disc.get("assessment") or {}
+    sq = next((t_["term"] for t_ in a.get("terms") or [] if t_["term"].startswith("sqrt(")), None)
+    info = {"verdict": disc.get("verdict"), "story": disc.get("story"), "final_model": disc.get("final_model"),
+            "winner_branch": disc.get("winner_branch"), "cost_usd": disc.get("cost_usd"), "wall_s": disc.get("wall_s"),
+            "uq": _uq_slim(a, disc.get("verdict")), "radius_term": sq, "tools": tools, "polar": polar,
+            "bare": {"rhs": bare["submitted"]["rhs"], "rationale": bare["submitted"].get("rationale"),
+                     "cost_usd": bare.get("cost_usd"), "n_tool_calls": bare.get("n_tool_calls")},
+            "errors_mean": {k: _time_avg(t, e) for k, e in err.items()},
+            "errors_at": {k: {str(tt): float(e[np.searchsorted(t, tt)]) for tt in (2, 5, 10, 30)} for k, e in err.items()}}
+    (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
+    np.savez_compressed(d / "arrays.npz", t=_f32(t), held=_f32(held), train=_f32(train),
+                        **{f"sim_{i}": _f32(S) for i, S in enumerate(sims.values())},
+                        **{f"err_{i}": _f32(e) for i, e in enumerate(err.values())}, names=np.array(list(sims)))
+
+
+# ----------------------------------------------------------------------------- E. Lorenz robustness (in vs out of sample)
+LORENZ_CONDS = {"clean": "Clean", "spikes": "Spikes", "forcing": "Outside kicks", "sensor": "Lost sensor"}
+FNO_W = 8          # time-window length, chosen on held-out training windows (8 / 16 / 32 tried on the clean case)
+
+
+def _lorenz_fno(cond, cache):
+    """Train the windowed FNO on the training runs as given, roll it out from the first FNO_W states of every run."""
+    from eqdisc.fno import rollout_fno_window, train_fno_window
+    p = cache / f"fno_{cond}.npz"
+    if p.exists():
+        return dict(np.load(p))
+    d = REPO / f"datasets/robust2/lorenz_{cond}"
+    U, T = np.load(d / "data.npz")["U"], np.load(d / "hidden/test.npz")["U"]
+    import torch
+    torch.set_num_threads(2)
+    m = train_fno_window(U, W=FNO_W, epochs=400, max_minutes=10)
+    out = {"in": rollout_fno_window(m, U[0], U.shape[1]),
+           "oos": np.stack([rollout_fno_window(m, X, len(X)) for X in T]),
+           "info": np.array(json.dumps({k: float(v) for k, v in m.info.items()}))}
+    np.savez(p, **out)
+    return out
+
+
+def _lyapunov(rhs, names, x0, dt, n=20000, eps=1e-8):
+    """Largest Lyapunov exponent (two nearby trajectories, renormalised every step)."""
+    from scipy.integrate import solve_ivp
+    from eqdisc import solvers
+    f = solvers.make_ode_rhs(names, rhs)
+    g = lambda tt, y: np.asarray(f(np.asarray(y)[None], np.array([tt]))[0], float)
+    x = solve_ivp(g, (0, 200 * dt), x0, rtol=1e-9, atol=1e-11).y[:, -1]
+    y = x + eps / np.sqrt(len(x))
+    s = 0.0
+    for _ in range(n // 10):
+        x = solve_ivp(g, (0, 10 * dt), x, rtol=1e-9, atol=1e-11).y[:, -1]
+        y = solve_ivp(g, (0, 10 * dt), y, rtol=1e-9, atol=1e-11).y[:, -1]
+        dd = np.linalg.norm(y - x)
+        s += np.log(dd / eps)
+        y = x + (y - x) * eps / dd
+    return s / (n * dt)
+
+
+def build_lorenz():
+    import importlib.util
+    from concurrent.futures import ProcessPoolExecutor
+    from eqdisc.oos import ode_video
+    src = (REPO / "scripts/lorenz_tutorial_plots.py").read_text().split("\nfor cond in")[0]
+    sim_ns = {}
+    exec(compile(src, "lorenz_tutorial_plots", "exec"), sim_ns)
+    simulate = sim_ns["simulate"]
+    R = {r["case"]: r for r in json.load(open(REPO / "runs/robust2/results.json"))}
+    cache = REPO / "runs/lorenz_showcase"
+    cache.mkdir(parents=True, exist_ok=True)
+    with ProcessPoolExecutor(4) as ex:
+        fno = dict(zip(LORENZ_CONDS, ex.map(_lorenz_fno, LORENZ_CONDS, [cache] * 4)))
+    d = _fresh("lorenz")
+    from eqdisc import insights
+    truth = json.load(open(REPO / "datasets/robust2/lorenz_clean/hidden/truth.json"))["rhs"]
+    D0 = np.load(REPO / "datasets/robust2/lorenz_clean/data.npz")
+    t = D0["t"] - D0["t"][0]
+    lam = _lyapunov(truth, ["x", "y", "z"], D0["U"][0, 0], float(t[1] - t[0]))
+    tl = t * lam
+    arrays, info = {"t_lyap": _f32(tl)}, {"lyapunov": lam, "fno_window": FNO_W, "conditions": {}}
+
+    def err(Y, X, sd):
+        e = np.sqrt(np.mean(((Y - X) / sd) ** 2, axis=1))
+        return np.where(np.isfinite(e), e, np.inf)
+
+    def vt(e, thr=0.5):
+        bad = np.nonzero(e > thr)[0]
+        return float(tl[bad[0]] if len(bad) else tl[-1])
+    for cond, label in LORENZ_CONDS.items():
+        ds = REPO / f"datasets/robust2/lorenz_{cond}"
+        names = json.load(open(ds / "meta.json"))["variables"]
+        U, T = np.load(ds / "data.npz")["U"], np.load(ds / "hidden/test.npz")["U"]
+        sd = T.reshape(-1, T.shape[-1]).std(0)
+        r = R[f"lorenz_{cond}"]
+        laws = {"Discovered law": r["agent"]["rhs"], "SINDy": r["baseline"]["rhs"]}
+        rows = {}
+        for k, law in laws.items():
+            rows[k] = {"in": simulate(names, law, U[0, 0], t), "oos": np.stack([simulate(names, law, X[0], t) for X in T])}
+        rows["FNO"] = {"in": fno[cond]["in"], "oos": fno[cond]["oos"]}
+        c = {"label": label, "names": names, "laws": laws, "valid_in": {}, "valid_oos": {}, "valid_oos_runs": {}}
+        arrays[f"{cond}_X_in"] = _f32(U[0])
+        arrays[f"{cond}_X_oos"] = _f32(T[0])
+        from scipy.signal import medfilt          # in sample: score against a de-spiked copy (isolated glitches are not forecast errors)
+        X_in = np.stack([medfilt(U[0][:, i], 5) for i in range(U.shape[-1])], 1)
+        for k, rr in rows.items():
+            e_in = np.minimum(err(rr["in"], X_in, sd), 5.0)
+            e_oos = [np.minimum(err(Y, X, sd), 5.0) for Y, X in zip(rr["oos"], T)]
+            key = {"Discovered law": "law", "SINDy": "sindy", "FNO": "fno"}[k]
+            arrays[f"{cond}_err_in_{key}"] = _f32(e_in)
+            arrays[f"{cond}_err_oos_{key}"] = _f32(np.mean(e_oos, 0))
+            arrays[f"{cond}_Y_in_{key}"] = _f32(np.nan_to_num(rr["in"], nan=np.nan))
+            arrays[f"{cond}_Y_oos_{key}"] = _f32(rr["oos"][0])
+            c["valid_in"][k] = vt(e_in)
+            c["valid_oos_runs"][k] = [vt(e) for e in e_oos]
+            c["valid_oos"][k] = float(np.mean(c["valid_oos_runs"][k]))
+        res = _json(REPO / f"runs/robust2/lorenz_{cond}/result.json") or {}
+        a = res.get("assessment")
+        c["uq"] = _uq_slim(a) if a else None
+        c["cost_usd"] = r["agent"].get("cost_usd")
+        c["vf_err"] = r["agent"].get("vf_err")
+        c["tools"] = _tools(REPO / f"runs/robust2/lorenz_{cond}")
+        c["rationale"] = (res.get("submitted") or {}).get("rationale")
+        c["fno_info"] = json.loads(str(fno[cond]["info"]))
+        info["conditions"][cond] = c
+        valid = {k: (v[0] if v[0] < tl[-1] else None) for k, v in c["valid_oos_runs"].items()}
+        valid = {k: valid[k] for k in ("Discovered law", "FNO")}
+        ode_video(str(d / f"video_{cond}.mp4"), tl, T[0], {k: rows[k]["oos"][0] for k in ("Discovered law", "FNO")},
+                  names, valid=valid, xlabel="Lyapunov times", title="New starting point (never seen)")
+    _thumb(d / "video_clean.mp4", d / "thumb.jpg", at=6.0)
+    (d / "case.json").write_text(json.dumps(info, indent=1, default=str))
+    np.savez_compressed(d / "arrays.npz", **arrays)
+
+
+CASES = {"lageos": build_lageos, "orbit": build_orbit, "ks": build_ks, "gray_scott": build_gray_scott, "lorenz": build_lorenz, "rehearsal": build_rehearsal,
+         "hidden_oscillator": build_hidden_oscillator}
 
 
 # ----------------------------------------------------------------------------- clean card thumbnails (no text)

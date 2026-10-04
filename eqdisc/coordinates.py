@@ -58,10 +58,14 @@ def find_invariants(meta, data, poly_degree=2, include_log=False, custom_terms=(
 
     ODE: H is a sparse combination of monomials (+ log terms, + custom terms) of the state.
     PDE: H = spatial mean of a sparse combination of monomials in fields and u_x, u_xx.
+    PDE invariants are implemented for 1-D grids only.
     Each candidate reports rel_variation (temporal variation along trajectories relative to the
     natural scale; < ~tol means conserved) and its value per trajectory. A constant value across
     trajectories means an algebraic constraint (it reduces the dimension); a varying value means a
     first integral (it labels the orbits)."""
+    if meta["kind"] == "pde" and len(meta.get("spatial_dims") or ["x"]) > 1:
+        return {"error": "find_invariants supports ODEs and 1-D PDEs only; for 2-D/3-D fields check conserved means "
+                         "with run_python (e.g. data['U'].mean over space vs time)"}
     U, dt = data["U"], meta["dt"]
     names = list(meta["allowed_symbols"])
     nw = min(window, U.shape[1] - (1 - U.shape[1] % 2))

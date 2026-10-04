@@ -1,0 +1,438 @@
+{
+ "verdict": {
+  "status": "CONFIDENT",
+  "headline": "We are confident this is your equation.",
+  "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. Predictions are reliable for about 0.1 time units from a new state. To validate it independently, the most demanding test would be: start at (-3.57, 5.5, 0.478)."
+ },
+ "story": {
+  "headline": "The three-variable system behaves as a stable oscillator. (u0, u1) settle onto a self-sustained, slightly elliptical limit cycle centred near (u0, u1) \u2248 (-1.69, 2.92), and u2 is a passive, damped variable driven by the oscillation amplitude. In normalised elliptical polar coordinates (r, \u03b8, w = u2) the discovered model reads approximately dr/dt \u2248 0.70\u00b7r(1 \u2212 r), d\u03b8/dt \u2248 1.91 + 0.42\u00b7r, and du2/dt \u2248 0.289\u00b7r \u2212 0.948\u00b7u2.",
+  "key_steps": [
+   {
+    "observation": "Plain polynomial weak-SINDy fits in the raw variables gave dense, uninterpretable equations. Their rollouts stayed accurate only briefly: 0.85 time units at degree 3 and 2.55 at degree 2, out of a 30-unit record.",
+    "decision": "Abandon raw-coordinate polynomial libraries and look at the geometry of the trajectories instead.",
+    "outcome": "Plots and the late-time data (second half of each trajectory) showed (u0, u1) converging onto a closed elliptical orbit, which suggested a limit cycle."
+   },
+   {
+    "observation": "Fitting the mean and covariance of the late-time (u0, u1) points gave an ellipse centred at (-1.694, 2.923) with a tilted principal axis.",
+    "decision": "Change to whitened elliptical polar coordinates: r = normalised distance from the centre, \u03b8 = phase along the ellipse, w = u2.",
+    "outcome": "In these coordinates the cycle sits at r \u2248 1, and the dynamics separate into an amplitude equation, a phase equation and a u2 equation."
+   },
+   {
+    "observation": "Weak SINDy with a library in (r, w) only produced a compact model.",
+    "decision": "Validate this sparse model by full trajectory rollout.",
+    "outcome": "The rollout stayed valid for the full 30 time units. It also isolated du2/dt = \u22120.946\u00b7u2 + 0.288\u00b7r, i.e. u2 is driven by amplitude, not phase."
+   },
+   {
+    "observation": "Several radial and phase laws reproduced the data comparably well, for example r' \u221d c \u2212 r\u00b3, r' \u221d r \u2212 r\u00b3 and r' \u221d r(1 \u2212 r), each paired with an amplitude-dependent frequency.",
+    "decision": "Fit parametric candidate forms directly to the trajectories and keep the simple normal-form-like version: r' = k\u00b7r(1 \u2212 r), \u03b8' = \u03c90 + \u03c91\u00b7r, linear relaxation of u2.",
+    "outcome": "The final model's residual error is at the estimated noise floor (ratio 1.02). All 14 expanded terms have bootstrap 90% confidence intervals that exclude zero. No additional term is supported (all \u0394BIC > +4.5)."
+   }
+  ],
+  "physical_interpretation": "The r(1 \u2212 r) term is a nonlinear amplitude saturation: small oscillations grow and large ones shrink toward a fixed amplitude (r = 1 in the normalised ellipse). This is the signature of a self-excited limit-cycle oscillator, such as a biochemical, electrical or ecological oscillator past a Hopf-like instability. The phase rate 1.91 + 0.42\u00b7r means larger-amplitude excursions circulate faster (frequency \u2248 2.33 rad per time unit, period \u2248 2.7, on the cycle). The u2 equation describes a downstream or readout species that is produced in proportion to oscillation amplitude and decays at rate \u2248 0.95. It therefore settles to a nearly constant level \u2248 0.30 once the cycle is reached and does not feed back on (u0, u1).",
+  "caveats": [
+   "The ellipse centre and shape were estimated from the data and then held fixed. Small errors in them are absorbed into the other coefficients.",
+   "The radial law is not uniquely identified. The 'submitted' and 'structure-first' models are statistically indistinguishable, and earlier candidates (c \u2212 r\u00b3, r \u2212 r\u00b3) also rolled out well. The data mostly live near the cycle, so they constrain the slope of r' at r \u2248 1 better than its global shape.",
+   "The plausible models agree (within 3\u00d7 noise) only up to about 0.1 time units from a held-out initial state. Long-horizon accuracy on the existing trajectories therefore does not guarantee correct predictions for transients far from the cycle.",
+   "The sqrt(r)-type term in du0/dt is weakly supported: about 31% relative uncertainty, and \u0394BIC \u2248 \u22120.4 if removed.",
+   "The model uses r = sqrt(...), which is non-smooth at the centre of the ellipse. Behaviour near the unstable fixed point (r \u2192 0) is not reliable.",
+   "There are only 4 trajectories at about 1.3% noise. Variable names and roles are unknown, and the axis layout was inferred with only medium confidence.",
+   "No conserved quantity was found in the tested library."
+  ],
+  "recommendation": "Use the model for describing and predicting behaviour on and near the observed limit cycle. To pin down the radial law and the amplitude-dependent frequency, collect new trajectories that start well off the cycle: some near the centre (small r) and some far outside it. The tool's most informative suggested start is (u0, u1, u2) \u2248 (-3.57, 5.50, 0.48). Repeating runs with lower measurement noise will further tighten the uncertain coefficients."
+ },
+ "final_model": {
+  "u0": "0.238029403042461*(1 - sqrt(0.512308083049*(u1 - 2.92202)**2 + (1.4107*u0 - 0.477933*u1 + 3.78705968366)**2))*(u1 - 2.92202) + 0.49803927128376*(1 - sqrt(0.512308083049*(u1 - 2.92202)**2 + (1.4107*u0 - 0.477933*u1 + 3.78705968366)**2))*(1.4107*u0 - 0.477933*u1 + 3.78705968366) - 0.507377188629758*(u1 - 2.92202)*(0.423833*sqrt(0.512308083049*(u1 - 2.92202)**2 + (1.4107*u0 - 0.477933*u1 + 3.78705968366)**2) + 1.90735) + 0.473332960999159*(0.423833*sqrt(0.512308083049*(u1 - 2.92202)**2 + (1.4107*u0 - 0.477933*u1 + 3.78705968366)**2) + 1.90735)*(1.4107*u0 - 0.477933*u1 + 3.78705968366)",
+  "u1": "0.702584*(1 - sqrt(0.512308083049*(u1 - 2.92202)**2 + (1.4107*u0 - 0.477933*u1 + 3.78705968366)**2))*(u1 - 2.92202) + 1.39712220767663*(0.423833*sqrt(0.512308083049*(u1 - 2.92202)**2 + (1.4107*u0 - 0.477933*u1 + 3.78705968366)**2) + 1.90735)*(1.4107*u0 - 0.477933*u1 + 3.78705968366)",
+  "u2": "-0.948228*u2 + 0.288725*sqrt(0.512308083049*(u1 - 2.92202)**2 + (1.4107*u0 - 0.477933*u1 + 3.78705968366)**2)"
+ },
+ "winner_branch": "adversary",
+ "cost_usd": 9.745,
+ "wall_s": 622.9,
+ "uq": {
+  "verdict": {
+   "status": "CONFIDENT",
+   "headline": "We are confident this is your equation.",
+   "recommendation": "The model is supported term by term, its remaining error is consistent with the noise, and it predicts held-out data. Use it. Predictions are reliable for about 0.1 time units from a new state. To validate it independently, the most demanding test would be: start at (-3.57, 5.5, 0.478)."
+  },
+  "terms": [
+   {
+    "var": "u0",
+    "term": "1",
+    "coef": 7.434,
+    "submitted_coef": 7.437,
+    "ci90": [
+     7.393,
+     7.52
+    ],
+    "rel_uncertainty": 0.00855,
+    "significant": true,
+    "dBIC_if_removed": 1530.0
+   },
+   {
+    "var": "u0",
+    "term": "sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328)",
+    "coef": 0.2046,
+    "submitted_coef": 0.1975,
+    "ci90": [
+     0.1181,
+     0.2408
+    ],
+    "rel_uncertainty": 0.3107,
+    "significant": true,
+    "dBIC_if_removed": -0.43
+   },
+   {
+    "var": "u0",
+    "term": "u0",
+    "coef": 1.97,
+    "submitted_coef": 1.976,
+    "ci90": [
+     1.948,
+     1.999
+    ],
+    "rel_uncertainty": 0.01284,
+    "significant": true,
+    "dBIC_if_removed": 1080.0
+   },
+   {
+    "var": "u0",
+    "term": "u1",
+    "coef": -1.401,
+    "submitted_coef": -1.399,
+    "ci90": [
+     -1.425,
+     -1.391
+    ],
+    "rel_uncertainty": 0.01235,
+    "significant": true,
+    "dBIC_if_removed": 1550.0
+   },
+   {
+    "var": "u0",
+    "term": "u1*sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328)",
+    "coef": -0.3091,
+    "submitted_coef": -0.3109,
+    "ci90": [
+     -0.32,
+     -0.2861
+    ],
+    "rel_uncertainty": 0.0552,
+    "significant": true,
+    "dBIC_if_removed": 314.0
+   },
+   {
+    "var": "u0",
+    "term": "u0*sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328)",
+    "coef": -0.4125,
+    "submitted_coef": -0.4196,
+    "ci90": [
+     -0.4417,
+     -0.391
+    ],
+    "rel_uncertainty": 0.06138,
+    "significant": true,
+    "dBIC_if_removed": 134.0
+   },
+   {
+    "var": "u1",
+    "term": "1",
+    "coef": 8.016,
+    "submitted_coef": 8.039,
+    "ci90": [
+     7.918,
+     8.111
+    ],
+    "rel_uncertainty": 0.01206,
+    "significant": true,
+    "dBIC_if_removed": 1090.0
+   },
+   {
+    "var": "u1",
+    "term": "sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328)",
+    "coef": 4.332,
+    "submitted_coef": 4.295,
+    "ci90": [
+     4.225,
+     4.433
+    ],
+    "rel_uncertainty": 0.02397,
+    "significant": true,
+    "dBIC_if_removed": 565.0
+   },
+   {
+    "var": "u1",
+    "term": "u0",
+    "coef": 3.741,
+    "submitted_coef": 3.759,
+    "ci90": [
+     3.722,
+     3.775
+    ],
+    "rel_uncertainty": 0.007121,
+    "significant": true,
+    "dBIC_if_removed": 1210.0
+   },
+   {
+    "var": "u1",
+    "term": "u1",
+    "coef": -0.5753,
+    "submitted_coef": -0.571,
+    "ci90": [
+     -0.5927,
+     -0.5501
+    ],
+    "rel_uncertainty": 0.03696,
+    "significant": true,
+    "dBIC_if_removed": 356.0
+   },
+   {
+    "var": "u1",
+    "term": "u0*sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328)",
+    "coef": 0.8575,
+    "submitted_coef": 0.8353,
+    "ci90": [
+     0.824,
+     0.8777
+    ],
+    "rel_uncertainty": 0.03152,
+    "significant": true,
+    "dBIC_if_removed": 179.0
+   },
+   {
+    "var": "u1",
+    "term": "u1*sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328)",
+    "coef": -0.9837,
+    "submitted_coef": -0.9856,
+    "ci90": [
+     -1.01,
+     -0.9668
+    ],
+    "rel_uncertainty": 0.02186,
+    "significant": true,
+    "dBIC_if_removed": 729.0
+   },
+   {
+    "var": "u2",
+    "term": "sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328)",
+    "coef": 0.2887,
+    "submitted_coef": 0.2887,
+    "ci90": [
+     0.2877,
+     0.289
+    ],
+    "rel_uncertainty": 0.002235,
+    "significant": true,
+    "dBIC_if_removed": 3180.0
+   },
+   {
+    "var": "u2",
+    "term": "u2",
+    "coef": -0.9478,
+    "submitted_coef": -0.9482,
+    "ci90": [
+     -0.9488,
+     -0.9448
+    ],
+    "rel_uncertainty": 0.002109,
+    "significant": true,
+    "dBIC_if_removed": 3150.0
+   }
+  ],
+  "missing": [
+   {
+    "var": "u1",
+    "term": "u0*u1",
+    "dBIC_if_added": 4.52,
+    "error_reduction": 0.0
+   },
+   {
+    "var": "u0",
+    "term": "sin(u1)",
+    "dBIC_if_added": 4.84,
+    "error_reduction": 0.0
+   },
+   {
+    "var": "u0",
+    "term": "cos(u1)",
+    "dBIC_if_added": 4.86,
+    "error_reduction": 0.0
+   },
+   {
+    "var": "u0",
+    "term": "u1*u1",
+    "dBIC_if_added": 5.07,
+    "error_reduction": 0.0
+   }
+  ],
+  "validation": {
+   "deriv_nrmse": 0.027971804270479322,
+   "rollout_valid_time": 30.0,
+   "rollout_horizon": 30.0,
+   "rollout_blew_up": false
+  },
+  "experiments": [
+   {
+    "score": 96.0,
+    "max_snr": 77.0,
+    "models_blow_up": [],
+    "most_separated": [
+     "submitted",
+     "sparse-regression"
+    ],
+    "initial_condition": [
+     -3.574783916532364,
+     5.501359947362086,
+     0.4778185002789672
+    ],
+    "inside_data_range": false,
+    "gain_vs_existing_data": 1.02,
+    "informs_coefficients": [
+     {
+      "coefficient": "sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328) in du1/dt",
+      "info_gain_vs_existing": 1.94
+     },
+     {
+      "coefficient": "u2 in du2/dt",
+      "info_gain_vs_existing": 1.26
+     },
+     {
+      "coefficient": "u0*sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328) in du1/dt",
+      "info_gain_vs_existing": 1.18
+     }
+    ]
+   },
+   {
+    "score": 95.8,
+    "max_snr": 76.8,
+    "models_blow_up": [],
+    "most_separated": [
+     "structure-first",
+     "sparse-regression"
+    ],
+    "initial_condition": [
+     -3.381637851697574,
+     5.682152382505159,
+     -0.5236457492820925
+    ],
+    "inside_data_range": false,
+    "gain_vs_existing_data": 1.02,
+    "informs_coefficients": [
+     {
+      "coefficient": "sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328) in du1/dt",
+      "info_gain_vs_existing": 1.95
+     },
+     {
+      "coefficient": "u0*sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328) in du1/dt",
+      "info_gain_vs_existing": 1.18
+     },
+     {
+      "coefficient": "sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328) in du2/dt",
+      "info_gain_vs_existing": 1.09
+     }
+    ]
+   },
+   {
+    "score": 95.7,
+    "max_snr": 76.9,
+    "models_blow_up": [],
+    "most_separated": [
+     "submitted",
+     "sparse-regression"
+    ],
+    "initial_condition": [
+     -3.296753125588742,
+     4.664322740478633,
+     0.6348036283123608
+    ],
+    "inside_data_range": false,
+    "gain_vs_existing_data": 1.02,
+    "informs_coefficients": [
+     {
+      "coefficient": "sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328) in du1/dt",
+      "info_gain_vs_existing": 2.01
+     },
+     {
+      "coefficient": "u2 in du2/dt",
+      "info_gain_vs_existing": 1.27
+     },
+     {
+      "coefficient": "u0*sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328) in du1/dt",
+      "info_gain_vs_existing": 1.17
+     }
+    ]
+   }
+  ],
+  "data_advice": [
+   "Remaining error is at the noise floor (ratio 1.02) but some coefficients are still uncertain: more data of the SAME kind (more trajectories/repeats) will narrow them; lowering noise (1.3% now) helps most."
+  ],
+  "confidence": {
+   "level": "high",
+   "points": 3,
+   "reasons": [
+    "all terms significantly non-zero (bootstrap 90% CIs exclude 0)",
+    "no single added term is supported by the data",
+    "residual error is at the noise floor (x1.02)",
+    "2 structurally different models fit equally well: ['submitted', 'structure-first']",
+    "held-out rollout stays within 30% error for 100% of the horizon"
+   ]
+  }
+ },
+ "radius_term": "sqrt(1.99007449*u0**2 - 1.3484401662*u0*u1 + 10.6848101914783*u0 + 0.740728035538*u1**2 - 6.61387052124303*u1 + 18.716010373328)",
+ "tools": {
+  "diagnose": 4,
+  "plot_data": 4,
+  "run_python": 19,
+  "fit_trajectories": 13,
+  "validate": 8,
+  "compare_models": 2,
+  "weak_sindy": 8,
+  "transform": 3,
+  "plot_model": 1,
+  "find_invariants": 1,
+  "detect_symmetries": 1,
+  "run_sindy": 2,
+  "run_pysr": 2
+ },
+ "polar": {
+  "growth": 0.702584,
+  "omega1": 0.423833,
+  "omega0": 1.90735,
+  "decay": 0.948228,
+  "drive": 0.288725
+ },
+ "bare": {
+  "rhs": {
+   "u0": "(7.13857)*1 + (-4.05717)*u1**1 + (0.916028)*u1**2 + (-0.105346)*u1**3 + (-3.53018)*u0**1 + (0.244181)*u0**1*u1**1 + (-0.00726245)*u0**1*u1**2 + (-3.00385)*u0**2 + (0.0631348)*u0**2*u1**1 + (-0.560899)*u0**3",
+   "u1": "(54.7043)*1 + (-26.7924)*u1**1 + (5.26662)*u1**2 + (-0.389062)*u1**3 + (38.9249)*u0**1 + (-12.2525)*u0**1*u1**1 + (1.09709)*u0**1*u1**2 + (9.99732)*u0**2 + (-1.72399)*u0**2*u1**1 + (0.976684)*u0**3",
+   "u2": "(3.9097)*1 + (2.17668)*u0**1 + (-1.34148)*u1**1 + (-0.952086)*u2**1 + (0.406271)*u0**2 + (-0.273914)*u0**1*u1**1 + (0.150211)*u1**2 + (-0.224214)*u2**2"
+  },
+  "rationale": "Data show a (u0,u1) limit cycle while u2 settles to a constant (~0.304). Fitting to smoothed derivatives (sparse regression) showed that u2 doesn't enter the u0/u1 equations, which behave like a cubic (FitzHugh\u2013Nagumo/van der Pol-like) oscillator. u2 relaxes, driven by a quadratic form in (u0,u1) centred on the oscillator's fixed point (\u2248 -1.7, 2.93). I then refined the coefficients by fitting simulated trajectories over 30-step windows (multiple shooting); the error got down to the noise level. On the held-out trajectory, the simulation stayed valid for the full 30 time units, with rollout NRMSE \u2248 0.005. I'm confident in how well it predicts, but not that these are the true sparse equations: the u0/u1 coefficients look ill-conditioned, which suggests a simpler law in shifted or rotated coordinates.",
+  "cost_usd": 1.024,
+  "n_tool_calls": 15
+ },
+ "errors_mean": {
+  "True law": 0.00717185114454346,
+  "Discovered law": 0.008056636717213274,
+  "Claude alone": 0.036670763908776056
+ },
+ "errors_at": {
+  "True law": {
+   "2": 0.007625545931943268,
+   "5": 0.007670624163889468,
+   "10": 0.005680278266096458,
+   "30": 0.020448911883530874
+  },
+  "Discovered law": {
+   "2": 0.007318826341462631,
+   "5": 0.007908576334532,
+   "10": 0.0060120886361872145,
+   "30": 0.02003325963009294
+  },
+  "Claude alone": {
+   "2": 0.19829115866897093,
+   "5": 0.0034330505761422567,
+   "10": 0.011257120097044541,
+   "30": 0.025858835355935413
+  }
+ }
+}

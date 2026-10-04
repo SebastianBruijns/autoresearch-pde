@@ -919,3 +919,104 @@ def orbit_case(path, out="runs/oos_orbit", noise=0.01, train_frac=0.5, units=(0.
     lageos_video(out / "orbit_forecast.mp4", tt[ev], truth_tr, {k: P for k, P in preds.items() if k != "Kepler + J2"},
                  days=1, name="Satellite with a large Earth bulge")
     return res
+
+
+# ----------------------------------------------------------------------------- Lorenz (ODE) forecast video
+ODE_COLORS = {"Reality": "k", "Discovered law": "#2a78d6", "FNO": "#eb6834", "SINDy": "#1baf7a"}
+
+
+def ode_video(path, t, truth, preds, names, valid=None, xlabel="time", fps=20, n_frames=200, title=""):
+    """Left: the trajectory in state space (3-D, or the plane for 2 variables), reality vs each forecast, trails and
+    moving dots. Right: one panel per variable, the curves drawn as time runs; a forecast's line turns faint after it
+    loses track (valid[label] = time where its error first passes the threshold)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.animation as anim
+    import matplotlib.pyplot as plt
+    _video_style(plt)
+    nv = truth.shape[1]
+    series = {"Reality": truth, **preds}
+    col = lambda k: ODE_COLORS.get(k, "#4a3aa7")
+    fig = plt.figure(figsize=(15, 8.4), facecolor="white")
+    if nv == 3:
+        ax = fig.add_axes([0.0, 0.04, 0.42, 0.78], projection="3d")
+        ax.set_box_aspect((1, 1, 1), zoom=1.05)
+        ax.set_xticks([]); ax.set_yticks([]); ax.set_zticks([])
+        ax.set_xlabel(names[0], labelpad=-8); ax.set_ylabel(names[1], labelpad=-8); ax.set_zlabel(names[2], labelpad=-8)
+    else:
+        ax = fig.add_axes([0.06, 0.12, 0.34, 0.68])
+        ax.set_xlabel(names[0]); ax.set_ylabel(names[1])
+        ax.grid(alpha=0.3)
+    lo, hi = np.nanmin(truth, 0), np.nanmax(truth, 0)
+    pad = 0.15 * (hi - lo)
+    lims = [(a - p, b + p) for a, b, p in zip(lo, hi, pad)]
+    ax.set_xlim(*lims[0]); ax.set_ylim(*lims[1])
+    if nv == 3:
+        ax.set_zlim(*lims[2])
+        ax.plot(*truth.T, color="0.85", lw=0.6)
+    else:
+        ax.plot(*truth.T, color="0.85", lw=0.6)
+    ax.set_title("State space", pad=4)
+    trails, dots = {}, {}
+    for k in series:
+        lw = 2.4 if k == "Reality" else 2.0
+        if nv == 3:
+            trails[k], = ax.plot([], [], [], color=col(k), lw=lw)
+            dots[k], = ax.plot([], [], [], "o", color=col(k), ms=9)
+        else:
+            trails[k], = ax.plot([], [], color=col(k), lw=lw)
+            dots[k], = ax.plot([], [], "o", color=col(k), ms=9)
+    panels, curves = [], {}
+    top, h, gap = 0.80, (0.68 - 0.05 * (nv - 1)) / nv, 0.05
+    for i in range(nv):
+        bx = fig.add_axes([0.52, top - (i + 1) * h - i * gap, 0.45, h])
+        bx.set_xlim(t[0], t[-1]); bx.set_ylim(*lims[i])
+        bx.set_ylabel(names[i])
+        bx.grid(alpha=0.3)
+        if i < nv - 1:
+            bx.tick_params(labelbottom=False)
+        panels.append(bx)
+        for k in series:
+            curves[(k, i)], = bx.plot([], [], color=col(k), lw=2.2 if k == "Reality" else 1.8,
+                                      ls="-" if k == "Reality" else "--")
+    panels[-1].set_xlabel(xlabel)
+    handles = [plt.Line2D([], [], color=col(k), lw=3) for k in series]
+    leg = fig.legend(handles, list(series), loc="upper center", bbox_to_anchor=(0.5, 0.93), ncol=len(series),
+                     frameon=False, handlelength=1.4, columnspacing=2.0)
+    clock = fig.text(0.02, 0.965, title, ha="left", va="top")
+    marks = {}
+    idx = np.unique(np.linspace(1, len(t) - 1, n_frames).astype(int))
+
+    def upd(f):
+        g = idx[f]
+        a0 = max(0, g - len(t) // 6)
+        for k, P in series.items():
+            seg = P[a0:g + 1]
+            ok = np.all(np.isfinite(seg), 1)
+            seg = seg[ok]
+            if not len(seg):
+                continue
+            lost = valid is not None and k in valid and valid[k] is not None and t[g] > valid[k]
+            if nv == 3:
+                trails[k].set_data(seg[:, 0], seg[:, 1]); trails[k].set_3d_properties(seg[:, 2])
+                dots[k].set_data([seg[-1, 0]], [seg[-1, 1]]); dots[k].set_3d_properties([seg[-1, 2]])
+            else:
+                trails[k].set_data(seg[:, 0], seg[:, 1])
+                dots[k].set_data([seg[-1, 0]], [seg[-1, 1]])
+            trails[k].set_alpha(0.35 if lost else 1.0)
+            for i in range(nv):
+                curves[(k, i)].set_data(t[:g + 1], P[:g + 1, i])
+            if lost and k not in marks:
+                marks[k] = [bx.axvline(valid[k], color=col(k), lw=1.5, ls=":") for bx in panels]
+        for j, k in enumerate(series):
+            txt = k
+            if valid and k in valid and valid[k] is not None:
+                txt = f"{k} (lost at {valid[k]:.1f})" if t[g] > valid[k] else f"{k} (on track)"
+            leg.get_texts()[j].set_text(txt)
+        clock.set_text(f"{title}   {xlabel.split('(')[0].strip()} {t[g]:.1f}".strip())
+        if nv == 3:
+            ax.view_init(elev=22, azim=-60 + 0.3 * f)
+        return list(trails.values()) + list(dots.values())
+    a = anim.FuncAnimation(fig, upd, frames=len(idx), interval=1000 / fps)
+    a.save(path, writer=anim.FFMpegWriter(fps=fps, bitrate=3500))
+    plt.close(fig)

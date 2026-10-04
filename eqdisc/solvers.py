@@ -66,7 +66,8 @@ def _lambdify(names, exprs):
     fns = [sp.lambdify(syms, e, modules="numpy") for e in exprs]
 
     def f(*args):
-        shape = np.broadcast(*args).shape if args else ()
+        # broadcast_shapes has no 64-argument limit (np.broadcast does): 3-D data with many fields exceeds 64 symbols
+        shape = np.broadcast_shapes(*[np.shape(a) for a in args]) if args else ()
         return [np.broadcast_to(np.asarray(fn(*args), dtype=float), shape) for fn in fns]
     return f
 
@@ -136,14 +137,17 @@ def spectral_derivs(U, L, kmax=MAX_DERIV, axis=-2):
 
 
 def make_pde_rhs(fields, rhs, L):
-    """Return f(U, x) with U shape (..., nx, n_fields) -> dU/dt (spectral derivatives)."""
-    names = pde_symbols(fields)
+    """Return f(U, x, t=0.0) with U shape (..., nx, n_fields) -> dU/dt (spectral derivatives).
+    The expressions may also use the time `t` (explicitly forced PDEs); t is a scalar or broadcasts
+    against U.shape[:-1] (e.g. shape (nt, 1) for U of shape (nt, nx, nf))."""
+    names = pde_symbols(fields) + ["t"]
     fn = _lambdify(names, [parse(rhs[f], names) for f in fields])
 
-    def f(U, x):
+    def f(U, x, t=0.0):
         D = spectral_derivs(U, L)                         # each (..., nx, nf)
         args = [D[k][..., i] for i in range(len(fields)) for k in range(MAX_DERIV + 1)]
         args.append(np.broadcast_to(x, D[0].shape[:-1]))
+        args.append(np.broadcast_to(t, D[0].shape[:-1]))
         return np.stack(fn(*args), axis=-1)
     return f
 
@@ -180,7 +184,7 @@ def _etdrk4_coeffs(Lop, h, M=32):
 
 
 def integrate_pde(fields, rhs, L, U0, t_eval, dt_sim, blowup=1e6, max_seconds=300.0, x0=0.0):
-    """ETDRK4 on a periodic grid with 2/3 dealiasing.
+    """ETDRK4 on a periodic grid with 2/3 dealiasing. The rhs may depend explicitly on t (and x).
     U0: (nx, n_fields). Returns (len(t_eval), nx, n_fields), NaN-padded after blow-up or timeout."""
     U0 = np.asarray(U0, float)
     nx, nf = U0.shape
@@ -193,8 +197,8 @@ def integrate_pde(fields, rhs, L, U0, t_eval, dt_sim, blowup=1e6, max_seconds=30
     dealias = (np.arange(k.size) < nx / 3)[:, None]
     Nfun = make_pde_rhs(fields, nonlin, L)
 
-    def N(vh):
-        return dealias * np.fft.rfft(Nfun(np.fft.irfft(vh, n=nx, axis=0), x), axis=0)
+    def N(vh, tt=0.0):
+        return dealias * np.fft.rfft(Nfun(np.fft.irfft(vh, n=nx, axis=0), x, tt), axis=0)
 
     out = np.full((len(t_eval), nx, nf), np.nan)
     out[0] = U0
@@ -205,16 +209,17 @@ def integrate_pde(fields, rhs, L, U0, t_eval, dt_sim, blowup=1e6, max_seconds=30
         v = np.fft.rfft(U0, axis=0)
         try:
             for i, ns in enumerate(steps):
-                for _ in range(ns):
+                for j in range(ns):
                     if max_seconds is not None and time.time() - t_start > max_seconds:
                         raise _Timeout
-                    Nv = N(v)
+                    tn = float(t_eval[i]) + j * h          # stage times t, t+h/2, t+h/2, t+h (used only if rhs has t)
+                    Nv = N(v, tn)
                     a = E2 * v + Q * Nv
-                    Na = N(a)
+                    Na = N(a, tn + h / 2)
                     b = E2 * v + Q * Na
-                    Nb = N(b)
+                    Nb = N(b, tn + h / 2)
                     c = E2 * a + Q * (2 * Nb - Nv)
-                    Nc = N(c)
+                    Nc = N(c, tn + h)
                     v = E * v + Nv * f1 + 2 * (Na + Nb) * f2 + Nc * f3
                 U = np.fft.irfft(v, n=nx, axis=0)
                 if not np.all(np.isfinite(U)) or np.abs(U).max() > blowup:

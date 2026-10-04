@@ -326,32 +326,37 @@ def confidence_panel(a, key, names=None):
 
 # ----------------------------------------------------------------------------- presentation layout (v3)
 CSS3 = """
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/aaaakshat/cm-web-fonts@latest/fonts.css">
 <style>
-html, body, p, div, span, li, label, button, a, input, textarea, h1, h2, h3, h4, h5, h6, summary,
-.stMarkdown, .stCaption {font-family: "Computer Modern Serif", "Latin Modern Roman", "CMU Serif", Georgia, serif !important;}
-[data-testid="stIconMaterial"], [data-testid*="Icon"], [data-testid*="icon"], .material-symbols-rounded,
-[class*="material-symbols"], [class*="Icon"] span {font-family: "Material Symbols Rounded" !important;}
+:root {--accent: #2a78d6; --muted: #6b6f76; --line: #e5e5e1; --soft: #f3f3f1;}
 .stMarkdown p, .stMarkdown li, .stCaption, [data-testid="stCaptionContainer"], details summary p,
-[data-testid="stExpander"] summary p, .vbox .s, .nbox .y {font-size: 1.12rem !important;}
-.block-container {padding-top: 4.6rem; max-width: 1500px;}
-.pt {font-size: 3.1rem; font-weight: 850; letter-spacing: -0.03em; line-height: 1.05; margin: 0 0 .25rem 0;}
-.ps {font-size: 1.15rem; opacity: .6; margin: 0 0 1.4rem 0;}
-.ft {font-size: 1.45rem; font-weight: 800; letter-spacing: -0.01em; margin: .4rem 0 .35rem 0;}
-.ft .lock {font-size: .85rem; font-weight: 600; opacity: .55; margin-left: .5rem; vertical-align: middle;}
-.vbox {border-radius: 18px; padding: 18px 22px; color: #fff; margin-bottom: 14px;}
-.vbox .v {font-size: 1.9rem; font-weight: 850; line-height: 1.15;}
-.vbox .s {font-size: 1.0rem; opacity: .92; margin-top: .3rem;}
-.nbox {border-radius: 18px; padding: 16px 22px; border: 2px solid rgba(99,102,241,.55);
-       background: rgba(99,102,241,.09); margin-top: 14px;}
-.nbox .h {font-size: .85rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: #6366f1;}
-.nbox .w {font-size: 1.45rem; font-weight: 800; line-height: 1.25; margin-top: .2rem;}
-.nbox .y {font-size: .95rem; opacity: .7; margin-top: .35rem;}
-.law {font-size: 1.25rem; font-weight: 700; margin: .2rem 0;}
-.home-t {font-size: 3.6rem; font-weight: 900; letter-spacing: -0.035em; line-height: 1.05; margin: 1rem 0 .4rem 0;}
-.home-s {font-size: 1.3rem; opacity: .6; margin-bottom: 2rem;}
-.cardn {font-size: 1.25rem; font-weight: 850; text-align: center; margin: .5rem 0 .2rem 0; min-height: 3.2em;
-         display: flex; align-items: center; justify-content: center; line-height: 1.25;}
+[data-testid="stExpander"] summary p {font-size: 1.05rem !important; line-height: 1.55;}
+.block-container {padding-top: 4.2rem; padding-bottom: 4rem; max-width: 1400px;}
+.pt {font-family: "Source Serif 4", serif; font-size: 2.9rem; font-weight: 600; letter-spacing: -0.02em;
+     line-height: 1.08; margin: 0 0 .4rem 0;}
+.ps {font-size: 1.1rem; color: var(--muted); margin: 0 0 1.8rem 0;}
+.ft {font-family: "Source Serif 4", serif; font-size: 1.4rem; font-weight: 600; letter-spacing: -0.01em;
+     margin: .4rem 0 .5rem 0; display: flex; align-items: center; gap: .6rem;}
+.ft .lock {font-family: "Inter", sans-serif; font-size: .66rem; font-weight: 600; letter-spacing: .1em;
+           text-transform: uppercase; color: var(--muted); background: var(--soft); border-radius: 999px;
+           padding: 3px 9px;}
+.vbox {border-radius: 12px; padding: 16px 20px; margin-bottom: 18px; border-left: 4px solid currentColor;}
+.vbox .v {font-size: 1.55rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2;}
+.vbox .s {font-size: .98rem; color: var(--muted); margin-top: .25rem;}
+.nbox {border-radius: 12px; padding: 16px 20px; border: 1px solid var(--line); background: #fff; margin-top: 18px;}
+.nbox .h {font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--accent);}
+.nbox .w {font-size: 1.2rem; font-weight: 600; line-height: 1.3; margin-top: .3rem;}
+.nbox .y {font-size: .95rem; color: var(--muted); margin-top: .35rem;}
+.law {font-size: 1.1rem; font-weight: 600; margin: .3rem 0;}
+.home-e {font-size: .74rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent);
+         margin: 1rem 0 .6rem 0;}
+.home-t {font-family: "Source Serif 4", serif; font-size: 3.4rem; font-weight: 600; letter-spacing: -0.025em;
+         line-height: 1.05; margin: 0 0 .6rem 0;}
+.home-s {font-size: 1.2rem; color: var(--muted); margin-bottom: 2.2rem;}
+.cardn {font-family: "Source Serif 4", serif; font-size: 1.25rem; font-weight: 600; margin: .7rem 0 .1rem 0;
+        min-height: 2.8em; display: flex; align-items: flex-start; line-height: 1.25;}
+.chip {background: var(--soft); border: none; color: #3a3d42;}
+.chip b {color: var(--accent);}
+div[data-testid="stImage"] img, div[data-testid="stVideo"] video {border-radius: 10px;}
 </style>
 """
 
@@ -366,7 +371,7 @@ def page_title(title, sub=None):
 
 
 def fig_title(text, locked=False):
-    lock = "<span class='lock'>🔒 hidden truth</span>" if locked else ""
+    lock = "<span class='lock'>hidden truth</span>" if locked else ""
     st.markdown(f"<div class='ft'>{html.escape(text)}{lock}</div>", unsafe_allow_html=True)
 
 
@@ -381,16 +386,16 @@ def _status(a):
     return status, failed
 
 
-SHORT_VERDICT = {"CONFIDENT": ("#16a34a", "✓ Very likely the law", "every check passed"),
-                 "CONFIDENT IN PREDICTIONS": ("#0891b2", "✓ Predictions trustworthy", "rival forms predict the same"),
-                 "COLLECT MORE DATA": ("#d97706", "◐ Not sure yet", "rival versions fit equally well"),
-                 "INCONCLUSIVE": ("#dc2626", "✗ Don't trust this law", "it fails its own checks")}
+SHORT_VERDICT = {"CONFIDENT": ("#15803d", "Very likely the law", "every check passed"),
+                 "CONFIDENT IN PREDICTIONS": ("#0e7490", "Predictions trustworthy", "rival forms predict the same"),
+                 "COLLECT MORE DATA": ("#b45309", "Not sure yet", "rival versions fit equally well"),
+                 "INCONCLUSIVE": ("#b91c1c", "Don't trust this law", "it fails its own checks")}
 
 
 def verdict_box(a):
     status, _ = _status(a)
     color, label, sub = SHORT_VERDICT.get(status, SHORT_VERDICT["INCONCLUSIVE"])
-    st.markdown(f"<div class='vbox' style='background:{color}'><div class='v'>{html.escape(label)}</div>"
+    st.markdown(f"<div class='vbox' style='color:{color}; background:{color}12'><div class='v'>{html.escape(label)}</div>"
                 f"<div class='s'>{html.escape(sub)}</div></div>", unsafe_allow_html=True)
 
 
@@ -411,7 +416,7 @@ def next_box(a, names=None):
         why = (f"{len(amb) - 1} rival versions fit equally well; new runs tell them apart" if len(amb) > 1
                else a["data_advice"][0])
     if what:
-        st.markdown(f"<div class='nbox'><div class='h'>📍 Measure next</div><div class='w'>{html.escape(str(what))}</div>"
+        st.markdown(f"<div class='nbox'><div class='h'>Measure next</div><div class='w'>{html.escape(str(what))}</div>"
                     + (f"<div class='y'>{html.escape(why)}</div>" if why else "") + "</div>", unsafe_allow_html=True)
 
 
@@ -439,5 +444,7 @@ def precision_fig(a, names=None):
 def checks_md(a):
     out = []
     for name, ok, detail in _checks(a):
-        out.append(f"- {'✅' if ok else ('➖' if ok is None else '⚠️')} **{name}**: {detail}")
+        mark = (":green[:material/check_circle:]" if ok else
+                ":gray[:material/remove_circle:]" if ok is None else ":orange[:material/error:]")
+        out.append(f"- {mark} **{name}**: {detail}")
     return "\n".join(out)

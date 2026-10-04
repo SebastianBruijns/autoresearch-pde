@@ -4,6 +4,7 @@
 """
 import base64
 import html
+import os
 import json
 import sys
 from pathlib import Path
@@ -28,6 +29,11 @@ th{color:var(--mut);font-weight:600} code{font-size:12.5px;word-break:break-word
 img{max-width:100%;border-radius:8px;border:1px solid var(--line);background:#fff}
 .eq{font-size:17px;overflow-x:auto} .good{color:var(--acc)} .bad{color:var(--bad)}
 """
+
+
+def _txt(x):
+    """Narration fields may be strings or lists of strings."""
+    return "; ".join(map(str, x)) if isinstance(x, (list, tuple)) else str(x or "")
 
 
 def _latex(v, e, names):
@@ -183,6 +189,40 @@ if __name__ == "__main__":
     print(build_report(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None))
 
 
+def _checks_card(res):
+    """'Data and model checks' card: fired evidence-layer findings in plain language, repairs, and the valid range."""
+    from .audit import describe
+    a = res.get("assessment") or {}
+    ev = res.get("evidence") or {}
+    findings = a.get("findings") if a.get("findings") is not None else \
+        (ev.get("data_findings") or []) + (ev.get("final_findings") or [])
+    fired = [f for f in findings if f.get("fired")]
+    rank = {"critical": 0, "warn": 1, "info": 2}
+    fired.sort(key=lambda f: (bool(f.get("resolved")), rank.get(f.get("severity"), 3)))
+    if not fired:
+        body = "<div class='good'><b>All checks passed.</b></div><div class='sub'>Data (glitches, gaps, sampling) and model " \
+               "(same coefficients on every slice, residual is only noise) checks found nothing.</div>"
+    else:
+        items = []
+        for f in fired:
+            sev = f.get("severity", "")
+            cls = "bad" if sev == "critical" and not f.get("resolved") else "sub" if f.get("resolved") or sev == "info" else ""
+            items.append(f"<li class='{cls}'>{html.escape(describe(f))} <span class='sub'>[{html.escape(str(f.get('id')))}]</span></li>")
+        body = "<ul>" + "".join(items) + "</ul>"
+    for r in ev.get("data_repairs") or []:
+        body += f"<div class='sub'>Data repair applied before fitting: {html.escape(r.get('note', ''))}.</div>"
+    for r in res.get("revisions") or []:
+        if r.get("name"):
+            body += (f"<div class='sub'>Revision from {html.escape(str(r.get('from_finding')))}: "
+                     f"<code>{html.escape(json.dumps(r.get('rhs'))[:300])}</code> "
+                     f"{'<b>adopted</b> (won the tournament)' if r.get('adopted') else 'rejected (lost the tournament)'}.</div>")
+    vr = (res.get("verdict") or {}).get("valid_range")
+    if vr:
+        body += "<div><b>Valid range.</b> " + html.escape("; ".join(
+            f"{v} in [{_fmt(lo)}, {_fmt(hi)}]" for v, (lo, hi) in vr.items())) + " (no data beyond).</div>"
+    return "<h2>Data and model checks</h2><div class='card'>" + body + "</div>"
+
+
 def build_discovery_report(out_dir, res, meta, data):
     """Top-level report for eqdisc.discover: verdict first, then the story, then the evidence."""
     out_dir = Path(out_dir)
@@ -198,6 +238,7 @@ def build_discovery_report(out_dir, res, meta, data):
              f"<div><b>Recommendation.</b> {html.escape(v['recommendation'])}</div></div>")
     if res.get("final_model"):
         P.append("<div class='card eq'>" + "".join(_latex(k, e, names) for k, e in res["final_model"].items()) + "</div>")
+    P.append(_checks_card(res))
     if st.get("headline"):
         P.append(f"<div class='card'><b>Summary.</b> {html.escape(st['headline'])}"
                  + (f"<br><br><b>Physical interpretation.</b> {html.escape(st.get('physical_interpretation', ''))}" if st.get("physical_interpretation") else "")
@@ -206,8 +247,8 @@ def build_discovery_report(out_dir, res, meta, data):
     steps = st.get("key_steps") or []
     if steps:
         P.append("<h2>Key steps</h2><table><tr><th>#</th><th>observation</th><th>decision</th><th>outcome</th></tr>" + "".join(
-            f"<tr><td>{i}</td><td>{html.escape(s_.get('observation', ''))}</td><td>{html.escape(s_.get('decision', ''))}</td>"
-            f"<td>{html.escape(s_.get('outcome', ''))}</td></tr>" for i, s_ in enumerate(steps, 1)) + "</table>")
+            f"<tr><td>{i}</td><td>{html.escape(_txt(s_.get('observation', '')))}</td><td>{html.escape(_txt(s_.get('decision', '')))}</td>"
+            f"<td>{html.escape(_txt(s_.get('outcome', '')))}</td></tr>" for i, s_ in enumerate(steps, 1)) + "</table>")
     P.append("<h2>Findings along the way</h2><table><tr><th>step</th><th>finding</th><th>why it matters</th></tr>" + "".join(
         f"<tr><td>{html.escape(i['step'])}</td><td>{html.escape(i['finding'])}</td><td class='sub'>{html.escape(i['why_it_matters'])}</td></tr>"
         for i in res["insights"]) + "</table>")
@@ -246,7 +287,7 @@ def build_discovery_report(out_dir, res, meta, data):
     rows = ""
     for k, b in res["branches"].items():
         sv = b.get("self_validation") or {}
-        link = f"<a href='{html.escape(str(Path(b['report']).relative_to(out_dir)))}'>report</a>" if b.get("report") else ""
+        link = f"<a href='{html.escape(os.path.relpath(b['report'], out_dir))}'>report</a>" if b.get("report") else ""
         rows += (f"<tr><td>{html.escape(k)}{' 🏆' if k == res['winner_branch'] else ''}</td><td><code>{html.escape(json.dumps(b.get('model'))[:260])}</code></td>"
                  f"<td>{_fmt(sv.get('rollout_valid_time', ''))}</td><td>{_fmt(b.get('cost_usd'))}</td><td>{link}</td></tr>")
     P.append("<h2>Parallel branches</h2><table><tr><th>strategy</th><th>model</th><th>valid time</th><th>$</th><th></th></tr>" + rows + "</table>")

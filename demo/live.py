@@ -30,7 +30,7 @@ def fmt_event(ev):
     br = f"`{ev['branch']}` " if ev.get("branch") else ""
     if typ == "stage":
         txt = (ev.get("text") or "").strip()
-        return f"**▶ {txt}**" if re.match(r"^\[\d/\d\]", txt) else f"&nbsp;&nbsp;&nbsp;{txt}"
+        return f"**▶ {txt}**" if re.match(r"^\[(\d/\d|\+)\]", txt) else f"&nbsp;&nbsp;&nbsp;{txt}"
     if typ == "note":
         return f"💭 {br}_{(ev.get('text') or '')[:220]}_"
     if typ == "tool":

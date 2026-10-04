@@ -19,15 +19,51 @@ def _names(rhs_a, rhs_b, extra=()):
                                                                     "atan2", "tanh", "cot", "Abs"} | set(extra))
 
 
+def _consts(e):
+    """Numeric constants that a fit may change: floats, and non-integer rationals (nsimplify turns 0.5 into 1/2)."""
+    return [a for a in e.atoms(sp.Float, sp.Rational) if not a.is_Integer]
+
+
 def _skeleton(e):
-    """Replace every float constant with a placeholder to compare structure."""
-    return e.xreplace({a: sp.Symbol("C") for a in e.atoms(sp.Float)})
+    """Replace every numeric constant (float or non-integer rational) with a placeholder to compare structure."""
+    return e.xreplace({a: sp.Symbol("C") for a in _consts(e)})
+
+
+def _term_map(e):
+    """{structure of a term (floats -> C): [(numeric coefficient, sorted inner floats), ...]} of an expanded sum."""
+    out = {}
+    for x in sp.Add.make_args(sp.expand(e)):
+        c, m = x.as_coeff_Mul()
+        out.setdefault(_skeleton(m), []).append((float(c), sorted(float(f) for f in _consts(m))))
+    return out
 
 
 def _coef_close(a, b, tol):
-    fa = sorted(float(x) for x in a.atoms(sp.Float))
-    fb = sorted(float(x) for x in b.atoms(sp.Float))
-    return len(fa) == len(fb) and all(abs(x - y) <= tol * max(abs(x), abs(y), 1e-12) for x, y in zip(fa, fb))
+    """Same terms with coefficients (and constants inside functions) within relative tol, matched term by term.
+    Integer coefficients count (a coefficient of exactly 1 is a coefficient), unlike comparing sorted Float atoms."""
+    close = lambda x, y: abs(x - y) <= tol * max(abs(x), abs(y), 1e-12)
+    A, B = _term_map(a), _term_map(b)
+    if A.keys() != B.keys():
+        return False
+    for k in A:
+        la, lb = sorted(A[k]), sorted(B[k])
+        if len(la) != len(lb):
+            return False
+        for (ca, fa), (cb, fb) in zip(la, lb):
+            if not close(ca, cb) or len(fa) != len(fb) or not all(close(x, y) for x, y in zip(fa, fb)):
+                return False
+    return True
+
+
+def _terms(e):
+    """{monomial: coefficient} of an expanded expression, or None if a coefficient is not a number."""
+    out = {}
+    for t in sp.Add.make_args(sp.expand(e)):
+        k, m = t.as_coeff_Mul()
+        if not k.is_number:
+            return None
+        out[m] = out.get(m, 0.0) + float(k)
+    return out
 
 
 def sympy_check(t_str, c_str, names, tol=0.05):
@@ -38,13 +74,24 @@ def sympy_check(t_str, c_str, names, tol=0.05):
             return True, "exact"
     except Exception:  # noqa: BLE001
         pass
+    try:     # sums of monomials (the usual case): same terms, each coefficient within tol
+        tt, ct = _terms(t), _terms(c)
+        if tt is not None and ct is not None and tt.keys() == ct.keys() and all(
+                abs(tt[m] - ct[m]) <= tol * max(abs(tt[m]), abs(ct[m]), 1e-12) for m in tt):
+            return True, "terms+coefficients"
+    except Exception:  # noqa: BLE001
+        pass
     try:
         tc, cc = sp.cancel(sp.together(sp.expand(t))), sp.cancel(sp.together(sp.expand(c)))
         tn, td = sp.fraction(tc)
         cn, cd = sp.fraction(cc)
         # normalise so that denominators are monic in their largest coefficient
         def norm(n, d):
-            cs = [abs(float(x)) for x in sp.Poly(d, *sorted(d.free_symbols, key=str)).coeffs()] if d.free_symbols else [abs(float(d))]
+            try:
+                cs = [abs(float(x)) for x in sp.Poly(d, *sorted(d.free_symbols, key=str)).coeffs()] if d.free_symbols \
+                    else [abs(float(d))]
+            except Exception:  # noqa: BLE001  (non-polynomial denominator, e.g. 1/exp(u/2): leave unnormalised)
+                cs = []
             k = max(cs) if cs else 1.0
             return sp.expand(n / k), sp.expand(d / k)
         tn, td = norm(tn, td)
@@ -52,7 +99,7 @@ def sympy_check(t_str, c_str, names, tol=0.05):
         if all(len(sp.Add.make_args(a)) == len(sp.Add.make_args(b)) for a, b in [(tn, cn), (td, cd)]):
             ts = {_skeleton(x.as_coeff_Mul()[1]) for x in sp.Add.make_args(tn) + sp.Add.make_args(td)}
             cs = {_skeleton(x.as_coeff_Mul()[1]) for x in sp.Add.make_args(cn) + sp.Add.make_args(cd)}
-            if ts == cs and _coef_close(sp.Add(tn, td), sp.Add(cn, cd), tol):
+            if ts == cs and _coef_close(tn, cn, tol) and _coef_close(td, cd, tol):
                 return True, "structure+coefficients"
     except Exception:  # noqa: BLE001
         pass

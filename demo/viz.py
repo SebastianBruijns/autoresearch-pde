@@ -322,3 +322,78 @@ def gs_simple(vrmse):
     fig.update_layout(xaxis=dict(title="error (lower is better)", range=[0, max(val) * 1.25]),
                       yaxis=dict(autorange="reversed"), showlegend=False)
     return _layout(fig, 360, hovermode="closest")
+
+
+# ----------------------------------------------------------------------------- hidden oscillator
+HIDDEN_STYLE = {"Discovered law": ("#16a34a", "solid", 4), "Claude alone": ("#ea580c", "solid", 4),
+                "True law": ("#111827", "dash", 2)}
+
+
+def hidden_training(train, h=430):
+    """The three training runs in the (u0, u1) plane, as measured (noisy)."""
+    fig = go.Figure()
+    for k, tr in enumerate(train):
+        fig.add_trace(go.Scatter(x=tr[:, 0], y=tr[:, 1], mode="markers", marker=dict(size=3, color=GREY, opacity=0.6),
+                                 name=f"run {k + 1}", hovertemplate="u0 %{x:.2f}<br>u1 %{y:.2f}<extra></extra>"))
+    fig.update_xaxes(title="u0"); fig.update_yaxes(title="u1", scaleanchor="x", scaleratio=1)
+    return _layout(fig, h, showlegend=False, hovermode="closest")
+
+
+def hidden_errors(t, errs, h=430):
+    """Distance from (smoothed) reality over time for each model, log scale in percent."""
+    fig = go.Figure()
+    for name, e in errs.items():
+        col, dash, w = HIDDEN_STYLE.get(name, (GREY, "solid", 2))
+        fig.add_trace(go.Scatter(x=t, y=100 * np.maximum(e, 1e-3), mode="lines", name=name,
+                                 line=dict(color=col, dash=dash, width=w), hovertemplate="%{y:.2g}%<extra>" + name + "</extra>"))
+    fig.add_vrect(x0=0, x1=8, fillcolor="#fef3c7", opacity=0.5, line_width=0, layer="below")
+    fig.update_xaxes(title="time")
+    fig.update_yaxes(title="distance from reality", type="log", ticksuffix="%")
+    return _layout(fig, h, legend_top=True)
+
+# ----------------------------------------------------------------------------- Lorenz (in vs out of sample)
+ODE_STYLE = {"Discovered law": (BLUE, "solid"), "FNO": (ORANGE, "solid"), "SINDy": (AQUA, "dot")}
+
+
+def ode_errors(t_lyap, errs, thr=0.5, xlabel="Lyapunov times"):
+    fig = go.Figure()
+    for name, e in errs.items():
+        c, dash = ODE_STYLE.get(name, (GREY, "solid"))
+        fig.add_trace(go.Scatter(x=t_lyap, y=e, mode="lines", name=name, line=dict(color=c, width=2.5, dash=dash),
+                                 hovertemplate="%{y:.2f}<extra>" + name + "</extra>"))
+    fig.add_hline(y=thr, line=dict(color="rgba(120,120,120,.6)", width=1, dash="dash"),
+                  annotation_text="lost track above here", annotation_position="top left")
+    fig.update_layout(xaxis_title=xlabel, yaxis=dict(title="error (relative)", range=[0, 1.6]))
+    return _layout(fig, 360)
+
+
+def ode_valid_bars(valid_in, valid_oos, horizon):
+    """Grouped bars: how long each method stays on track, on a training run vs on new starting points."""
+    names = list(valid_in)
+    fig = go.Figure()
+    for grp, v, pat in [("In sample (a training run)", valid_in, ""), ("Out of sample (new starting points)", valid_oos, "/")]:
+        fig.add_trace(go.Bar(x=names, y=[v[n] for n in names], name=grp,
+                             marker=dict(color=[ODE_STYLE.get(n, (GREY,))[0] for n in names], pattern_shape=pat,
+                                         cornerradius=4, opacity=1.0 if not pat else 0.75),
+                             text=[f"{v[n]:.1f}" for n in names], textposition="outside",
+                             hovertemplate="%{x}: %{y:.2f} Lyapunov times<extra>" + grp + "</extra>"))
+    fig.add_hline(y=horizon, line=dict(color="rgba(120,120,120,.6)", width=1, dash="dash"),
+                  annotation_text="end of the record", annotation_position="top left")
+    fig.update_layout(barmode="group", yaxis=dict(title="Lyapunov times on track", range=[0, horizon * 1.18]),
+                      hovermode="closest")
+    return _layout(fig, 360)
+
+
+def ode_series(t, X, preds, names):
+    """One panel per variable: the data (solid grey-black) and each forecast."""
+    fig = make_subplots(rows=len(names), cols=1, shared_xaxes=True, vertical_spacing=0.05)
+    for i, v in enumerate(names):
+        fig.add_trace(go.Scatter(x=t, y=X[:, i], mode="lines", name="Data", line=dict(color="rgba(30,30,30,.85)", width=2),
+                                 showlegend=i == 0, legendgroup="Data"), row=i + 1, col=1)
+        for k, Y in preds.items():
+            c, dash = ODE_STYLE.get(k, (GREY, "solid"))
+            fig.add_trace(go.Scatter(x=t, y=Y[:, i], mode="lines", name=k, line=dict(color=c, width=2, dash="dash"),
+                                     showlegend=i == 0, legendgroup=k), row=i + 1, col=1)
+        fig.update_yaxes(title_text=v, row=i + 1, col=1)
+    fig.update_xaxes(title_text="Lyapunov times", row=len(names), col=1)
+    return _layout(fig, 150 + 140 * len(names))

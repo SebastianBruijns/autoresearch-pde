@@ -19,6 +19,12 @@ def _spatial_ndim(meta, data):
     return data["U"].ndim - 3
 
 
+def _img(A):
+    """2-D image of a field snapshot: 3-D snapshots are shown as their middle plane along the last axis."""
+    A = np.asarray(A)
+    return A[..., A.shape[-1] // 2] if A.ndim == 3 else A
+
+
 def plot_data(meta, data, path, max_traj=4):
     U, t = data["U"], data["t"]
     names = meta["variables"]
@@ -61,8 +67,8 @@ def plot_data(meta, data, path, max_traj=4):
         fig, axes = _subplots(nf, 3, figsize=(10, 3.2 * nf), squeeze=False)
         for i, f in enumerate(names):
             for k, ti in enumerate(idx):
-                im = axes[i, k].imshow(U[0, ti, ..., i].T, origin="lower", cmap="RdBu_r")
-                axes[i, k].set_title(f"{f}, t={t[ti]:.2f}")
+                im = axes[i, k].imshow(_img(U[0, ti, ..., i]).T, origin="lower", cmap="RdBu_r")
+                axes[i, k].set_title(f"{f}, t={t[ti]:.2f}" + (" (mid z-plane)" if U.ndim == 6 else ""))
                 fig.colorbar(im, ax=axes[i, k])
     fig.tight_layout()
     fig.savefig(path, dpi=90)
@@ -127,8 +133,8 @@ def plot_model(meta, data, rhs, path):
         for i, fld in enumerate(names):
             for k, (A, ttl) in enumerate([(val[0, ti, ..., i], "data"), (roll[ti, ..., i], "model"),
                                           (roll[ti, ..., i] - val[0, ti, ..., i], "model - data")]):
-                im = axes[i, k].imshow(A.T, origin="lower", cmap="RdBu_r")
-                axes[i, k].set_title(f"{fld} {ttl}, t={t[ti]:.2f}")
+                im = axes[i, k].imshow(_img(A).T, origin="lower", cmap="RdBu_r")
+                axes[i, k].set_title(f"{fld} {ttl}, t={t[ti]:.2f}" + (" (mid z-plane)" if U.ndim == 6 else ""))
                 fig.colorbar(im, ax=axes[i, k])
     fig.suptitle("  |  ".join(f"d{k}/dt = {v[:70]}" for k, v in rhs.items()), fontsize=8)
     fig.tight_layout()

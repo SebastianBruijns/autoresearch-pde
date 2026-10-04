@@ -1,0 +1,1242 @@
+{
+ "lyapunov": 1.7488331527465952,
+ "fno_window": 8,
+ "conditions": {
+  "clean": {
+   "label": "Clean",
+   "names": [
+    "x",
+    "y",
+    "z"
+   ],
+   "laws": {
+    "Discovered law": {
+     "x": "-18.949*x + 26.825*y",
+     "y": "37.44*x - 1.865*y - 2.3022*x*z",
+     "z": "3.6895*x*y - 5.0572*z"
+    },
+    "SINDy": {
+     "x": "-18.931*x +26.804*y",
+     "y": "37.44*x -1.8732*y -2.302*x*z",
+     "z": "-5.0527*z +3.6874*x*y"
+    }
+   },
+   "valid_in": {
+    "Discovered law": 3.9336831873805913,
+    "SINDy": 3.9521511835654763,
+    "FNO": 3.1026233590607477
+   },
+   "valid_oos": {
+    "Discovered law": 2.29003152692579,
+    "SINDy": 2.313116522156897,
+    "FNO": 1.7821616318414417
+   },
+   "valid_oos_runs": {
+    "Discovered law": [
+     3.0010493800438782,
+     1.579013673807702
+    ],
+    "SINDy": [
+     3.0287513743212062,
+     1.5974816699925873
+    ],
+    "FNO": [
+     2.234627538371134,
+     1.3296957253117492
+    ]
+   },
+   "uq": {
+    "verdict": {
+     "status": "COLLECT MORE DATA",
+     "headline": "Best current model, not yet confirmed: coefficients are not yet pinned down.",
+     "recommendation": "Collect data at: start at (-8.52, -16.7, 3.63). It would mainly pin down x*y in dz/dt, y in dy/dt (about 1.28x more informative than repeating existing conditions). Next best: start at (-18.1, -14.2, 3.45)."
+    },
+    "terms": [
+     {
+      "var": "x",
+      "term": "y",
+      "coef": 26.8255,
+      "submitted_coef": 26.825,
+      "ci90": [
+       26.77,
+       26.88
+      ],
+      "rel_uncertainty": 0.00215,
+      "significant": true,
+      "dBIC_if_removed": 2000.0
+     },
+     {
+      "var": "x",
+      "term": "x",
+      "coef": -18.9496,
+      "submitted_coef": -18.949,
+      "ci90": [
+       -19.0,
+       -18.9
+      ],
+      "rel_uncertainty": 0.0024,
+      "significant": true,
+      "dBIC_if_removed": 1910.0
+     },
+     {
+      "var": "y",
+      "term": "x",
+      "coef": 37.4441,
+      "submitted_coef": 37.44,
+      "ci90": [
+       37.32,
+       37.58
+      ],
+      "rel_uncertainty": 0.00342,
+      "significant": true,
+      "dBIC_if_removed": 1640.0
+     },
+     {
+      "var": "y",
+      "term": "y",
+      "coef": -1.86678,
+      "submitted_coef": -1.865,
+      "ci90": [
+       -1.923,
+       -1.809
+      ],
+      "rel_uncertainty": 0.0305,
+      "significant": true,
+      "dBIC_if_removed": 297.0
+     },
+     {
+      "var": "y",
+      "term": "x*z",
+      "coef": -2.30233,
+      "submitted_coef": -2.3022,
+      "ci90": [
+       -2.308,
+       -2.297
+      ],
+      "rel_uncertainty": 0.00223,
+      "significant": true,
+      "dBIC_if_removed": 1910.0
+     },
+     {
+      "var": "z",
+      "term": "z",
+      "coef": -5.05722,
+      "submitted_coef": -5.0572,
+      "ci90": [
+       -5.068,
+       -5.047
+      ],
+      "rel_uncertainty": 0.00199,
+      "significant": true,
+      "dBIC_if_removed": 2070.0
+     },
+     {
+      "var": "z",
+      "term": "x*y",
+      "coef": 3.68951,
+      "submitted_coef": 3.6895,
+      "ci90": [
+       3.683,
+       3.695
+      ],
+      "rel_uncertainty": 0.00155,
+      "significant": true,
+      "dBIC_if_removed": 2340.0
+     }
+    ],
+    "missing": [
+     {
+      "var": "y",
+      "term": "y*z",
+      "dBIC_if_added": 4.72,
+      "error_reduction": 0.00325
+     },
+     {
+      "var": "y",
+      "term": "z*z",
+      "dBIC_if_added": 5.28,
+      "error_reduction": 0.00157
+     },
+     {
+      "var": "x",
+      "term": "y*y",
+      "dBIC_if_added": 5.33,
+      "error_reduction": 0.00143
+     },
+     {
+      "var": "z",
+      "term": "1",
+      "dBIC_if_added": 5.35,
+      "error_reduction": 0.00137
+     }
+    ],
+    "validation": {
+     "deriv_nrmse": 0.08695003202787777,
+     "rollout_valid_time": 3.632702569494989,
+     "rollout_horizon": 5.2800909440334145,
+     "rollout_blew_up": false,
+     "rollout_timed_out": false
+    },
+    "experiments": [
+     {
+      "score": 89.8,
+      "max_snr": 70.6,
+      "models_blow_up": [],
+      "most_separated": null,
+      "initial_condition": [
+       -8.516319262418673,
+       -16.70034686510599,
+       3.6331443496478473
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 1.28,
+      "informs_coefficients": [
+       {
+        "coefficient": "x*y in dz/dt",
+        "info_gain_vs_existing": 4.2
+       },
+       {
+        "coefficient": "y in dy/dt",
+        "info_gain_vs_existing": 1.3
+       },
+       {
+        "coefficient": "z in dz/dt",
+        "info_gain_vs_existing": 1.26
+       }
+      ]
+     },
+     {
+      "score": 89.0,
+      "max_snr": 77.4,
+      "models_blow_up": [],
+      "most_separated": null,
+      "initial_condition": [
+       -18.074175176740177,
+       -14.182362122107008,
+       3.44543295904694
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 1.26,
+      "informs_coefficients": [
+       {
+        "coefficient": "x*y in dz/dt",
+        "info_gain_vs_existing": 6.19
+       },
+       {
+        "coefficient": "x*z in dy/dt",
+        "info_gain_vs_existing": 1.89
+       },
+       {
+        "coefficient": "x in dx/dt",
+        "info_gain_vs_existing": 1.54
+       }
+      ]
+     },
+     {
+      "score": 83.0,
+      "max_snr": 71.9,
+      "models_blow_up": [],
+      "most_separated": null,
+      "initial_condition": [
+       -6.69862847024441,
+       5.859523526810481,
+       11.201306574523082
+      ],
+      "inside_data_range": true,
+      "gain_vs_existing_data": 1.18,
+      "informs_coefficients": [
+       {
+        "coefficient": "x*y in dz/dt",
+        "info_gain_vs_existing": 2.64
+       },
+       {
+        "coefficient": "x*z in dy/dt",
+        "info_gain_vs_existing": 1.18
+       },
+       {
+        "coefficient": "x in dy/dt",
+        "info_gain_vs_existing": 1.12
+       }
+      ]
+     }
+    ],
+    "data_advice": [],
+    "confidence": {
+     "level": "medium",
+     "points": 1,
+     "reasons": [
+      "all terms significantly non-zero (bootstrap 90% CIs exclude 0)",
+      "no single added term is supported by the data",
+      "held-out rollout stays within 30% error for 69% of the horizon"
+     ]
+    }
+   },
+   "cost_usd": 0.241,
+   "vf_err": {
+    "x": 0.0014052693483618674,
+    "y": 0.0015454578713143294,
+    "z": 0.0010306745924164387
+   },
+   "tools": [
+    "intuit",
+    "diagnose",
+    "weak_sindy",
+    "fit_skeleton",
+    "submit"
+   ],
+   "rationale": "Weak-form SINDy (noise ~2.5%) with degree-2 polynomials gives a clear 7-term Lorenz-type model (rescaled Lorenz system). The sparsity path has a sharp elbow at this structure, and the validation error is at the noise floor. Least-squares refitting on the same structure gives the same coefficients. Rollout stays valid for about 3.6 of the 5.3 time units, which is reasonable for a chaotic attractor.",
+   "fno_info": {
+    "epochs": 210.0,
+    "val_loss": 0.0005739678163081408,
+    "n_train_windows": 3140.0,
+    "minutes": 10.000936595598857
+   }
+  },
+  "spikes": {
+   "label": "Spikes",
+   "names": [
+    "x",
+    "y",
+    "z"
+   ],
+   "laws": {
+    "Discovered law": {
+     "x": "-18.85*x + 26.67*y",
+     "y": "37.69*x - 1.99*y - 2.313*x*z",
+     "z": "-5.042*z + 3.686*x*y"
+    },
+    "SINDy": {
+     "x": "24.799*x -12.101*y -1.92*x*z +1.5838*y*z",
+     "y": "30.624*x -1.9688*x*z",
+     "z": "-6.7999 -6.0156*x +1.0754*y -3.878*z +0.68925*x*x +1.6483*x*y +0.11958*x*z +1.1619*y*y +0.25328*y*z -0.041621*z*z"
+    }
+   },
+   "valid_in": {
+    "Discovered law": 3.07492136478342,
+    "SINDy": 0.9788037977989266,
+    "FNO": 0.14774396947908325
+   },
+   "valid_oos": {
+    "Discovered law": 2.179223549816478,
+    "SINDy": 0.9741867987527051,
+    "FNO": 0.7941238359500724
+   },
+   "valid_oos_runs": {
+    "Discovered law": [
+     2.8902414029345658,
+     1.4682056966983899
+    ],
+    "SINDy": [
+     1.3481637214966347,
+     0.6002098760087756
+    ],
+    "FNO": [
+     1.5143756871606031,
+     0.07387198473954162
+    ]
+   },
+   "uq": {
+    "verdict": {
+     "status": "COLLECT MORE DATA",
+     "headline": "Best current model, not yet confirmed: some terms are not significant: y in dy/dt.",
+     "recommendation": "Collect data at: start at (-72.6, -52.3, -51.2). It would mainly pin down x*y in dz/dt, y in dx/dt (about 3.19x more informative than repeating existing conditions). Next best: start at (-34.7, -61.4, -50.3)."
+    },
+    "terms": [
+     {
+      "var": "x",
+      "term": "y",
+      "coef": 16.61,
+      "submitted_coef": 26.67,
+      "ci90": [
+       13.18,
+       19.39
+      ],
+      "rel_uncertainty": 0.1895,
+      "significant": true,
+      "dBIC_if_removed": 224.0
+     },
+     {
+      "var": "x",
+      "term": "x",
+      "coef": -11.01,
+      "submitted_coef": -18.85,
+      "ci90": [
+       -13.33,
+       -8.52
+      ],
+      "rel_uncertainty": 0.2199,
+      "significant": true,
+      "dBIC_if_removed": 150.0
+     },
+     {
+      "var": "y",
+      "term": "x",
+      "coef": 29.71,
+      "submitted_coef": 37.69,
+      "ci90": [
+       24.16,
+       38.72
+      ],
+      "rel_uncertainty": 0.2532,
+      "significant": true,
+      "dBIC_if_removed": 9.87
+     },
+     {
+      "var": "y",
+      "term": "y",
+      "coef": 0.6422,
+      "submitted_coef": -1.99,
+      "ci90": [
+       -2.939,
+       2.892
+      ],
+      "rel_uncertainty": 2.923,
+      "significant": false,
+      "dBIC_if_removed": -6.96
+     },
+     {
+      "var": "y",
+      "term": "x*z",
+      "coef": -1.941,
+      "submitted_coef": -2.313,
+      "ci90": [
+       -2.285,
+       -1.736
+      ],
+      "rel_uncertainty": 0.1448,
+      "significant": true,
+      "dBIC_if_removed": 39.9
+     },
+     {
+      "var": "z",
+      "term": "z",
+      "coef": -4.366,
+      "submitted_coef": -5.042,
+      "ci90": [
+       -4.593,
+       -4.096
+      ],
+      "rel_uncertainty": 0.05668,
+      "significant": true,
+      "dBIC_if_removed": 75.4
+     },
+     {
+      "var": "z",
+      "term": "x*y",
+      "coef": 3.336,
+      "submitted_coef": 3.686,
+      "ci90": [
+       3.179,
+       3.432
+      ],
+      "rel_uncertainty": 0.03788,
+      "significant": true,
+      "dBIC_if_removed": 204.0
+     }
+    ],
+    "missing": [
+     {
+      "var": "x",
+      "term": "x*z",
+      "dBIC_if_added": -24.8,
+      "error_reduction": 0.0314,
+      "rollout_improvement": -0.0617
+     },
+     {
+      "var": "x",
+      "term": "x*z*z",
+      "dBIC_if_added": -23.0,
+      "error_reduction": 0.0296,
+      "rollout_improvement": -0.198
+     },
+     {
+      "var": "x",
+      "term": "y*z*z",
+      "dBIC_if_added": 0.67,
+      "error_reduction": 0.0063
+     },
+     {
+      "var": "x",
+      "term": "y*z",
+      "dBIC_if_added": 1.04,
+      "error_reduction": 0.00592
+     }
+    ],
+    "validation": {
+     "deriv_nrmse": 0.9287538719869375,
+     "rollout_valid_time": 0.3326457294741051,
+     "rollout_horizon": 5.2800909440334145,
+     "rollout_blew_up": false,
+     "rollout_timed_out": false
+    },
+    "experiments": [
+     {
+      "score": 10.5,
+      "max_snr": 19.0,
+      "models_blow_up": [],
+      "most_separated": null,
+      "initial_condition": [
+       -72.58168644230528,
+       -52.34544084461473,
+       -51.246137717526565
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 3.19,
+      "informs_coefficients": [
+       {
+        "coefficient": "x*y in dz/dt",
+        "info_gain_vs_existing": 8.06
+       },
+       {
+        "coefficient": "y in dx/dt",
+        "info_gain_vs_existing": 3.17
+       },
+       {
+        "coefficient": "y in dy/dt",
+        "info_gain_vs_existing": 1.92
+       }
+      ]
+     },
+     {
+      "score": 9.27,
+      "max_snr": 17.3,
+      "models_blow_up": [],
+      "most_separated": null,
+      "initial_condition": [
+       -34.66979920105165,
+       -61.361210530568016,
+       -50.31915645276748
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 2.81,
+      "informs_coefficients": [
+       {
+        "coefficient": "y in dx/dt",
+        "info_gain_vs_existing": 2.11
+       },
+       {
+        "coefficient": "y in dy/dt",
+        "info_gain_vs_existing": 1.64
+       },
+       {
+        "coefficient": "x in dx/dt",
+        "info_gain_vs_existing": 1.59
+       }
+      ]
+     },
+     {
+      "score": 9.19,
+      "max_snr": 17.4,
+      "models_blow_up": [],
+      "most_separated": null,
+      "initial_condition": [
+       -47.104363675548484,
+       -65.62140659318968,
+       3.7406959015084027
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 2.79,
+      "informs_coefficients": [
+       {
+        "coefficient": "x*y in dz/dt",
+        "info_gain_vs_existing": 5.82
+       },
+       {
+        "coefficient": "x in dx/dt",
+        "info_gain_vs_existing": 2.15
+       },
+       {
+        "coefficient": "x*z in dy/dt",
+        "info_gain_vs_existing": 1.76
+       }
+      ]
+     }
+    ],
+    "data_advice": [],
+    "confidence": {
+     "level": "low",
+     "points": -2,
+     "reasons": [
+      "1 term(s) not significantly non-zero: y in dy/dt",
+      "extra terms that are statistically detectable but do not improve predictions (<2% error reduction or <10% rollout gain; typically numerical/differentiation bias): x*z, x*z*z",
+      "no single added term is supported by the data",
+      "held-out rollout stays within 30% error for 6% of the horizon"
+     ]
+    }
+   },
+   "cost_usd": 0.909,
+   "vf_err": {
+    "x": 0.004769348935188805,
+    "y": 0.003050081238928752,
+    "z": 0.0015552033430189854
+   },
+   "tools": [
+    "intuit",
+    "diagnose",
+    "plot_data",
+    "weak_sindy",
+    "run_python",
+    "run_python",
+    "run_python",
+    "run_python",
+    "validate",
+    "run_python",
+    "run_python",
+    "submit"
+   ],
+   "rationale": "The data are a Lorenz-type chaotic attractor contaminated by sparse impulsive outliers (spikes of ~40 units in about 0.5% of samples). These spikes corrupted the tool-based derivative fits, including weak SINDy. I despiked each series using a median-filter residual threshold, then estimated derivatives with Savitzky-Golay and ran STLSQ on a degree-2 polynomial library. Across windows 7/11/15 the same 7-term Lorenz structure was selected with stable coefficients: x'=a(y,x) linear, y'=c x - d y - e xz, z'=-b z + g xy. I refined the coefficients by robust multi-step shooting on the cleaned data, which changed them by <1%. Clean-data rollouts track the trajectories for ~1.4-2.8 time units, which is consistent with chaotic divergence. The validator's deriv_nrmse is inflated by the spikes in the held-out data.",
+   "fno_info": {
+    "epochs": 211.0,
+    "val_loss": 0.2322929948568344,
+    "n_train_windows": 3140.0,
+    "minutes": 10.016873633861541
+   }
+  },
+  "forcing": {
+   "label": "Outside kicks",
+   "names": [
+    "x",
+    "y",
+    "z"
+   ],
+   "laws": {
+    "Discovered law": {
+     "x": "-18.848*x + 26.668*y",
+     "y": "36.87*x - 1.668*y - 2.2782*x*z",
+     "z": "-5.031*z + 3.672*x*y"
+    },
+    "SINDy": {
+     "x": "-18.842*x +26.707*y",
+     "y": "37.112*x -1.5517*y -2.2955*x*z",
+     "z": "-4.997*z +3.6509*x*y"
+    }
+   },
+   "valid_in": {
+    "Discovered law": 3.2226653342625036,
+    "SINDy": 2.5116474811444154,
+    "FNO": 1.7729276337489988
+   },
+   "valid_oos": {
+    "Discovered law": 1.7960126289801055,
+    "SINDy": 1.722140644240564,
+    "FNO": 1.5790136738077023
+   },
+   "valid_oos_runs": {
+    "Discovered law": [
+     2.197691546001363,
+     1.3943337119588481
+    ],
+    "SINDy": [
+     2.1145855631693786,
+     1.3296957253117492
+    ],
+    "FNO": [
+     1.9206716032280822,
+     1.2373557443873222
+    ]
+   },
+   "uq": {
+    "verdict": {
+     "status": "INCONCLUSIVE",
+     "headline": "The data do not determine the model well, and no simulated experiment clearly separates the candidates.",
+     "recommendation": "Consider more trajectories, lower noise, or domain constraints."
+    },
+    "terms": [
+     {
+      "var": "x",
+      "term": "y",
+      "coef": 26.7148,
+      "submitted_coef": 26.668,
+      "ci90": [
+       26.56,
+       26.86
+      ],
+      "rel_uncertainty": 0.00552,
+      "significant": true,
+      "dBIC_if_removed": 1620.0
+     },
+     {
+      "var": "x",
+      "term": "x",
+      "coef": -18.8506,
+      "submitted_coef": -18.848,
+      "ci90": [
+       -18.98,
+       -18.72
+      ],
+      "rel_uncertainty": 0.00677,
+      "significant": true,
+      "dBIC_if_removed": 1540.0
+     },
+     {
+      "var": "y",
+      "term": "x",
+      "coef": 37.0216,
+      "submitted_coef": 36.87,
+      "ci90": [
+       36.69,
+       37.31
+      ],
+      "rel_uncertainty": 0.00843,
+      "significant": true,
+      "dBIC_if_removed": 1170.0
+     },
+     {
+      "var": "y",
+      "term": "y",
+      "coef": -1.49717,
+      "submitted_coef": -1.668,
+      "ci90": [
+       -1.672,
+       -1.318
+      ],
+      "rel_uncertainty": 0.118,
+      "significant": true,
+      "dBIC_if_removed": 62.8
+     },
+     {
+      "var": "y",
+      "term": "x*z",
+      "coef": -2.29222,
+      "submitted_coef": -2.2782,
+      "ci90": [
+       -2.304,
+       -2.279
+      ],
+      "rel_uncertainty": 0.0053,
+      "significant": true,
+      "dBIC_if_removed": 1430.0
+     },
+     {
+      "var": "z",
+      "term": "z",
+      "coef": -4.99471,
+      "submitted_coef": -5.031,
+      "ci90": [
+       -5.038,
+       -4.95
+      ],
+      "rel_uncertainty": 0.00883,
+      "significant": true,
+      "dBIC_if_removed": 1240.0
+     },
+     {
+      "var": "z",
+      "term": "x*y",
+      "coef": 3.64791,
+      "submitted_coef": 3.672,
+      "ci90": [
+       3.624,
+       3.672
+      ],
+      "rel_uncertainty": 0.00665,
+      "significant": true,
+      "dBIC_if_removed": 1500.0
+     }
+    ],
+    "missing": [
+     {
+      "var": "x",
+      "term": "z*z",
+      "dBIC_if_added": -2.56,
+      "error_reduction": 0.0251
+     },
+     {
+      "var": "x",
+      "term": "z",
+      "dBIC_if_added": -2.09,
+      "error_reduction": 0.0237
+     },
+     {
+      "var": "y",
+      "term": "z",
+      "dBIC_if_added": -0.344,
+      "error_reduction": 0.0185
+     },
+     {
+      "var": "x",
+      "term": "1",
+      "dBIC_if_added": 0.233,
+      "error_reduction": 0.0168
+     }
+    ],
+    "validation": {
+     "deriv_nrmse": 0.11709114934448539,
+     "rollout_valid_time": 1.1404996439112176,
+     "rollout_horizon": 5.2800909440334145,
+     "rollout_blew_up": false,
+     "rollout_timed_out": false
+    },
+    "experiments": [
+     {
+      "score": 92.4,
+      "max_snr": 66.5,
+      "models_blow_up": [],
+      "most_separated": null,
+      "initial_condition": [
+       14.384925690594144,
+       3.1332869325587183,
+       35.81179467175987
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 1.12,
+      "informs_coefficients": [
+       {
+        "coefficient": "x*y in dz/dt",
+        "info_gain_vs_existing": 1.88
+       },
+       {
+        "coefficient": "z in dz/dt",
+        "info_gain_vs_existing": 1.23
+       },
+       {
+        "coefficient": "y in dx/dt",
+        "info_gain_vs_existing": 1.01
+       }
+      ]
+     },
+     {
+      "score": 91.0,
+      "max_snr": 61.5,
+      "models_blow_up": [],
+      "most_separated": null,
+      "initial_condition": [
+       -11.734510211679083,
+       -18.816161289956632,
+       16.147706044032116
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 1.1,
+      "informs_coefficients": [
+       {
+        "coefficient": "x*y in dz/dt",
+        "info_gain_vs_existing": 2.26
+       },
+       {
+        "coefficient": "z in dz/dt",
+        "info_gain_vs_existing": 1.25
+       },
+       {
+        "coefficient": "x*z in dy/dt",
+        "info_gain_vs_existing": 1.14
+       }
+      ]
+     },
+     {
+      "score": 90.0,
+      "max_snr": 65.9,
+      "models_blow_up": [],
+      "most_separated": null,
+      "initial_condition": [
+       -17.439515855984254,
+       18.815323538351656,
+       8.838088522176317
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 1.09,
+      "informs_coefficients": [
+       {
+        "coefficient": "x*y in dz/dt",
+        "info_gain_vs_existing": 2.24
+       },
+       {
+        "coefficient": "y in dx/dt",
+        "info_gain_vs_existing": 1.16
+       },
+       {
+        "coefficient": "z in dz/dt",
+        "info_gain_vs_existing": 1.14
+       }
+      ]
+     }
+    ],
+    "data_advice": [],
+    "confidence": {
+     "level": "low",
+     "points": 0,
+     "reasons": [
+      "all terms significantly non-zero (bootstrap 90% CIs exclude 0)",
+      "no single added term is supported by the data",
+      "5 structurally different models fit equally well: ['submitted', 'z*z in dx/dt', 'z in dx/dt', 'z in dy/dt', '1 in dx/dt']",
+      "held-out rollout stays within 30% error for 22% of the horizon"
+     ]
+    }
+   },
+   "cost_usd": 1.239,
+   "vf_err": {
+    "x": 0.004842146931484219,
+    "y": 0.00809134713675857,
+    "z": 0.003780035437015092
+   },
+   "tools": [
+    "intuit",
+    "diagnose",
+    "weak_sindy",
+    "fit_skeleton",
+    "plot_model",
+    "run_python",
+    "run_python",
+    "run_python",
+    "run_python",
+    "run_python",
+    "run_python",
+    "run_python",
+    "run_python",
+    "validate",
+    "submit"
+   ],
+   "rationale": "Weak SINDy (poly deg 2) gave a clear Lorenz-type structure: x'=a x+b y, y'=c x+d y+e xz, z'=f z+g xy (7 terms). Residual analysis showed short (~0.2 time unit) localized pulses of external forcing (~\u00b120-45 in derivative units) at different times/components in each trajectory \u2014 not a function of state or common time, so not modelable autonomously. I excluded those pulse windows and refit coefficients by least squares on the clean segments; the full quadratic library on clean data confirms no other significant terms. The refit doubled rollout valid time on the held-out trajectory (0.45 -> 1.14, limited by chaos and a forcing pulse).",
+   "fno_info": {
+    "epochs": 214.0,
+    "val_loss": 0.0017687950748950243,
+    "n_train_windows": 3140.0,
+    "minutes": 10.007012951374055
+   }
+  },
+  "sensor": {
+   "label": "Lost sensor",
+   "names": [
+    "x",
+    "y"
+   ],
+   "laws": {
+    "Discovered law": {
+     "x": "-18.9*x + 26.75*y",
+     "y": "-0.79*x + 12.864*y - 0.258*x**3 - 0.1737*x**2*y + 0.4545*x*y**2 - 0.171*y**3"
+    },
+    "SINDy": {
+     "x": "-18.899*x +26.743*y",
+     "y": "-16.859*x +18.263*y"
+    }
+   },
+   "valid_in": {
+    "Discovered law": 0.04616999046221351,
+    "SINDy": 0.04616999046221351,
+    "FNO": 1.8283316223036552
+   },
+   "valid_oos": {
+    "Discovered law": 0.08310598283198432,
+    "SINDy": 0.04616999046221351,
+    "FNO": 0.8125918321349578
+   },
+   "valid_oos_runs": {
+    "Discovered law": [
+     0.12004197520175514,
+     0.04616999046221351
+    ],
+    "SINDy": [
+     0.05540398855465621,
+     0.03693599236977081
+    ],
+    "FNO": [
+     0.22161595421862484,
+     1.4035677100512907
+    ]
+   },
+   "uq": {
+    "verdict": {
+     "status": "INCONCLUSIVE",
+     "headline": "The data do not determine the model well, and no simulated experiment clearly separates the candidates.",
+     "recommendation": "Consider more trajectories, lower noise, or domain constraints."
+    },
+    "terms": [
+     {
+      "var": "x",
+      "term": "y",
+      "coef": 26.74,
+      "submitted_coef": 26.75,
+      "ci90": [
+       26.69,
+       26.8
+      ],
+      "rel_uncertainty": 0.002039,
+      "significant": true,
+      "dBIC_if_removed": 4250.0
+     },
+     {
+      "var": "x",
+      "term": "x",
+      "coef": -18.9,
+      "submitted_coef": -18.9,
+      "ci90": [
+       -18.94,
+       -18.85
+      ],
+      "rel_uncertainty": 0.002389,
+      "significant": true,
+      "dBIC_if_removed": 3970.0
+     },
+     {
+      "var": "y",
+      "term": "y",
+      "coef": 12.7,
+      "submitted_coef": 12.86,
+      "ci90": [
+       10.81,
+       13.4
+      ],
+      "rel_uncertainty": 0.1057,
+      "significant": true,
+      "dBIC_if_removed": 723.0
+     },
+     {
+      "var": "y",
+      "term": "x**3",
+      "coef": -0.2541,
+      "submitted_coef": -0.258,
+      "ci90": [
+       -0.3148,
+       -0.2413
+      ],
+      "rel_uncertainty": 0.1397,
+      "significant": true,
+      "dBIC_if_removed": 533.0
+     },
+     {
+      "var": "y",
+      "term": "x",
+      "coef": -0.6105,
+      "submitted_coef": -0.79,
+      "ci90": [
+       -1.09,
+       1.067
+      ],
+      "rel_uncertainty": 3.272,
+      "significant": false,
+      "dBIC_if_removed": -14.6
+     },
+     {
+      "var": "y",
+      "term": "y**3",
+      "coef": -0.1083,
+      "submitted_coef": -0.171,
+      "ci90": [
+       -0.1614,
+       0.1232
+      ],
+      "rel_uncertainty": 1.392,
+      "significant": false,
+      "dBIC_if_removed": -46.7
+     },
+     {
+      "var": "y",
+      "term": "x*y**2",
+      "coef": 0.3592,
+      "submitted_coef": 0.4545,
+      "ci90": [
+       -0.09573,
+       0.4572
+      ],
+      "rel_uncertainty": 0.779,
+      "significant": false,
+      "dBIC_if_removed": -81.8
+     },
+     {
+      "var": "y",
+      "term": "x**2*y",
+      "coef": -0.1463,
+      "submitted_coef": -0.1737,
+      "ci90": [
+       -0.1877,
+       0.1239
+      ],
+      "rel_uncertainty": 1.119,
+      "significant": false,
+      "dBIC_if_removed": -39.7
+     }
+    ],
+    "missing": [
+     {
+      "var": "y",
+      "term": "sin(y)",
+      "dBIC_if_added": -79.2,
+      "error_reduction": 0.0817,
+      "rollout_improvement": 0.198
+     },
+     {
+      "var": "y",
+      "term": "cos(y)",
+      "dBIC_if_added": -3.89,
+      "error_reduction": 0.00962
+     },
+     {
+      "var": "x",
+      "term": "cos(x)",
+      "dBIC_if_added": 5.18,
+      "error_reduction": 0.0
+     },
+     {
+      "var": "y",
+      "term": "sin(x)",
+      "dBIC_if_added": 5.8,
+      "error_reduction": 0.0
+     }
+    ],
+    "validation": {
+     "deriv_nrmse": 0.17057692836302416,
+     "rollout_valid_time": 0.17424300115310268,
+     "rollout_horizon": 5.2800909440334145,
+     "rollout_blew_up": false,
+     "rollout_timed_out": false
+    },
+    "experiments": [
+     {
+      "score": 99.8,
+      "max_snr": 96.5,
+      "models_blow_up": [
+       "coef_draw_0",
+       "coef_draw_2",
+       "coef_draw_4",
+       "coef_draw_5",
+       "coef_draw_7",
+       "coef_draw_9",
+       "coef_draw_10",
+       "coef_draw_11",
+       "remove x*y**2 in dy/dt",
+       "remove y**3 in dy/dt"
+      ],
+      "most_separated": null,
+      "initial_condition": [
+       14.512575038330176,
+       -17.269666494567318
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 1.01,
+      "informs_coefficients": [
+       {
+        "coefficient": "x*y**2 in dy/dt",
+        "info_gain_vs_existing": 1.46
+       },
+       {
+        "coefficient": "y**3 in dy/dt",
+        "info_gain_vs_existing": 1.18
+       },
+       {
+        "coefficient": "x**2*y in dy/dt",
+        "info_gain_vs_existing": 1.13
+       }
+      ]
+     },
+     {
+      "score": 99.8,
+      "max_snr": 92.0,
+      "models_blow_up": [
+       "coef_draw_0",
+       "coef_draw_2",
+       "coef_draw_4",
+       "coef_draw_5",
+       "coef_draw_7",
+       "coef_draw_9",
+       "coef_draw_10",
+       "coef_draw_11",
+       "remove x*y**2 in dy/dt",
+       "remove y**3 in dy/dt"
+      ],
+      "most_separated": null,
+      "initial_condition": [
+       -14.766502282108767,
+       15.608683789325347
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 1.01,
+      "informs_coefficients": [
+       {
+        "coefficient": "x*y**2 in dy/dt",
+        "info_gain_vs_existing": 1.46
+       },
+       {
+        "coefficient": "y**3 in dy/dt",
+        "info_gain_vs_existing": 1.29
+       },
+       {
+        "coefficient": "x**2*y in dy/dt",
+        "info_gain_vs_existing": 1.16
+       }
+      ]
+     },
+     {
+      "score": 99.8,
+      "max_snr": 116.0,
+      "models_blow_up": [
+       "coef_draw_0",
+       "coef_draw_2",
+       "coef_draw_4",
+       "coef_draw_5",
+       "coef_draw_7",
+       "coef_draw_9",
+       "coef_draw_10",
+       "coef_draw_11",
+       "remove x*y**2 in dy/dt",
+       "remove y**3 in dy/dt"
+      ],
+      "most_separated": null,
+      "initial_condition": [
+       -18.70640545979461,
+       11.509515790970255
+      ],
+      "inside_data_range": false,
+      "gain_vs_existing_data": 1.01,
+      "informs_coefficients": [
+       {
+        "coefficient": "x in dx/dt",
+        "info_gain_vs_existing": 1.73
+       },
+       {
+        "coefficient": "y in dx/dt",
+        "info_gain_vs_existing": 1.68
+       },
+       {
+        "coefficient": "x*y**2 in dy/dt",
+        "info_gain_vs_existing": 1.54
+       }
+      ]
+     }
+    ],
+    "data_advice": [],
+    "confidence": {
+     "level": "low",
+     "points": -7,
+     "reasons": [
+      "4 term(s) not significantly non-zero: x in dy/dt, y**3 in dy/dt, x*y**2 in dy/dt, x**2*y in dy/dt",
+      "data favour adding: sin(y) to dy/dt (dBIC -79.2)",
+      "residual error is 1.7x the noise floor: systematic misfit remains",
+      "3 structurally different models fit equally well: ['submitted', 'remove x*y**2 in dy/dt', 'remove y**3 in dy/dt']",
+      "held-out rollout stays within 30% error for 3% of the horizon"
+     ]
+    }
+   },
+   "cost_usd": 1.549,
+   "vf_err": {
+    "x": 0.001857608564630395
+   },
+   "tools": [
+    "intuit",
+    "diagnose",
+    "plot_data",
+    "weak_sindy",
+    "run_pysr",
+    "run_python",
+    "run_python",
+    "run_python",
+    "run_python",
+    "compare_models",
+    "fit_skeleton",
+    "run_python",
+    "run_python",
+    "validate",
+    "validate",
+    "plot_model",
+    "submit",
+    "repair",
+    "submit"
+   ],
+   "rationale": "I am keeping the same model and answering the critic's points:\n(1) The short rollout valid time comes from a structural limit in the data, not from overfitting. The (x,y) trajectories cross each other and switch lobes irregularly. A 2-D autonomous ODE cannot do that, so a hidden third variable (Lorenz-like z) must be present, and the dy/dt residual drifts slowly over time, as it would if z were missing. No closure in x and y alone can follow the chaotic lobe switching.\n(2) Each of the repair edits the critic recommends gives about the same derivative error (0.164-0.167) and the same valid time (0.158). So removing those terms gains nothing.\n(3) I checked stability by integrating the models myself from all 4 training initial conditions. The sparser cubic closures were unstable: [y, x\u00b3, xy\u00b2] and [y, x\u00b3, x\u00b2y, xy\u00b2] blew up on 2 of 4 trajectories, and the repaired variants have positive y\u00b3 or xy\u00b2 growth terms that carry the same risk. The full odd cubic is the only one that stayed bounded on all 4, with oscillation amplitude and frequency like the data.\n(4) The sin(y) term has no physical basis; at |y| up to 10 it is just a noise-fitted wiggle.\n(5) The 5-term skeleton [x, y, x\u00b3] is bounded, but its derivative error is worse (0.216) and its valid time is shorter (0.03).",
+   "fno_info": {
+    "epochs": 215.0,
+    "val_loss": 0.0009377924725413322,
+    "n_train_windows": 3140.0,
+    "minutes": 10.011640711625416
+   }
+  }
+ }
+}

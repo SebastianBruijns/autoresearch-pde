@@ -1,0 +1,7 @@
+# Start points for datasets/parallel-pendulums/parallel-pendulums.mov, read off frame 0 (original pixels).
+# 1, 2: bright cap at the top of the left / right hanging weight. 3, 4: left / right black knot.
+point,frame,x,y
+1,0,473,478
+2,0,722,478
+3,0,497,295
+4,0,706,283

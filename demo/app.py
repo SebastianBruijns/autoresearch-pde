@@ -21,12 +21,14 @@ for p in (str(REPO), str(DEMO)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon="🧭", layout="wide",
+st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon=":material/function:", layout="wide",
                    initial_sidebar_state="collapsed")
 
+import evidence  # noqa: E402
 import live  # noqa: E402
 import ui  # noqa: E402
 import viz  # noqa: E402
+import yourdata  # noqa: E402
 
 SHOW = DEMO / "showcase"
 ui.inject_css()
@@ -35,7 +37,7 @@ PROTOCOL = ("Data only: the agent gets numbers with neutral names, no descriptio
             "and its code cannot read anything else. Honest test: noisy training data → forecast an unseen future or "
             "held-out trajectory from a noisy observed state; coefficients refitted; a neural net trained on the same data.")
 TOOL_LABEL = {"diagnose": "diagnose", "intuit": "intuition", "run_sindy": "SINDy", "weak_sindy": "weak SINDy",
-              "run_pysr": "PySR", "fit_skeleton": "skeleton fit", "fit_flow": "flow-map fit",
+              "run_pysr": "PySR", "fit_skeleton": "skeleton fit", "fit_flow": "flow-map fit", "fit_trajectories": "trajectory fit",
               "find_invariants": "invariants", "transform": "coordinates", "set_coordinates": "coordinates",
               "detect_symmetries": "symmetries", "equivariant_sindy": "equivariant SINDy",
               "ensemble_sindy": "ensemble SINDy", "compare_models": "model comparison",
@@ -54,7 +56,7 @@ def tool_chips(tools, title="what the agent did (from its log)"):
         ui.chips([f"{k} ×{n}" if n > 1 else k for k, n in counts.items()], title=f"{title} · {len(tools)} tool calls")
 J2_ACCEPTED = 1.08263e-3
 PAGES = ["Home", "🛰️ LAGEOS-1 satellite", "🔥 Chaos (KS)", "🌀 Gray–Scott patterns", "⚡ Run on your data",
-         "⚙️ How it works", "🌍 Orbit with a big bulge"]
+         "⚙️ How it works", "🌍 Orbit with a big bulge", "🔎 When not to trust it"]
 
 
 @st.cache_data(show_spinner=False)
@@ -540,6 +542,9 @@ def page_home():
             sub = (f"VRMSE 6–12: FNO on same data {fno['6-12']:.2g}; The Well paper's best 0.29" if fno
                    else "forecast a held-out trajectory")
         cards.append(("🌀 Gray–Scott (The Well)", num, sub, "gray_scott", PAGES[3]))
+    ev = evidence.home_card()
+    if ev:
+        cards.append(("🔎 When not to trust it", ev[0], ev[1], "evidence", PAGES[7]))
     cols = st.columns(len(cards) or 1, gap="medium")
     for c, (name, num, sub, case, page) in zip(cols, cards):
         with c, st.container(border=True):
@@ -758,14 +763,14 @@ digraph G { rankdir=LR; bgcolor="transparent"; node [shape=box, style="rounded,f
 
 # ============================================================================= main
 # ============================================================================= presentation pages (v3)
-CM_FONT = "Computer Modern Serif, Latin Modern Roman, CMU Serif, Georgia, serif"
+CHART_FONT = "Inter, sans-serif"
 
 
 def _bigfont(fig, h=None):
-    """One font (LaTeX Computer Modern) and one size for every chart text: ticks, axis titles, legend."""
-    fig.update_layout(font=dict(size=16, family=CM_FONT), legend=dict(font=dict(size=16, family=CM_FONT)))
-    fig.update_xaxes(title_font=dict(size=16), tickfont=dict(size=16))
-    fig.update_yaxes(title_font=dict(size=16), tickfont=dict(size=16))
+    """One font (the app's Inter) and one size for every chart text: ticks, axis titles, legend."""
+    fig.update_layout(font=dict(size=15, family=CHART_FONT), legend=dict(font=dict(size=15, family=CHART_FONT)))
+    fig.update_xaxes(title_font=dict(size=15), tickfont=dict(size=15))
+    fig.update_yaxes(title_font=dict(size=15), tickfont=dict(size=15))
     if h:
         fig.update_layout(height=h)
     return fig
@@ -821,19 +826,19 @@ def v3_satellite():
         f = ui.precision_fig(uq, {"central pull (1/r²)": "gravity", "equatorial bulge (J₂)": "bulge (J₂)"})
         if f:
             show(_bigfont(f), "sat_prec")
-    with st.expander("🧠 How it got there"):
+    with st.expander("How it got there", icon=":material/psychology:"):
         _reasoning(info.get("rationale"), ag.get("tools"))
-    with st.expander("🔭 What the equation means"):
+    with st.expander("What the equation means", icon=":material/function:"):
         st.markdown(
             "- **1/r² term:** Newton's gravity, the pull toward Earth's centre.\n"
             "- **Bulge term (J₂):** Earth is fatter at the equator; this extra pull makes the orbit's plane slowly turn "
             f"(measured ≈ {lageos_numbers(info)['node']['data']:.3f}°/day).\n"
             "- The agent inferred both from unnamed numbers in random units: it was never told this is a satellite.")
-    with st.expander("✅ The checks behind the verdict"):
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq))
         for adv in uq.get("data_advice") or []:
             st.caption(adv)
-    with st.expander("🔒 Benchmark details"):
+    with st.expander("Benchmark details", icon=":material/lock:"):
         st.markdown(LEGEND_ORBIT, unsafe_allow_html=True)
         n = lageos_numbers(info)
         lageos_details(info, n, ag, ag.get("position_error_km") or {})
@@ -865,9 +870,9 @@ def v3_bulge():
         if "kj_t" in a:
             ui.fig_title("What it missed", locked=True)
             show(_bigfont(viz.orbit_kepler_vs_j2(a["kj_t"], a["kj_disc"], a["kj_kep"]), 470), "bb_kj")
-    with st.expander("🧠 How it got there"):
+    with st.expander("How it got there", icon=":material/psychology:"):
         _reasoning(ag.get("rationale"), ag.get("tools"))
-    with st.expander("🔭 What went wrong"):
+    with st.expander("What went wrong", icon=":material/function:"):
         st.markdown(
             "- It found that velocity is the rate of change of position, and that the motion is symmetric about one axis.\n"
             "- It then fitted a smooth polynomial instead of Newton's 1/r² gravity plus a bulge term.\n"
@@ -875,12 +880,12 @@ def v3_bulge():
             "hold-out forecast fails at once. So it says *don't trust this law* and where to measure next.\n"
             "- The ‘missing term’ check tries a short generic menu (a 1/r² pull, drag, an extra radial power) for any "
             "position-and-velocity data; it was not chosen knowing the answer.")
-    with st.expander("✅ The checks behind the verdict"):
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq))
         f = ui.precision_fig(uq)
         if f:
             show(_bigfont(f), "bb_prec")
-    with st.expander("🔒 Benchmark details"):
+    with st.expander("Benchmark details", icon=":material/lock:"):
         if "raan_disc" in a:
             st.markdown("**The tell-tale drift: measured vs forecast**")
             show(viz.orbit_elements(a["el_hrs"], a["raan_data"], a["argp_data"], a["hrs"], a["raan_disc"], a["argp_disc"],
@@ -922,20 +927,20 @@ def v3_chaos():
         f = ui.precision_fig(uq, names)
         if f:
             show(_bigfont(f), "ks_prec3")
-    with st.expander("🧠 How it got there"):
+    with st.expander("How it got there", icon=":material/psychology:"):
         story = info.get("story") or {}
         tool_chips(info.get("tools"), title="tools it used")
         for s_ in story.get("key_steps") or []:
             st.markdown(f"- **{s_.get('observation', '')}** → {s_.get('decision', '')}")
-    with st.expander("🔭 What the equation means"):
+    with st.expander("What the equation means", icon=":material/function:"):
         st.markdown(
             "- **u_xx with a minus sign (anti-diffusion):** pumps energy into long waves (the instability).\n"
             "- **u_xxxx (hyper-diffusion):** kills short waves, so cells of a preferred size form.\n"
             "- **u·u_x (steepening):** moves energy between scales; together these make cellular chaos.\n"
             "- This is the Kuramoto–Sivashinsky equation, but rescaled: its numbers appear in no textbook.")
-    with st.expander("✅ The checks behind the verdict"):
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq))
-    with st.expander("🔒 Benchmark details"):
+    with st.expander("Benchmark details", icon=":material/lock:"):
         ks_details(info, r, rows)
 
 
@@ -965,42 +970,212 @@ def v3_reaction():
         f = ui.precision_fig(uq, names)
         if f:
             show(_bigfont(f), "gs_prec3")
-    with st.expander("🧠 How it got there"):
+    with st.expander("How it got there", icon=":material/psychology:"):
         _reasoning(info.get("rationale"), info.get("tools"))
-    with st.expander("🔭 What the equations mean"):
+    with st.expander("What the equations mean", icon=":material/function:"):
         st.markdown(
             "- **Feed and decay:** chemical A is supplied, B is removed.\n"
             "- **A·B² reaction:** B converts A into more B (autocatalysis), the engine of the patterns.\n"
             "- **Diffusion:** A spreads faster than B; that mismatch is what makes spots and spirals (a Turing mechanism).")
-    with st.expander("✅ The checks behind the verdict"):
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq))
-        st.caption("🔒 Its equations turn out to be the true ones. The checks could not know that: with two noisy runs, "
+        st.caption("Hidden truth: its equations turn out to be the true ones. The checks could not know that: with two noisy runs, "
                    "close rival versions fit equally well, so ‘collect more data’ is the right call.")
-    with st.expander("🔒 Benchmark details"):
+    with st.expander("Benchmark details", icon=":material/lock:"):
         gs_details(info, agent, vr)
 
 
+def v3_hidden():
+    info, a = load_case("hidden_oscillator")
+    if not info:
+        return missing("hidden_oscillator")
+    uq = info.get("uq") or {}
+    pol = info.get("polar") or {}
+    ui.page_title("Hidden Oscillator", "Synthetic · 3 unnamed variables, 4 noisy runs · the law hides behind a tilted, "
+                                       "stretched ellipse and a square root")
+
+    def law():
+        if pol:
+            ui.equations([rf"\dot r = {pol['growth']:.3f}\, r\,(1 - r)",
+                          rf"\dot\varphi = {pol['omega0']:.3f} + {pol['omega1']:.3f}\, r",
+                          rf"\dot u_2 = -{pol['decay']:.3f}\, u_2 + {pol['drive']:.3f}\, r"], small=True)
+        st.markdown("<div class='law'>a self-sustained oscillation, in coordinates it found itself<br>"
+                    "<span style='opacity:.6;font-weight:500'>r, φ: distance and angle around a hidden centre, "
+                    "after undoing a tilt and a stretch</span></div>", unsafe_allow_html=True)
+    _hero("hidden_oscillator", law, uq, video_title="Forecast of a run it never saw")
+    names = [str(n) for n in a.get("names", [])]
+    errs = {n: a[f"err_{i}"] for i, n in enumerate(names)}
+    c1, c2, c3 = st.columns(3, gap="large")
+    with c1:
+        ui.fig_title("Training data (3 noisy runs)")
+        if "train" in a:
+            show(_bigfont(viz.hidden_training(a["train"]), 430), "ho_train")
+    with c2:
+        ui.fig_title("Forecast error over time", locked=True)
+        if errs:
+            show(_bigfont(viz.hidden_errors(a["t"], errs), 430), "ho_err")
+    with c3:
+        ui.fig_title("How precisely known")
+        sq = info.get("radius_term")
+        nm = {t["term"]: t["term"].replace(sq, "r") if sq else t["term"] for t in uq.get("terms") or []}
+        f = ui.precision_fig(uq, nm)
+        if f:
+            show(_bigfont(f), "ho_prec")
+    with st.expander("How it got there", icon=":material/psychology:"):
+        steps = (info.get("story") or {}).get("key_steps") or []
+        tool_chips(info.get("tools") or {}, title="tools it used (all branches)")
+        for k, s_ in enumerate(steps, 1):
+            st.markdown(f"**{k}. {s_.get('observation', '')}**  \n{s_.get('decision', '')}  \n*{s_.get('outcome', '')}*")
+    with st.expander("What the equation means", icon=":material/function:"):
+        st.markdown(
+            "- **r(1 − r):** a limit cycle. Small swings grow, large ones shrink, so every run settles onto the same "
+            "loop (r = 1).\n"
+            "- **φ̇ = a + b·r:** it circles faster the further out it is (the frequency depends on amplitude).\n"
+            "- **u₂:** a third variable that simply follows the size of the swing, with a lag.\n"
+            "- In the measured variables none of this is visible: r is a square root of a tilted quadratic form, so no "
+            "polynomial can write it. The agent found the centre, undid the tilt and stretch, and fitted in (r, φ).")
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
+        st.markdown(ui.checks_md(uq))
+        for adv in uq.get("data_advice") or []:
+            st.caption(adv)
+    with st.expander("Benchmark details", icon=":material/lock:"):
+        tr = {"growth": 0.7029, "omega0": 1.9022, "omega1": 0.5183 * 0.8274, "decay": 0.9497, "drive": 0.3493 * 0.8274}
+        lab = {"growth": "growth rate (r term)", "omega0": "base frequency", "omega1": "frequency per unit r",
+               "decay": "u₂ decay rate", "drive": "u₂ drive by r"}
+        if pol:
+            st.markdown("**Discovered vs. true law** (in the same coordinates; the limit cycle at r = 1)\n\n| | true | "
+                        "discovered | off by |\n|---|---|---|---|\n" + "\n".join(
+                            f"| {lab[k]} | {tr[k]:.4f} | {pol[k]:.4f} | {abs(pol[k] - tr[k]) / tr[k]:.1%} |" for k in tr))
+        em = info.get("errors_mean") or {}
+        b = info.get("bare") or {}
+        st.markdown(
+            f"**Forecast of the held-out run** (mean distance from reality over 30 time units): discovered law "
+            f"{em.get('Discovered law', 0):.1%}, true law {em.get('True law', 0):.1%}, Claude alone "
+            f"{em.get('Claude alone', 0):.1%}.\n\n"
+            f"**Claude alone** is the same model with only a Python sandbox and the prompt *Gimme PDE!*, on the same "
+            f"training runs (${b.get('cost_usd', 0):.2f}, {b.get('n_tool_calls', 0)} tool calls). It fitted a cubic "
+            f"polynomial oscillator: close on the loop, but wrong while a run settles. eqdisc: "
+            f"${info.get('cost_usd', 0):.2f}, {info.get('wall_s', 0) / 60:.0f} min; the winning law came from its "
+            f"{info.get('winner_branch', '')} step.")
+
+LORENZ_WHAT = {
+    "clean": "Four noisy runs (2% noise), nothing else wrong.",
+    "spikes": "The same runs with sensor glitches: 0.5% of the samples replaced by large spikes.",
+    "forcing": "The same runs, but the system was kicked from outside a few times (short pushes nobody recorded).",
+    "sensor": "The third variable was never measured: only two of the three columns exist.",
+}
+
+
+def v3_lorenz():
+    info, a = load_case("lorenz")
+    if not info:
+        return missing("lorenz")
+    conds = info["conditions"]
+    ui.page_title("Lorenz: In and Out of Sample",
+                  "A chaotic system · 4 short noisy runs · rescaled units · law vs a neural operator (FNO)")
+    labels = {c["label"]: k for k, c in conds.items()}
+    pick = st.segmented_control("What was wrong with the training data", list(labels), default="Clean",
+                                key="lorenz_cond") or "Clean"
+    cond = labels[pick]
+    c = conds[cond]
+    st.markdown(f"<div class='law'>{html.escape(LORENZ_WHAT[cond])}</div>", unsafe_allow_html=True)
+    uq = c.get("uq") or {}
+    tl = a["t_lyap"]
+    left, right = st.columns([1.35, 1], gap="large")
+    with left:
+        ui.fig_title("Forecast from a new starting point", locked=True)
+        p = SHOW / "lorenz" / f"video_{cond}.mp4"
+        if p.exists():
+            st.video(str(p), loop=True, autoplay=True, muted=True)
+    with right:
+        if uq:
+            ui.fig_title("The verdict")
+            ui.verdict_box(uq)
+        ui.fig_title("The law it found")
+        ui.equations(ui.rhs_latex(c["laws"]["Discovered law"], digits=3), small=True)
+        if cond == "sensor":
+            st.caption("Only the first equation is checkable: the second is its stand-in for the missing variable.")
+        if uq:
+            ui.next_box(uq)
+    keys = {"Discovered law": "law", "FNO": "fno", "SINDy": "sindy"}
+    c1, c2 = st.columns(2, gap="large")
+    with c1:
+        ui.fig_title("In sample: a training run")
+        show(_bigfont(viz.ode_errors(tl, {k: a[f"{cond}_err_in_{v}"] for k, v in keys.items()}), 400), f"lz_in_{cond}")
+    with c2:
+        ui.fig_title("Out of sample: new starting points", locked=True)
+        show(_bigfont(viz.ode_errors(tl, {k: a[f"{cond}_err_oos_{v}"] for k, v in keys.items()}), 400), f"lz_oos_{cond}")
+    ui.fig_title("How long each stays on track", locked=True)
+    show(_bigfont(viz.ode_valid_bars(c["valid_in"], c["valid_oos"], float(tl[-1])), 400), f"lz_bars_{cond}")
+    with st.expander("The trajectories (in sample and out of sample)", icon=":material/show_chart:"):
+        names = c["names"]
+        for tag, lab in (("in", "In sample: training run 1 (as given, with its noise)"),
+                         ("oos", "Out of sample: new starting point 1 (clean)")):
+            st.markdown(f"**{lab}**")
+            show(_bigfont(viz.ode_series(tl, a[f"{cond}_X_{tag}"], {k: a[f"{cond}_Y_{tag}_{v}"] for k, v in keys.items()},
+                                         names)), f"lz_ser_{tag}_{cond}")
+    with st.expander("How it got there", icon=":material/psychology:"):
+        _reasoning(c.get("rationale"), c.get("tools"))
+    with st.expander("What this shows", icon=":material/function:"):
+        st.markdown(
+            "- **Clean data:** the law and the FNO both track a training run well; on new starting points the law "
+            "lasts longer (about 2.3 vs 1.8 Lyapunov times). Plain SINDy also finds the law here.\n"
+            "- **Spikes:** SINDy fits the glitches and gets a wrong law; the FNO learns the glitches too. The agent "
+            "recovers the right law, which tracks new runs more than twice as long as either.\n"
+            "- **Outside kicks:** all three degrade; the law is still the most accurate.\n"
+            "- **Lost sensor:** the law's first equation is right, but its stand-in for the missing variable cannot "
+            "forecast; the FNO does better on the two measured columns. The agent's verdict (inconclusive) says so.\n"
+            "- Lorenz is chaotic: tiny errors grow about 2.7× every Lyapunov time, so every forecast is lost "
+            "eventually. What matters is how long it lasts.")
+    if uq:
+        with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
+            st.markdown(ui.checks_md(uq))
+    with st.expander("Benchmark details", icon=":material/lock:"):
+        fi = c.get("fno_info") or {}
+        rows = [{"method": k, "in sample": round(c["valid_in"][k], 2),
+                 "out of sample (run 1, run 2)": ", ".join(f"{x:.2f}" for x in c["valid_oos_runs"][k]),
+                 "out of sample (mean)": round(c["valid_oos"][k], 2)} for k in c["valid_in"]]
+        st.markdown("**Lyapunov times before the error passes 0.5** (end of record: "
+                    f"{float(tl[-1]):.1f})")
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        st.markdown(
+            f"- **Same data for everyone:** the FNO, SINDy and the agent all trained on the same 4 runs, as given "
+            f"(noise, spikes, kicks, missing column).\n"
+            f"- **FNO:** Fourier layers over a window of {info['fno_window']} time steps; it maps the last "
+            f"{info['fno_window']} states to the next {info['fno_window']} and is chained to forecast. Window chosen on "
+            f"held-out training windows; best checkpoint by held-out loss ({int(fi.get('epochs', 0))} epochs, "
+            f"{fi.get('minutes', 0):.0f} min on a laptop CPU).\n"
+            f"- **Head start:** the FNO is given the first {info['fno_window']} true states of each run; the laws only "
+            f"the first one.\n"
+            "- **Error:** RMS over the variables of |forecast − data| / spread of that variable. Out-of-sample runs are "
+            "clean; in sample is scored against the training run with isolated spikes median-filtered out.\n"
+            f"- **Agent cost:** ${c.get('cost_usd') or 0:.2f}.")
+
+
 def v3_home():
-    st.markdown("<div class='home-t'>Equation Discovery AutoScientist</div>"
-                "<div class='home-s'>Data in → the equation, how sure it is, and where to measure next</div>",
+    st.markdown("<div class='home-e'>eqdisc</div><div class='home-t'>Equation Discovery AutoScientist</div>"
+                "<div class='home-s'>Data in. Out come the equation, how sure it is, and where to measure next.</div>",
                 unsafe_allow_html=True)
     cards = [("lageos", "Satellite", V3_PAGES["sat"]), ("orbit", "Big Bulge Orbit", V3_PAGES["bulge"]),
-             ("ks", "Blind Chaos (KS)", V3_PAGES["chaos"]), ("gray_scott", "Reaction-Diffusion (Chemistry)", V3_PAGES["rd"])]
-    cols = st.columns(4, gap="large")
+             ("ks", "Blind Chaos (KS)", V3_PAGES["chaos"]), ("gray_scott", "Reaction-Diffusion (Chemistry)", V3_PAGES["rd"]),
+             ("hidden_oscillator", "Hidden Oscillator", V3_PAGES["hidden"]),
+             ("lorenz", "Lorenz (In vs Out of Sample)", V3_PAGES["lorenz"])]
+    cols = [c for _ in range(0, len(cards), 3) for c in st.columns(3, gap="large")]
     for c, (case, name, page) in zip(cols, cards):
         with c, st.container(border=True):
             th = SHOW / case / "thumb.jpg"
             if th.exists():
                 st.image(str(th), width="stretch")
             st.markdown(f"<div class='cardn'>{html.escape(name)}</div>", unsafe_allow_html=True)
-            st.page_link(page, label="Open →", width="stretch")
+            st.page_link(page, label="Open case", icon=":material/arrow_forward:")
     st.write("")
     _, mid, _ = st.columns([1, 1.2, 1])
     with mid:
-        if st.button("⬆  Try it on your own data", type="primary", width="stretch"):
+        if st.button("Try it on your own data", type="primary", icon=":material/upload:", width="stretch"):
             st.switch_page(V3_PAGES["yours"])
     with st.expander("How we keep it honest"):
-        st.markdown(f"{PROTOCOL}\n\n🔒 marks anything that uses the hidden future or the true law: eqdisc never sees it.")
+        st.markdown(f"{PROTOCOL}\n\n‘Hidden truth’ marks anything that uses the hidden future or the true law: "
+                    "eqdisc never sees it.")
 
 
 def _slim(a, verdict=None):
@@ -1014,13 +1189,25 @@ def _slim(a, verdict=None):
             "data_advice": a.get("data_advice"), "model_ambiguity": a.get("model_ambiguity")}
 
 
+def _meaning_expander(res):
+    m = res.get("meaning")
+    if m and m.get("bullets"):
+        with st.expander("What the equation means", icon=":material/function:"):
+            st.markdown(yourdata.meaning_md(m))
+            st.caption(yourdata.meaning_note(m))
+
+
 def _yourdata_result(job):
     res = job.result
+    if getattr(job, "saved_at", None):
+        st.caption(f"Saved result from {job.saved_at} · {job.run_dir}")
     if getattr(job, "prompt", ""):
         st.caption(f"Prompt used: “{job.prompt}”")
     else:
         st.caption("Blind run: no prompt, data only.")
     uq = _slim(res.get("assessment"), res.get("verdict"))
+    fc = res.get("forecast") or {}
+    video = fc.get("video") if fc.get("video") and Path(fc["video"]).exists() else None
     if res["kind"] == "dynamics":
         kind, png = "ode", None
         if res.get("dataset_path") and res.get("final_model"):
@@ -1028,22 +1215,50 @@ def _yourdata_result(job):
                                       str(Path(job.run_dir) / "demo_figs" / "model.png"))
         left, right = st.columns([1.35, 1], gap="large")
         with left:
-            ui.fig_title("Model vs your data")
-            if png:
-                st.image(png, width="stretch")
+            if video:
+                ui.fig_title("Forecast vs reality", locked=True)
+                if yourdata.blew_up_early(fc):
+                    st.error("The law it found breaks down right at the start of the forecast: its values become "
+                             "infinite or invalid, so there is no forecast to show, only reality. Treat this law as "
+                             "unusable for prediction.")
+                st.video(video, loop=True, autoplay=True, muted=True)
+            else:
+                ui.fig_title("Model vs your data")
+                if png:
+                    st.image(png, width="stretch")
+                if fc.get("skipped") or fc.get("error"):
+                    st.caption(f"No forecast video: {fc.get('skipped') or fc.get('error')}")
         with right:
             ui.fig_title("The verdict")
             ui.verdict_box(uq)
             ui.fig_title("The law it found")
             ui.equations(ui.rhs_latex(res.get("final_model") or {}, pde=kind == "pde"), small=True)
             ui.next_box(uq)
+        if fc.get("npz"):
+            st.caption(yourdata.caption(fc))
+            c1, c2, c3 = st.columns(3, gap="large")
+            with c1:
+                ui.fig_title("What the agents saw")
+                show(_bigfont(yourdata.training_fig(fc["npz"]), 430), "yd_train")
+            with c2:
+                ui.fig_title("Forecast error", locked=True)
+                show(_bigfont(yourdata.error_fig(fc["npz"]), 430), "yd_err")
+            with c3:
+                ui.fig_title("How precisely known")
+                f = ui.precision_fig(uq)
+                if f:
+                    show(_bigfont(f), "yd_prec_row")
         story = res.get("story") or {}
-        with st.expander("🧠 How it got there"):
+        with st.expander("How it got there", icon=":material/psychology:"):
             tool_chips([e["name"] for e in job.events if e.get("type") == "tool"], title="tools it used")
             if story.get("headline"):
                 st.markdown(story["headline"])
             for s_ in story.get("key_steps") or []:
                 st.markdown(f"- **{s_.get('observation', s_.get('decision', ''))}** → {s_.get('decision', s_.get('outcome', ''))}")
+        _meaning_expander(res)
+        if video and png:
+            with st.expander("🔍 Fit to the data the agents saw"):
+                st.image(png, width="stretch")
     else:
         from eqdisc.sr import evaluate_expr
         names, target, expr = res["names"], res["target"], res.get("expr")
@@ -1063,19 +1278,22 @@ def _yourdata_result(job):
             ui.fig_title("The law it found")
             ui.equations([f"{ui.expr_latex(target, [target])} = {ui.expr_latex(expr, names)}"], small=True)
             ui.next_box(uq)
-        with st.expander("🧠 How it got there"):
+        with st.expander("How it got there", icon=":material/psychology:"):
             tool_chips([e["name"] for e in job.events if e.get("type") == "tool"], title="tools it used")
             if (res.get("verdict") or {}).get("recommendation"):
                 st.markdown(res["verdict"]["recommendation"])
-    with st.expander("✅ The checks behind the verdict"):
+        _meaning_expander(res)
+    with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq) or "No checks available.")
-        f = ui.precision_fig(uq)
+        f = None if fc.get("npz") else ui.precision_fig(uq)       # already shown in the figure row
         if f:
             show(_bigfont(f), "yd_prec")
-    with st.expander("⬇️ Downloads"):
+    with st.expander("Downloads", icon=":material/download:"):
         rp = Path(res["report"]) if res.get("report") else None
         if rp and rp.exists():
             st.download_button("Full report (HTML)", rp.read_bytes(), rp.name, "text/html")
+        if video:
+            st.download_button("Forecast video (MP4)", Path(video).read_bytes(), "forecast.mp4", "video/mp4")
         st.download_button("Result (JSON)", json.dumps(res, default=str, indent=1), "result.json")
         if res.get("rehearsal_note"):
             st.caption(res["rehearsal_note"])
@@ -1089,13 +1307,34 @@ def v3_yourdata():
     c1, c2 = st.columns([1.35, 1], gap="large")
     with c1:
         ui.fig_title("Data")
-        src = st.radio("Data", ["Upload a CSV"] + list(EXAMPLES), horizontal=True, disabled=running, key="src",
-                       label_visibility="collapsed")
-        df, fname = None, None
-        if src == "Upload a CSV":
-            up = st.file_uploader("A time column plus one column per variable, or one row per measurement",
-                                  type=["csv", "tsv", "txt"], disabled=running)
-            if up is not None:
+        src = st.radio("Data", ["Upload a CSV"] + list(EXAMPLES) + ["Saved results"], horizontal=True,
+                       disabled=running, key="src", label_visibility="collapsed")
+        df, fname, npz = None, None, None
+        if src == "Saved results":
+            saved = yourdata.list_saved(live.RUNS)
+            if not saved:
+                st.info("No saved results yet. Every finished run is saved automatically and shows up here.")
+            else:
+                pick = st.selectbox("Saved results (newest first)", [lab for lab, _ in saved], disabled=running)
+                if st.button("Open", disabled=running):
+                    st.session_state.job = yourdata.SavedJob(dict(saved)[pick])
+                st.caption(f"Saved in {live.RUNS}: one folder per run, with the result, forecast video and report.")
+        elif src == "Upload a CSV":
+            up = st.file_uploader("CSV: a time column plus one column per variable, or one row per measurement. "
+                                  "Or .npz: time and variable/field arrays",
+                                  type=["csv", "tsv", "txt", "npz"], disabled=running)
+            if up is not None and up.name.lower().endswith(".npz"):
+                npz, fname = yourdata.read_npz(up.getvalue(), up.name, live.RUNS), Path(up.name).stem
+                if npz.get("error"):
+                    st.error(npz["error"])
+                    npz = None
+                else:
+                    df = npz["df"]
+                    if npz.get("warning"):
+                        st.warning(npz["warning"])
+                    st.caption(f".npz read as {'a time series' if npz['kind'] == 'ode' else 'a field over space'}: "
+                               f"{', '.join(npz['variables'])}, shape {tuple(npz['shape'])}. {npz['summary']}"[:400])
+            elif up is not None:
                 df, fname = pd.read_csv(up, sep=None, engine="python"), Path(up.name).stem
         else:
             path, _ = EXAMPLES[src]
@@ -1103,6 +1342,7 @@ def v3_yourdata():
                 df, fname = pd.read_csv(path), path.stem
         if df is not None:
             st.dataframe(df.head(6), hide_index=True, width="stretch")
+        field = npz is not None and df is None          # .npz field over space: goes to discovery as the file itself
         ui.fig_title("Tell it about your data")
         prompt = st.text_area(
             "Prompt", key=f"prompt_{src}", height=130, disabled=running, label_visibility="collapsed",
@@ -1116,28 +1356,45 @@ def v3_yourdata():
         mode = st.segmented_control("Kind of law", ["Auto", "Dynamics", "Static y = f(x)"], default="Auto",
                                     disabled=running, key="mode") or "Auto"
         resolved = mode
-        if df is not None and mode == "Auto":
+        if npz is not None:
+            resolved = "Dynamics"                        # .npz holds time + states/fields
+        elif df is not None and mode == "Auto":
             resolved = "Dynamics" if live.detect_mode(df) == "dynamics" else "Static y = f(x)"
         target = None
         if df is not None and resolved.startswith("Static"):
             num = list(df.select_dtypes("number").columns)
             target = st.selectbox("Predict which column", num, index=len(num) - 1, disabled=running)
         budget = st.segmented_control("Effort", ["Quick", "Full"], default="Quick", disabled=running, key="budget") or "Quick"
+        holdout = None
+        if df is None or resolved.startswith("Dyn"):
+            hold = st.segmented_control("Forecast check", ["Off", "10%", "20%", "30%"], default="20%",
+                                        disabled=running, key="holdout") or "Off"
+            holdout = None if hold == "Off" else int(hold[:-1]) / 100
+            st.caption(("Holds back the last snapshots. " if field else "Holds back the end of every run. ")
+                       + "The agents never see it; the video shows the found law forecasting it." if holdout
+                       else "Off: the agents see all the data; no forecast video.")
         fake = st.checkbox("Rehearsal (replays a saved run, no API cost)", value=env_fake, disabled=running, key="fake")
-        go_btn = st.button("Discover", type="primary", disabled=running or df is None, width="stretch")
+        ready = df is not None or field
+        go_btn = st.button("Discover", type="primary", disabled=running or not ready, width="stretch")
         if df is not None:
             st.caption(f"{df.shape[0]} rows × {df.shape[1]} columns · detected: {resolved}")
-    if go_btn and df is not None:
+    if go_btn and ready:
         run_dir = live.RUNS / time.strftime("%Y%m%d-%H%M%S")
         run_dir.mkdir(parents=True, exist_ok=True)
-        csv_path = run_dir / f"{live.ident(fname or 'data')}.csv"
-        df.to_csv(csv_path, index=False)
+        if field:
+            csv_path = run_dir / Path(npz["path"]).name           # the framework's ingester reads .npz directly
+            csv_path.write_bytes(Path(npz["path"]).read_bytes())
+        else:
+            csv_path = run_dir / f"{live.ident(fname or 'data')}.csv"
+            df.to_csv(csv_path, index=False)
         quick = budget == "Quick"
         if resolved.startswith("Dyn"):
-            job = live.Job(live.fake_dynamics if fake else live.run_dynamics, csv_path=str(csv_path),
-                           run_dir=str(run_dir), n_branches=2 if quick else 3, adversary=not quick, context=prompt.strip())
+            job = live.Job(yourdata.dynamics_job, backend=live.fake_dynamics if fake else live.run_dynamics,
+                           holdout=holdout, use_llm=not fake, csv_path=str(csv_path), run_dir=str(run_dir),
+                           n_branches=2 if quick else 3, adversary=not quick, context=prompt.strip())
         else:
-            job = live.Job(live.fake_static if fake else live.run_static, csv_path=str(csv_path), target=target,
+            job = live.Job(yourdata.static_job, backend=live.fake_static if fake else live.run_static,
+                           use_llm=not fake, run_dir=str(run_dir), csv_path=str(csv_path), target=target,
                            context=prompt.strip(), n_sessions=2 if quick else 3)
         job.run_dir = str(run_dir)
         job.prompt = prompt.strip()
@@ -1178,11 +1435,25 @@ def main():
     ui.inject_css3()
     env_fake = os.environ.get("EQDISC_DEMO_FAKE", "") not in ("", "0", "false")
     V3_PAGES.update({
+        "home": st.Page(v3_home, title="Home", icon=":material/home:", default=True),
+        "sat": st.Page(v3_satellite, title="Satellite", icon=":material/satellite_alt:", url_path="satellite"),
+        "bulge": st.Page(v3_bulge, title="Big Bulge Orbit", icon=":material/public:", url_path="big-bulge-orbit"),
+        "chaos": st.Page(v3_chaos, title="Blind Chaos (KS)", icon=":material/cyclone:", url_path="blind-chaos"),
+        "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", icon=":material/texture:",
+                      url_path="reaction-diffusion"),
+        "hidden": st.Page(v3_hidden, title="Hidden Oscillator", icon=":material/graphic_eq:", url_path="hidden-oscillator"),
+        "evidence": st.Page(evidence.page, title="When Not to Trust It", icon=":material/gpp_maybe:",
+                            url_path="when-not-to-trust-it"),
+        "yours": st.Page(v3_yourdata, title="Your Data", icon=":material/upload_file:", url_path="your-data"),
+
         "home": st.Page(v3_home, title="Home", default=True),
         "sat": st.Page(v3_satellite, title="Satellite", url_path="satellite"),
         "bulge": st.Page(v3_bulge, title="Big Bulge Orbit", url_path="big-bulge-orbit"),
         "chaos": st.Page(v3_chaos, title="Blind Chaos (KS)", url_path="blind-chaos"),
         "rd": st.Page(v3_reaction, title="Reaction-Diffusion (Chemistry)", url_path="reaction-diffusion"),
+        "lorenz": st.Page(v3_lorenz, title="Lorenz (In vs Out of Sample)", icon=":material/all_inclusive:", url_path="lorenz"),
+        "evidence": st.Page(evidence.page, title="When Not to Trust It", icon=":material/gpp_maybe:",
+                            url_path="when-not-to-trust-it"),
         "yours": st.Page(v3_yourdata, title="Your Data", url_path="your-data"),
     })
     nav = st.navigation(list(V3_PAGES.values()), position="top")

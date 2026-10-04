@@ -1,0 +1,5 @@
+# Start points for datasets/double-pendulum/double-pendulum.mov, read off original frame 200 (original pixels).
+# 1: centre of the upper metal bolt. 2: centre of the lower metal bolt.
+point,frame,x,y
+1,200,770,348
+2,200,746,467
