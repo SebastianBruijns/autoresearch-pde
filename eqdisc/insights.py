@@ -107,6 +107,16 @@ def verdict(assessment):
         else:
             v = dict(v, headline=v["headline"].rstrip(".") + f". Critical check failed: {names}.")
         v["failed_checks"] = [f["id"] for f in crit]
+    # Warnings: two independent model checks against the model, or one plus a low grade, also rule out confidence.
+    # (residual_white is excluded: it restates the noise-floor ratio the grade already uses.)
+    warns = [f for f in unresolved(findings, "warn") if f.get("severity") == "warn" and f.get("stage") == "model"
+             and f.get("id") != "residual_white"]
+    level = (assessment.get("confidence") or {}).get("level")
+    if v["status"].startswith("CONFIDENT") and (len(warns) >= 2 or (warns and level == "low")):
+        names = "; ".join(f"{f['id']}: {f.get('message') or 'warning'}" for f in warns[:2])
+        v = {"status": "COLLECT MORE DATA",
+             "headline": f"Best current model, not confirmed: independent checks disagree with it ({names}).",
+             "recommendation": v["recommendation"], "failed_checks": [f["id"] for f in warns]}
     vr = valid_range(findings)
     if vr:
         v["valid_range"] = vr
