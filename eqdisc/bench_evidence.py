@@ -288,11 +288,14 @@ def _w_auto(path, out_dir):
         data_f, data_rep = [], []
     res["evidence"] = {"data_findings": data_f, "data_repairs": data_rep}
     if "verdict" not in res:
+        from .orchestrate import _revise
         fit = auto_fit(meta, data)
         rhs = fit.get("rhs")
-        res["final_model"] = rhs
         res["auto_config"] = fit.get("auto_config")
         model_f = _audit.audit_model(meta, data, rhs) if rhs else []
+        if rhs:
+            rhs, model_f, res["revisions"] = _revise(meta, data, rhs, model_f, None, lambda *a: None)
+        res["final_model"] = rhs
         res["evidence"]["final_findings"] = model_f
         a = assess(meta, data, rhs, data_findings=data_f) if rhs else None
         res["verdict"] = verdict(a)

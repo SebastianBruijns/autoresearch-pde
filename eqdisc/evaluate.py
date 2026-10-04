@@ -48,7 +48,7 @@ def _load_hidden(d):
 
 def _names(truth):
     if truth["kind"] == "pde":
-        return derivative_symbols(truth["variables"], truth.get("spatial_dims") or ["x"], MAX_DERIV)
+        return derivative_symbols(truth["variables"], truth.get("spatial_dims") or ["x"], MAX_DERIV) + ["t"]
     return truth["variables"] + ["t"]
 
 

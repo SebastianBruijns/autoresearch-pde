@@ -259,7 +259,7 @@ def weak_system(meta, data, struct):
     else:
         gfeats = None
         for tm in all_terms:
-            kind = wf._classify(parse(tm, names), fields, dims, dims)
+            kind = wf._classify(parse(tm, names), fields, dims, dims + ["t"])
             if kind[0] == "mono":
                 cnoise[tm] = pointwise_noise(kind[1])
                 d = _debiased(kind[1], fields, raw, var, coords)

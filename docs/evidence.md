@@ -31,6 +31,21 @@ Run on the tournament winner and on the final model.
 - Residual: partial R^2 of time-only, space-only and amplitude-dependent structure beyond a candidate library,
   against a pure-noise surrogate; residual level against the noise floor.
 
+## Revise (`audit/revise.py`)
+
+Diagnosis leads to a revision, never straight to an answer. After the tournament (and the adversary), each fired model
+finding proposes one challenger, with coefficients refitted by fixed-structure weak-form least squares:
+
+| finding | challenger |
+|---|---|
+| `residual_time_only` | + sin(wt), cos(wt), with w the dominant frequency of the residual's time profile (skipped after a gap split) |
+| `residual_space_only` | + sin(kx), cos(kx), with k the dominant mode of the residual's space profile |
+| `residual_amplitude` | + v^3, or + v^2 |
+
+A challenger replaces the model only if it wins the existing tournament (`uq.compare_models`: cross-validated error,
+BIC, rollouts); up to 2 rounds. Every proposal and outcome goes to `ledger.jsonl` (`revision`) and the report.
+`slice_trajectory` stays report-only (per-trajectory coefficients are not a single equation).
+
 ## Grade and verdict (`assess.grade`, `insights.verdict`)
 
 Unresolved critical: -3 points and no CONFIDENT verdict (named in the headline). Unresolved warning: -1 point; two
@@ -53,6 +68,11 @@ corruptions x 3 seeds, sympy judge only (2026-10-04, this code):
 |---|---|---|---|---|---|
 | dev (seeds 0-2, calibration) | 96 | 45 | 19 | 32 | 0 |
 | report (seeds 10-12) | - | not yet run | | | |
+
+Revise step (this code, arm B, dev seeds 0-2, sympy judge): forcing_time 0/12 -> 6/12 right, source_space 0/12 ->
+4/12 right, amp_term and clean unchanged (12/12 right+confident), 0 confident-wrong. The challenger families
+(one sinusoid, one Fourier mode, a cubic term) match the shapes the benchmark generator injects, so these numbers show
+the mechanism works, not that it generalises to other forcing shapes.
 
 Dev is the calibration split, so it is not evidence of generalisation. The previous code also had 0/96
 confident-wrong on dev, partly by deleting data (it kept 66-86% of some KS and Burgers outlier records); it got 57/96 right

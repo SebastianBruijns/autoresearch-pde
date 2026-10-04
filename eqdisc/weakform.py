@@ -385,8 +385,7 @@ def weak_sindy(meta, data, poly_degree=3, max_deriv=4, custom_terms=(), exclude_
             shp = [1] * (2 + nsp)
             shp[2 + i] = sp_shape[i]
             coords[dim] = np.broadcast_to(grids[i][0].reshape(shp), U.shape[:-1])
-    else:
-        coords["t"] = np.broadcast_to(t[None, :], U.shape[:-1])
+    coords["t"] = np.broadcast_to(t.reshape((1, -1) + (1,) * nsp), U.shape[:-1])
     axes_info = [(1 + i, grids[i][1], periodic[i]) for i in range(nsp)]  # axes of a single field array
     smooth_cache = {}
 
@@ -443,7 +442,7 @@ def weak_sindy(meta, data, poly_degree=3, max_deriv=4, custom_terms=(), exclude_
                 ncomp.append([])
     else:
         for tm in terms:
-            kind = _classify(parse(tm, names), fields, dims, dims)
+            kind = _classify(parse(tm, names), fields, dims, dims + ["t"])
             if kind[0] == "mono":
                 cols.append(integrate(evalg(kind[1], lambda f: raw[f])))
                 how.append("pointwise")

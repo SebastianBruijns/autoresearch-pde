@@ -25,10 +25,13 @@ from .solvers import (integrate_ode, integrate_pde, make_ode_rhs, make_pde_rhs, 
 
 # ----------------------------------------------------------------------------- data helpers
 def symbols(meta):
+    """Allowed symbols; PDEs always include the time `t` (explicitly forced models, e.g. sin(w*t))."""
     if "allowed_symbols" not in meta and meta.get("kind") == "pde":
         from .solvers import derivative_symbols
-        return derivative_symbols(meta["variables"], meta.get("spatial_dims") or ["x"], 4)
-    return list(meta["allowed_symbols"])
+        names = derivative_symbols(meta["variables"], meta.get("spatial_dims") or ["x"], 4)
+    else:
+        names = list(meta["allowed_symbols"])
+    return names + ["t"] if meta.get("kind") == "pde" and "t" not in names else names
 
 
 def smooth_and_differentiate(meta, U, window=9, order=3, lowpass_frac=None, method="savgol"):
@@ -57,14 +60,16 @@ def feature_arrays(meta, Us, t):
         out["t"] = np.broadcast_to(t[None, :], Us.shape[:-1])
     else:
         from .solvers import derivative_features, is_legacy_pde
+        tt = np.broadcast_to(np.reshape(t, (1, -1) + (1,) * (Us.ndim - 3)), Us.shape[:-1])
         if not is_legacy_pde(meta):       # 2-D and/or non-periodic: spectral or finite differences
-            return derivative_features(Us, meta, meta["variables"], 4)
+            return derivative_features(Us, meta, meta["variables"], 4) | {"t": tt}
         D = spectral_derivs(Us, meta["L"])
         for i, f in enumerate(meta["variables"]):
             for k in range(5):
                 out[f if k == 0 else f"{f}_{'x' * k}"] = D[k][..., i]
         x = np.arange(meta["nx"]) * meta["L"] / meta["nx"]
         out["x"] = np.broadcast_to(x, Us.shape[:-1])
+        out["t"] = tt
     return out
 
 

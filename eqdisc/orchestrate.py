@@ -101,6 +101,17 @@ def _data_evidence(meta, data, src, out, ledger):
     return meta, data, findings, repairs, audited
 
 
+def _revise(meta, data, rhs, findings, ledger, say=print):
+    """Diagnose -> revise: fired findings propose challengers (audit/revise.py); a challenger replaces the model only
+    if it wins the tournament. Returns (rhs, findings of the returned model, revision log)."""
+    from .audit.revise import revise
+    new, log = revise(meta, data, rhs, findings, tournament, ledger=ledger)
+    for e in log:
+        if e.get("name"):
+            say(f"      revise ({e.get('from_finding')}): {e['name']} {'ADOPTED' if e.get('adopted') else 'rejected'}")
+    return new, (findings if new == rhs else _audit.audit_model(meta, data, new)), log
+
+
 def _say_fired(say, findings, prefix):
     """Print fired findings (any severity); returns them."""
     fired = fired_findings(findings, "info")
@@ -220,10 +231,13 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
 
     # optional human checkpoint on the final model
     human_log = []
-    say("[6/7] assessment of the final model (with evidence checks)")
-    assessment = None
+    say("[6/7] revise from the checks, then assess the final model")
+    assessment, revisions = None, []
     if final:
         final_findings = _audit.audit_model(meta, data, final)        # cached when final is the tournament winner
+        revised, final_findings, revisions = _revise(meta, data, final, final_findings, ledger, say)
+        if revised != final:
+            cands["revised"], incumbent, final = revised, "revised", revised
         ledger.findings(final_findings, "model audit (final model)")
         evidence["final_findings"] = final_findings
         _say_fired(say, final_findings, "check ")
@@ -260,7 +274,7 @@ def discover(path, n_branches=3, adversary=True, human=None, context=None, model
                             "report": r.get("report") if isinstance(r, dict) else None,
                             "error": r.get("error") if isinstance(r, dict) else None} for k, r in branches.items()},
            "assessment": assessment, "brief": brief_markdown(assessment) if assessment else None, "human_log": human_log,
-           "data_card": data_card, "evidence": evidence, "wall_s": round(time.time() - t0, 1)}
+           "data_card": data_card, "evidence": evidence, "revisions": revisions, "wall_s": round(time.time() - t0, 1)}
     res["cost_usd"] = round(sum((b.get("cost_usd") or 0) for b in res["branches"].values())
                             + (res["adversary"].get("cost_usd") or 0) + usage.cost(), 3)
     if (original_path / "hidden" / "truth.json").exists() and final:          # benchmark datasets only
@@ -290,6 +304,9 @@ def reassess(run_dir):
     meta, data, data_findings, data_repairs, audited = _data_evidence(meta, data, src, run_dir, ledger)
     final = res.get("final_model")
     final_findings = _audit.audit_model(meta, data, final)
+    if final:
+        final, final_findings, res["revisions"] = _revise(meta, data, final, final_findings, ledger, lambda *a: None)
+        res["final_model"] = final
     ledger.findings(final_findings, "model audit (reassess)")
     res["evidence"] = {"data_findings": data_findings, "data_repairs": data_repairs, "final_findings": final_findings,
                        "dataset_audited_path": str(audited) if audited else None,

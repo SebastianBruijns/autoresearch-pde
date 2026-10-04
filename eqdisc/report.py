@@ -211,6 +211,11 @@ def _checks_card(res):
         body = "<ul>" + "".join(items) + "</ul>"
     for r in ev.get("data_repairs") or []:
         body += f"<div class='sub'>Data repair applied before fitting: {html.escape(r.get('note', ''))}.</div>"
+    for r in res.get("revisions") or []:
+        if r.get("name"):
+            body += (f"<div class='sub'>Revision from {html.escape(str(r.get('from_finding')))}: "
+                     f"<code>{html.escape(json.dumps(r.get('rhs'))[:300])}</code> "
+                     f"{'<b>adopted</b> (won the tournament)' if r.get('adopted') else 'rejected (lost the tournament)'}.</div>")
     vr = (res.get("verdict") or {}).get("valid_range")
     if vr:
         body += "<div><b>Valid range.</b> " + html.escape("; ".join(
