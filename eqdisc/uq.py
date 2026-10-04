@@ -30,8 +30,7 @@ import numpy as np
 import sympy as sp
 
 from .baselines import lowpass, stlsq, to_expr
-from . import solvers
-from .solvers import integrate_ode, integrate_pde, parse
+from .solvers import integrate_ode, integrate_pde, integrate_pde_general, is_legacy_pde, parse, pde_layout
 from .toolbox import (_pde_step, build_library, diagnose, eval_exprs, feature_arrays, smooth_and_differentiate,
                       split_rows, symbols, validate)
 
@@ -191,16 +190,24 @@ def _rollout(prep, rhs, seg, max_rollout_steps=3000):
     if meta["kind"] == "ode":
         roll = integrate_ode(meta["variables"], rhs, Us[j, a], tt, max_seconds=5.0)
         ref = Us[j, a:b]
-    else:
+    elif is_legacy_pde(meta):
         h = _pde_step(meta, prep["U"])
         n_obs = max(2, min(len(tt), int(max_rollout_steps * h / meta["dt"]) + 1))
         tt = tt[:n_obs]
         sub = max(1, int(round(meta["dt"] / h)))
-        lay = solvers.pde_layout(meta)
-        if len(lay["spatial_dims"]) == 1 and lay["boundary"] == "periodic":       # legacy 1-D path (unchanged)
-            roll = integrate_pde(meta["variables"], rhs, meta["L"], Us[j, a], tt, meta["dt"] / sub)
-        else:                                                                    # 2-D / non-periodic grids
-            roll = solvers.integrate_pde_general(meta["variables"], rhs, lay, Us[j, a], tt, meta["dt"] / sub)
+        roll = integrate_pde(meta["variables"], rhs, meta["L"], Us[j, a], tt, meta["dt"] / sub)
+        ref = Us[j, a:a + n_obs]
+    else:   # 2-D and/or non-periodic grids: same dispatch and step budget as toolbox.validate
+        lay = pde_layout(meta)
+        periodic = lay["boundary"] == "periodic"
+        h = _pde_step(meta, prep["U"])
+        npts = int(np.prod(Us.shape[2:-1]))
+        budget = max_rollout_steps * min(1.0, 256.0 / npts)
+        n_obs = len(tt) if (not periodic and Us.ndim == 4) else max(2, min(len(tt), int(budget * h / meta["dt"]) + 1))
+        tt = tt[:n_obs]
+        sub = max(1, int(round(meta["dt"] / h)))
+        roll = integrate_pde_general(meta["variables"], rhs, lay, Us[j, a], tt, meta["dt"] / sub,
+                                     boundary_data=None if periodic else Us[j, a:a + n_obs], max_seconds=30.0)
         ref = Us[j, a:a + n_obs]
     red = tuple(range(1, roll.ndim))
     with np.errstate(all="ignore"):

@@ -66,7 +66,8 @@ def _lambdify(names, exprs):
     fns = [sp.lambdify(syms, e, modules="numpy") for e in exprs]
 
     def f(*args):
-        shape = np.broadcast(*args).shape if args else ()
+        # broadcast_shapes has no 64-argument limit (np.broadcast does): 3-D data with many fields exceeds 64 symbols
+        shape = np.broadcast_shapes(*[np.shape(a) for a in args]) if args else ()
         return [np.broadcast_to(np.asarray(fn(*args), dtype=float), shape) for fn in fns]
     return f
 

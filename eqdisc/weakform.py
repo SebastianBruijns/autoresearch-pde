@@ -387,7 +387,8 @@ def weak_sindy(meta, data, poly_degree=3, max_deriv=4, custom_terms=(), exclude_
             coords[dim] = np.broadcast_to(grids[i][0].reshape(shp), U.shape[:-1])
     else:
         coords["t"] = np.broadcast_to(t[None, :], U.shape[:-1])
-    axes_info = [(1 + i, grids[i][1], periodic[i]) for i in range(nsp)]  # axes of a single field array
+    # a single field array is (n_traj, nt, *space): spatial axis i is array axis 2 + i (was 1 + i, i.e. time)
+    axes_info = [(2 + i, grids[i][1], periodic[i]) for i in range(nsp)]
     smooth_cache = {}
 
     def smoothed(f):
@@ -397,7 +398,7 @@ def weak_sindy(meta, data, poly_degree=3, max_deriv=4, custom_terms=(), exclude_
 
     def dfield(F, alpha):
         for i, k in enumerate(alpha):
-            F = _diff(F, 1 + i, k, grids[i][1], periodic[i])
+            F = _diff(F, 2 + i, k, grids[i][1], periodic[i])   # spatial axis i of (n_traj, nt, *space)
         return F
 
     def evalg(g, src):
