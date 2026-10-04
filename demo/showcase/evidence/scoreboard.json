@@ -1,0 +1,70 @@
+{
+ "available": true,
+ "categories": [
+  "right+confident",
+  "right+cautious",
+  "wrong+flagged",
+  "wrong+confident",
+  "crashed"
+ ],
+ "expected": {
+  "blind": 96,
+  "dev": 96,
+  "report": 96,
+  "all": 288
+ },
+ "counts": {
+  "dev": {
+   "B": {
+    "right+cautious": 10,
+    "right+confident": 47,
+    "wrong+flagged": 39
+   },
+   "A": {
+    "crashed": 1,
+    "right+confident": 1
+   }
+  },
+  "all": {
+   "B": {
+    "right+cautious": 20,
+    "right+confident": 94,
+    "wrong+flagged": 78
+   },
+   "A": {
+    "crashed": 7,
+    "right+confident": 9,
+    "wrong+flagged": 3,
+    "right+cautious": 1,
+    "wrong+confident": 1
+   },
+   "C": {
+    "crashed": 21,
+    "wrong+flagged": 3,
+    "right+confident": 8
+   }
+  },
+  "report": {
+   "A": {
+    "crashed": 6,
+    "right+confident": 8,
+    "wrong+flagged": 3,
+    "right+cautious": 1,
+    "wrong+confident": 1
+   },
+   "B": {
+    "right+confident": 47,
+    "right+cautious": 10,
+    "wrong+flagged": 39
+   },
+   "C": {
+    "crashed": 21,
+    "wrong+flagged": 3,
+    "right+confident": 8
+   }
+  }
+ },
+ "n_rows": 245,
+ "built": "2026-10-04 10:43",
+ "source_mtime": "2026-10-04 10:26"
+}

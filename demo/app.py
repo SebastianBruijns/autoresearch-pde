@@ -23,6 +23,7 @@ for p in (str(REPO), str(DEMO)):
 st.set_page_config(page_title="eqdisc — equations that forecast", page_icon="🧭", layout="wide",
                    initial_sidebar_state="expanded")
 
+import evidence  # noqa: E402
 import live  # noqa: E402
 import ui  # noqa: E402
 import viz  # noqa: E402
@@ -53,7 +54,7 @@ def tool_chips(tools, title="what the agent did (from its log)"):
         ui.chips([f"{k} ×{n}" if n > 1 else k for k, n in counts.items()], title=f"{title} · {len(tools)} tool calls")
 J2_ACCEPTED = 1.08263e-3
 PAGES = ["Home", "🛰️ LAGEOS-1 satellite", "🔥 Chaos (KS)", "🌀 Gray–Scott patterns", "⚡ Run on your data",
-         "⚙️ How it works", "🌍 Orbit with a big bulge"]
+         "⚙️ How it works", "🌍 Orbit with a big bulge", "🔎 When not to trust it"]
 
 
 @st.cache_data(show_spinner=False)
@@ -539,6 +540,9 @@ def page_home():
             sub = (f"VRMSE 6–12: FNO on same data {fno['6-12']:.2g}; The Well paper's best 0.29" if fno
                    else "forecast a held-out trajectory")
         cards.append(("🌀 Gray–Scott (The Well)", num, sub, "gray_scott", PAGES[3]))
+    ev = evidence.home_card()
+    if ev:
+        cards.append(("🔎 When not to trust it", ev[0], ev[1], "evidence", PAGES[7]))
     cols = st.columns(len(cards) or 1, gap="medium")
     for c, (name, num, sub, case, page) in zip(cols, cards):
         with c, st.container(border=True):
@@ -760,11 +764,11 @@ def main():
     env_fake = os.environ.get("EQDISC_DEMO_FAKE", "") not in ("", "0", "false")
     with st.sidebar:
         st.markdown("### 🧭 eqdisc")
-        page = st.radio("Navigate", [PAGES[i] for i in (0, 1, 6, 2, 3, 4, 5)], key="nav", label_visibility="collapsed")
+        page = st.radio("Navigate", [PAGES[i] for i in (0, 1, 6, 7, 2, 3, 4, 5)], key="nav", label_visibility="collapsed")
         with st.expander("⚙️", expanded=False):
             fake = st.toggle("Rehearsal mode (no API calls)", value=env_fake, key="fake")
     {"Home": page_home, PAGES[1]: page_lageos, PAGES[2]: page_ks, PAGES[3]: page_gs,
-     PAGES[5]: page_how, PAGES[6]: page_orbit}.get(page, lambda: page_live(fake))()
+     PAGES[5]: page_how, PAGES[6]: page_orbit, PAGES[7]: evidence.page}.get(page, lambda: page_live(fake))()
 
 
 main()
