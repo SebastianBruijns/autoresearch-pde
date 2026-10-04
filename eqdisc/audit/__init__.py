@@ -4,7 +4,8 @@ A correct equation (1) has the same coefficients on every slice of the data and 
 Each detector tests one of these, or guards the data before fitting, and returns a Finding (see `finding`).
 
     audit_data(meta, data)        -> list[Finding]   before fitting   (audit/data.py)
-    audit_model(meta, data, rhs)  -> list[Finding]   after fitting    (audit/slices.py, audit/residual.py)
+    audit_model(meta, data, rhs)  -> list[Finding]   after fitting    (audit/slices.py, audit/residual.py,
+                                                                      audit/events.py)
 
 Responses to a fired finding, in order: "repair" (apply `fix`, keep only if it wins the tournament), "widen"
 (inflate coefficient intervals), "scope" (restrict the claim to a valid range and ask for data).
@@ -84,9 +85,10 @@ def audit_data(meta, data):
 def audit_model(meta, data, rhs):
     if not enabled():
         return []
-    from . import residual, slices
+    from . import events, residual, slices
     return _safe("model", "slices", slices.audit, meta, data, rhs) + \
-        _safe("model", "residual", residual.audit, meta, data, rhs)
+        _safe("model", "residual", residual.audit, meta, data, rhs) + \
+        _safe("model", "events", events.audit, meta, data, rhs)
 
 
 def fired(findings, min_severity="warn"):

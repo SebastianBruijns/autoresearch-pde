@@ -13,6 +13,14 @@ four 1-D periodic base PDEs with 2% Gaussian noise and exactly one corruption:
     traj_coeffs   each trajectory's coefficients perturbed (blind._perturb)  slice_trajectory
     amp_term      rhs + c*u**3, IC amplitudes so it matters on the largest   slice_amplitude, residual_amplitude
 
+Event corruptions (WS8, written to their own suite `datasets/corrupt_events/`, never mixed into the main suite):
+
+    glitch        2-4 single-sample spikes per trajectory (single grid points) outliers (despike removes exactly them)
+                  of 8-15 x the noise sd: measurement errors, no dynamics
+    kick          at t_k (40-60% of the run) a smooth localized bump is added    external_shock or nothing; never
+                  to the TRUE state and the same equation keeps integrating        outliers, nothing despiked
+                  (a dynamical impulse the system remembers)
+
 `hidden/truth.json` holds the BASE equation (what a correct discovery should recover). `hidden/corruption.json`
 holds {"id", "params", "expected_detector", ...} plus the generating right-hand sides and diagnostics. The hidden test
 set is simulated from unseen ICs with the corrupted dynamics where the corruption is in the dynamics (forcing_time,
@@ -25,6 +33,7 @@ corruption (same convention as datagen's blinded `mystery_<hash>` names). The ma
     python -m eqdisc.corrupt --seeds 0 1 2            # dev suite (calibration)    -> datasets/corrupt/dev/
     python -m eqdisc.corrupt --seeds 10 11 12         # reporting suite            -> datasets/corrupt/report/
     python -m eqdisc.corrupt --seeds 10 11 12 --blind # blinded reporting variants -> datasets/corrupt/blind/
+    python -m eqdisc.corrupt --events --seeds 0 1 2 10 11 12   # glitch / kick suite -> datasets/corrupt_events/
 """
 import argparse
 import dataclasses
@@ -55,6 +64,12 @@ EXPECTED = {
     "traj_coeffs": ["slice_trajectory"],
     "amp_term": ["slice_amplitude", "residual_amplitude"],
 }
+EVENT_CORRUPTIONS = ("glitch", "kick")
+EXPECTED.update({"glitch": ["outliers"], "kick": ["external_shock"]})
+# what a correct audit does with them (hidden/corruption.json["expected_handling"])
+HANDLING = {"glitch": {"outliers_fires": True, "despike_removes": "exactly the glitch samples"},
+            "kick": {"outliers_fires": False, "despike_removes": "nothing",
+                     "acceptable": ["external_shock", "nothing"]}}
 DYNAMIC = ("forcing_time", "source_space", "amp_term")       # hidden test uses the corrupted dynamics
 
 # Per-system corruption parameters. Forcing / source amplitudes are ~0.1-0.4 x rms of the base rhs (lower where the
@@ -72,7 +87,9 @@ PARAMS = {
                              "amp_term": {"c": -0.01, "scales": [0.4, 0.5, 1.6], "test_scales": [0.6, 1.4]}},
 }
 COMMON = {"gaps_random": {"frac": 0.10, "n_windows": 3}, "gaps_state": {"quantile": 0.80, "window": [3, 5]},
-          "traj_coeffs": {"spread": 0.20, "min_range": 0.15}, "outliers": {}, "clean": {}}
+          "traj_coeffs": {"spread": 0.20, "min_range": 0.15}, "outliers": {}, "clean": {},
+          "glitch": {"n_per_traj": [2, 4], "amp_noise_sd": [8.0, 15.0], "min_sep": 10, "edge": 8},
+          "kick": {"t_frac": [0.4, 0.6], "amp_std": [0.5, 1.0], "width_frac": 1 / 16}}
 N_TRAIN, N_TEST, NOISE = 3, 2, 0.02
 
 
@@ -139,6 +156,59 @@ def _simulate(sys, rhs_list, ic_scales, rng, t):
     return np.stack(trajs), retries
 
 
+def _add_glitches(U_obs, U, noise, rng, params):
+    """In place: per trajectory 2-4 single-sample (single grid point) spikes of 8-15 x the noise sd, random sign,
+    >= min_sep rows apart and >= edge rows from the ends. Returns [[traj, t_index, x_index, field, amp_sd], ...]."""
+    nt, nx, nf = U.shape[1], U.shape[2], U.shape[-1]
+    sd = noise * U.reshape(-1, nf).std(0)
+    lo_n, hi_n = params["n_per_traj"]
+    out = []
+    for j in range(U.shape[0]):
+        k = int(rng.integers(lo_n, hi_n + 1))
+        for _ in range(1000):
+            ti = np.sort(rng.choice(np.arange(params["edge"], nt - params["edge"]), k, replace=False))
+            if k < 2 or np.diff(ti).min() >= params["min_sep"]:
+                break
+        for i in ti:
+            xi, f = int(rng.integers(nx)), int(rng.integers(nf))
+            amp = float(rng.uniform(*params["amp_noise_sd"]) * rng.choice([-1, 1]))
+            U_obs[j, i, xi, f] += amp * sd[f]
+            out.append([j, int(i), xi, f, amp])
+    return out
+
+
+def _simulate_kicked(sys, rhs, rng, t, params, n):
+    """n trajectories of the base equation; at t_k (index k, 40-60% of the run) a smooth periodic Gaussian bump
+    (amplitude 0.5-1 x the trajectory's std, width L * width_frac) is added to the true state, and the same equation
+    keeps integrating from the kicked state. Row k is the state just before the kick. Returns (U, retries, kicks)."""
+    lay = sys.layout()
+    coords = grid_coords(lay)
+    x = coords[0]
+    trajs, kicks, retries = [], [], 0
+    nt = len(t)
+    for _ in range(n):
+        for attempt in range(6):
+            U0 = sys.ic(rng, *coords)
+            k = int(round(rng.uniform(*params["t_frac"]) * (nt - 1)))
+            A = integrate_pde_general(sys.fields, rhs, lay, U0, t[:k + 1], sys.dt_sim, max_seconds=600.0)
+            amp = float(rng.uniform(*params["amp_std"]) * rng.choice([-1, 1]) * np.std(A))
+            x0, w = float(rng.uniform(0, sys.L)), sys.L * params["width_frac"]
+            dx = (x - x0 + sys.L / 2) % sys.L - sys.L / 2
+            bump = amp * np.exp(-0.5 * (dx / w) ** 2)
+            Uk = A[-1] + bump[:, None]
+            B = integrate_pde_general(sys.fields, rhs, lay, Uk, t[k:], sys.dt_sim, max_seconds=600.0)
+            U = np.concatenate([A, B[1:]], 0)
+            if np.all(np.isfinite(U)) and np.abs(U).max() < 50 * max(1.0, np.abs(U0).max()):
+                break
+            retries += 1
+        else:
+            raise RuntimeError(f"{sys.name}: unstable kicked trajectory")
+        trajs.append(U)
+        kicks.append({"traj": len(trajs) - 1, "t_index": k, "t": float(t[k]), "x0": x0, "width": w,
+                      "amplitude": amp, "amplitude_noise_sd": amp / (NOISE * float(np.std(U)) + 1e-300)})
+    return np.stack(trajs), retries, kicks
+
+
 def _term_ratio(fields, base_rhs, extra, L, U, x, t):
     """Per-trajectory rms(extra term) / rms(base rhs) on clean data (how strongly the corruption acts)."""
     fb = make_pde_rhs(fields, base_rhs, L)(U, x, t[None, :, None])
@@ -150,7 +220,7 @@ def _term_ratio(fields, base_rhs, extra, L, U, x, t):
 def make_case(system, corruption, seed, noise=NOISE, out_root="datasets/corrupt", blind=False, t_end=None):
     """Generate one corrupted dataset; returns its directory. `t_end` shortens the record (tests only)."""
     t_start = time.time()
-    if system not in BASE_SYSTEMS or corruption not in CORRUPTIONS:
+    if system not in BASE_SYSTEMS or corruption not in CORRUPTIONS + EVENT_CORRUPTIONS:
         raise ValueError(f"unknown case {system}/{corruption}")
     sys = _blind_base(system, seed) if blind else SYSTEMS[system]
     fields, f0 = list(sys.fields), sys.fields[0]
@@ -179,7 +249,10 @@ def make_case(system, corruption, seed, noise=NOISE, out_root="datasets/corrupt"
         train_rhs = [gen] * N_TRAIN
     test_rhs = [gen if corruption in DYNAMIC else base] * N_TEST
 
-    U, r1 = _simulate(sys, train_rhs, scales, rng, t)
+    if corruption == "kick":
+        U, r1, kicks = _simulate_kicked(sys, base, rng, t, params, N_TRAIN)
+    else:
+        U, r1 = _simulate(sys, train_rhs, scales, rng, t)
     U_test, r2 = _simulate(sys, test_rhs, test_scales, rng, t)
     diagnostics = {"retries": r1 + r2, "max_abs_u_train": float(np.abs(U).max()),
                    "max_abs_u_test": float(np.abs(U_test).max())}
@@ -209,6 +282,10 @@ def make_case(system, corruption, seed, noise=NOISE, out_root="datasets/corrupt"
         nan_mask[:, 0] = False
         U_obs[nan_mask] = np.nan
         diagnostics["amplitude_threshold"] = float(thr)
+    if corruption == "glitch":
+        diagnostics["glitches"] = _add_glitches(U_obs, U, noise, rng, params)
+    if corruption == "kick":
+        diagnostics["kicks"] = kicks
     if nan_mask is not None:
         diagnostics["nan_fraction"] = float(nan_mask.mean() if nan_mask.ndim == 3 else nan_mask.mean())
         diagnostics["nan_fraction_per_traj"] = [float(m.mean()) for m in nan_mask]
@@ -234,6 +311,9 @@ def make_case(system, corruption, seed, noise=NOISE, out_root="datasets/corrupt"
             "base_system": system, "blind": bool(blind), "seed": seed, "noise": noise,
             "rhs_train": train_rhs, "rhs_test": test_rhs[0], "dynamics_corrupted": corruption in DYNAMIC + ("traj_coeffs",),
             "diagnostics": diagnostics, "wall_seconds": round(time.time() - t_start, 2)}
+    if corruption in EVENT_CORRUPTIONS:
+        corr["expected_handling"] = HANDLING[corruption]
+        corr["events"] = diagnostics["glitches" if corruption == "glitch" else "kicks"]
     (d / "hidden" / "corruption.json").write_text(json.dumps(corr, indent=2))
     return d
 
@@ -273,7 +353,8 @@ def make_suite(seeds, out_root="datasets/corrupt", blind=False, systems=BASE_SYS
     key = lambda r: (r["system"], r["corruption"], r["seed"], r["blind"])  # noqa: E731
     new_keys = {key(r) for r in rows}
     index = [r for r in old if key(r) not in new_keys] + rows
-    index.sort(key=lambda r: (r["split"], r["seed"], r["system"], CORRUPTIONS.index(r["corruption"])))
+    order = CORRUPTIONS + EVENT_CORRUPTIONS
+    index.sort(key=lambda r: (r["split"], r["seed"], r["system"], order.index(r["corruption"])))
     idx_path.parent.mkdir(parents=True, exist_ok=True)
     idx_path.write_text(json.dumps(index, indent=1))
     return [Path(r["path"]) for r in rows if "path" in r]
@@ -285,9 +366,14 @@ def main():
     p.add_argument("--blind", action="store_true", help="blinded variants (field renamed, base coefficients perturbed)")
     p.add_argument("--out", default="datasets/corrupt")
     p.add_argument("--systems", nargs="+", default=list(BASE_SYSTEMS), choices=BASE_SYSTEMS)
-    p.add_argument("--corruptions", nargs="+", default=list(CORRUPTIONS), choices=CORRUPTIONS)
+    p.add_argument("--corruptions", nargs="+", choices=CORRUPTIONS + EVENT_CORRUPTIONS)
+    p.add_argument("--events", action="store_true",
+                   help="glitch / kick suite (WS8) into datasets/corrupt_events unless --out is given")
     p.add_argument("--workers", type=int)
     a = p.parse_args()
+    if a.events and a.out == "datasets/corrupt":
+        a.out = "datasets/corrupt_events"
+    a.corruptions = a.corruptions or list(EVENT_CORRUPTIONS if a.events else CORRUPTIONS)
     t0 = time.time()
     paths = make_suite(a.seeds, a.out, a.blind, a.systems, a.corruptions, a.workers)
     index = json.loads((Path(a.out) / "index.json").read_text())

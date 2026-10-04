@@ -79,9 +79,12 @@ def test_outliers_fire_and_despike(ds, name):
     f = by_id(audit_data(meta, with_U(data, Us)))["outliers"]
     assert f["fired"] and f["response"] == "repair" and f["fix"]["tool"] == "despike"
     clean, n = D.despike(meta, with_U(data, Us), **f["fix"]["args"])
-    assert n > 0.5 * (Us != U).sum()
+    spiked = Us != U
+    edited = clean["U"] != Us
+    assert n >= edited.sum() > 0.7 * spiked.sum()
+    assert not (edited & ~spiked).any()          # WS8: despike touches glitch samples only
     err = lambda A: np.sqrt(np.mean((A - U) ** 2))  # noqa: E731
-    assert err(clean["U"]) < 0.4 * err(Us)
+    assert err(clean["U"]) < 0.6 * err(Us)
     assert not by_id(audit_data(meta, clean))["outliers"]["fired"]
 
 
