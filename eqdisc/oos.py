@@ -142,6 +142,7 @@ def spacetime_video(path, x, t, truth, models, lyap=None, title="", fps=15, nx=2
     matplotlib.use("Agg")
     import matplotlib.animation as anim
     import matplotlib.pyplot as plt
+    _video_style(plt)
     st = max(1, len(x) // nx)
     xs, U = x[::st], truth[:, ::st]
     T = (t - t[0]) * (lyap or 1.0)
@@ -151,42 +152,58 @@ def spacetime_video(path, x, t, truth, models, lyap=None, title="", fps=15, nx=2
     E = [(lab, np.abs(Y[:, ::st] - U)) for lab, Y in models]
     emax = float(np.percentile(np.concatenate([e.ravel() for _, e in E]), 99))
     le = np.linspace(0, emax, 21)
-    panels = [("truth (what really happened)", U, "field")] + [(lab, Y[:, ::st], "field") for lab, Y in models] + \
-             [(f"error of {lab}", e, "err") for lab, e in E]
-    fig, axes = plt.subplots(len(panels), 1, figsize=(11, 1.55 * len(panels) + 0.9), sharex=True)
-    sup = fig.suptitle(title, fontsize=11)
+    panels = [("Reality", U, "field")] + [(lab, Y[:, ::st], "field") for lab, Y in models] + \
+             [(f"Error:\n{lab.lower()}", e, "err") for lab, e in E]
+    names = ["Reality"] + [lab for lab, _ in models] + [lab for lab, _ in models]
+    n = len(panels)
+    fig = plt.figure(figsize=(13, 2.0 * n + 1.4), facecolor="white")
+    top, bot, h_gap = 0.90, 0.09, 0.025
+    h = (top - bot - h_gap * (n - 1)) / n
+    axes = [fig.add_axes([0.21, top - (i + 1) * h - i * h_gap, 0.69, h]) for i in range(n)]
+    fig.text(0.21, 0.955, title, fontsize=VIDEO_FS, ha="left", va="center")
     for ax, (lab, _, kind) in zip(axes, panels):
-        ax.set_ylabel("x", fontsize=8)
         ax.set_xlim(T[0], T[-1])
         ax.set_ylim(xs[0], xs[-1])
-        ax.tick_params(labelsize=7)
-    axes[-1].set_xlabel(tlab)
+        ax.set_yticks([])
+        ax.tick_params(labelsize=VIDEO_FS, labelbottom=False)
+        ax.text(-0.02, 0.5, lab, transform=ax.transAxes, ha="right", va="center", fontsize=VIDEO_FS)
+    axes[-1].tick_params(labelbottom=True)
+    axes[-1].set_xlabel("time  (Lyapunov times)" if lyap else "time", fontsize=VIDEO_FS)
     m1 = plt.cm.ScalarMappable(cmap="RdBu_r", norm=plt.Normalize(-vmax, vmax))
     m2 = plt.cm.ScalarMappable(cmap="magma", norm=plt.Normalize(0, emax))
-    fig.colorbar(m1, ax=axes[:1 + len(models)], fraction=0.015, pad=0.01, label="u")
-    fig.colorbar(m2, ax=axes[1 + len(models):], fraction=0.015, pad=0.01, label="|error|")
+    nf = 1 + len(models)
+    y_f0, y_f1 = axes[nf - 1].get_position().y0, axes[0].get_position().y1
+    y_e0, y_e1 = axes[-1].get_position().y0, axes[nf].get_position().y1
+    c1 = fig.colorbar(m1, cax=fig.add_axes([0.92, y_f0, 0.013, y_f1 - y_f0]))
+    c2 = fig.colorbar(m2, cax=fig.add_axes([0.92, y_e0, 0.013, y_e1 - y_e0]))
+    c1.set_label("value", fontsize=VIDEO_FS)
+    c2.set_label("error", fontsize=VIDEO_FS)
+    for c in (c1, c2):
+        c.ax.tick_params(labelsize=VIDEO_FS)
 
     def upd(i):
         k = max(i + 1, 2)
-        for ax, (lab, Z, kind) in zip(axes, panels):
+        for ax, (lab, Z, kind), name in zip(axes, panels, names):
             for c in list(ax.collections):
                 c.remove()
-            for ln in list(ax.lines):
+            for ln in list(ax.lines) + list(ax.texts[1:]):
                 ln.remove()
             if kind == "field":
                 ax.contourf(T[:k], xs, Z[:k].T, levels=lv, cmap="RdBu_r", extend="both")
             else:
                 ax.contourf(T[:k], xs, np.minimum(Z[:k], emax).T, levels=le, cmap="magma")
-            ax.axvline(T[k - 1], color="k", lw=0.8)
-            name = lab.replace("error of ", "")
+            ax.axvline(T[k - 1], color="k", lw=1.2)
             if valid and name in valid and valid[name] <= T[k - 1]:
-                ax.axvline(valid[name], color="w" if kind == "err" else "k", ls="--", lw=1.2)
-            ax.set_title(lab + (f"   (valid for {valid[name]:.1f} Lyapunov times)" if valid and name in valid
-                                and kind == "field" else ""), fontsize=8.5, loc="left")
+                ax.axvline(valid[name], color="w" if kind == "err" else "k", ls="--", lw=2)
+                if kind == "field":
+                    right = valid[name] > 0.5 * (T[0] + T[-1])
+                    ax.text(valid[name], 0.88, f"useful until here ({valid[name]:.1f}) " if right else
+                            f" useful until here ({valid[name]:.1f})", transform=ax.get_xaxis_transform(),
+                            fontsize=VIDEO_FS, va="top", ha="right" if right else "left",
+                            bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=2))
         return []
-    fig.tight_layout(rect=(0, 0, 0.93, 0.95))
     a = anim.FuncAnimation(fig, upd, frames=len(T), interval=1000 / fps)
-    a.save(path, writer=anim.FFMpegWriter(fps=fps, bitrate=3000))
+    a.save(path, writer=anim.FFMpegWriter(fps=fps, bitrate=3500))
     plt.close(fig)
 
 
@@ -487,11 +504,21 @@ def lageos_figures(out, tt, truth, preds, days, node, res):
 LAGEOS_COLORS = {"data-only agent": "#16a34a", "Kepler + J2": "tab:red", "Kepler": "tab:orange",
                  "neural step model (MLP)": "#7c3aed"}
 # plain-language names for the audience (legend) and short ones (running title)
-PLAIN = {"data-only agent": "eqdisc: equation found from the data", "neural step model (MLP)":
-         "neural network trained on the same data", "Kepler": "Newton's gravity, perfectly round Earth",
-         "Kepler + J2": "textbook model incl. Earth's bulge (reference)", "measured": "real satellite (measured)"}
-SHORT = {"data-only agent": "eqdisc", "neural step model (MLP)": "neural net", "Kepler": "round-Earth gravity",
+PLAIN = {"data-only agent": "Discovered law", "neural step model (MLP)": "Neural network", "Kepler": "Simple gravity",
+         "Kepler + J2": "Textbook law", "measured": "Reality"}
+SHORT = {"data-only agent": "eqdisc", "neural step model (MLP)": "neural net", "Kepler": "round Earth",
          "Kepler + J2": "textbook"}
+
+
+VIDEO_FS = 18          # one text size for every label, title, legend and tick in the videos
+
+
+def _video_style(plt):
+    """LaTeX look: bold Computer Modern for all text, one size everywhere."""
+    plt.rcParams.update({"font.family": "cmb10", "mathtext.fontset": "cm", "axes.unicode_minus": False,
+                         "font.size": VIDEO_FS, "axes.titlesize": VIDEO_FS, "axes.labelsize": VIDEO_FS,
+                         "xtick.labelsize": VIDEO_FS, "ytick.labelsize": VIDEO_FS, "legend.fontsize": VIDEO_FS,
+                         "axes.titleweight": "normal", "figure.titlesize": VIDEO_FS})
 
 
 def lageos_video(path, tt, truth, preds, days=3, colors=None, name="LAGEOS-1", title_where="Close-up"):
@@ -504,6 +531,7 @@ def lageos_video(path, tt, truth, preds, days=3, colors=None, name="LAGEOS-1", t
     matplotlib.use("Agg")
     import matplotlib.animation as anim
     import matplotlib.pyplot as plt
+    _video_style(plt)
     colors = {**LAGEOS_COLORS, **(colors or {})}
     hrs = tt * T_E / 3600
     dt_h = float(hrs[1] - hrs[0])
@@ -529,30 +557,39 @@ def lageos_video(path, tt, truth, preds, days=3, colors=None, name="LAGEOS-1", t
     tracks = {k: dense(P) for k, P in preds.items()}
     off = {k: np.stack([np.sum((P - T) * A_, 1), np.sum((P - T) * N_, 1)], 1) * RE_E / 1e3 for k, P in tracks.items()}
     lim = 1.15 * max(np.abs(o).max() for o in off.values())
-    fig = plt.figure(figsize=(13, 6.2))
-    ax = fig.add_subplot(1, 2, 1, projection="3d")
-    bx = fig.add_subplot(1, 2, 2)
+    fig = plt.figure(figsize=(15, 8.4), facecolor="white")
+    ax = fig.add_axes([0.0, 0.02, 0.36, 0.78], projection="3d")
+    bx = fig.add_axes([0.44, 0.10, 0.52, 0.76])
     u_, v_ = np.mgrid[0:2 * np.pi:40j, 0:np.pi:20j]
     ax.plot_surface(np.cos(u_) * np.sin(v_), np.sin(u_) * np.sin(v_), np.cos(v_), color="#3a6ea5", alpha=0.6, linewidth=0)
-    ax.set_box_aspect((1, 1, 1))
-    ax.set(xlim=(-1.5, 1.5), ylim=(-1.5, 1.5), zlim=(-1.5, 1.5))
+    rl = 1.05 * float(np.max(np.linalg.norm(T, axis=1)))       # fit the whole orbit
+    ax.set_box_aspect((1, 1, 1), zoom=1.15)
+    ax.set(xlim=(-rl, rl), ylim=(-rl, rl), zlim=(-rl, rl))
     ax.set_axis_off()
+    ax.set_title("The orbit", fontsize=VIDEO_FS, pad=0)
     lines, dots, olines, odots = {}, {}, {}, {}
-    lines["measured"], = ax.plot([], [], [], color="k", lw=2.5, label=PLAIN["measured"])
-    dots["measured"], = ax.plot([], [], [], "o", color="k", ms=6)
+    lines["measured"], = ax.plot([], [], [], color="k", lw=3)
+    dots["measured"], = ax.plot([], [], [], "o", color="k", ms=8)
     for k in tracks:
-        lines[k], = ax.plot([], [], [], color=colors.get(k), lw=1.4, label=PLAIN.get(k, k))
-        dots[k], = ax.plot([], [], [], "o", color=colors.get(k), ms=6)
-        olines[k], = bx.plot([], [], color=colors.get(k), lw=1.5, alpha=0.6)
-        odots[k], = bx.plot([], [], "o", color=colors.get(k), ms=9, label=PLAIN.get(k, k))
-    bx.plot([0], [0], "k+", ms=18, mew=2.5, label="the real satellite")
-    bx.set(xlim=(-lim, lim), ylim=(-lim, lim), xlabel="ahead (+) / behind (−) the real satellite along its orbit (km)",
-           ylabel="off the real orbit's plane (km)", title=f"{title_where}: where each forecast is, relative to the real satellite")
+        lines[k], = ax.plot([], [], [], color=colors.get(k), lw=2)
+        dots[k], = ax.plot([], [], [], "o", color=colors.get(k), ms=8)
+        olines[k], = bx.plot([], [], color=colors.get(k), lw=2, alpha=0.6)
+        odots[k], = bx.plot([], [], "o", color=colors.get(k), ms=13)
+    cross, = bx.plot([0], [0], "k+", ms=28, mew=3.5)
+    bx.set(xlim=(-lim, lim), ylim=(-lim, lim))
+    bx.set_xlabel("ahead / behind  (km)", fontsize=VIDEO_FS)
+    bx.set_ylabel("off the orbit plane  (km)", fontsize=VIDEO_FS)
+    bx.tick_params(labelsize=VIDEO_FS)
+    bx.set_title("Distance from reality", fontsize=VIDEO_FS, pad=12)
     bx.set_aspect("equal")
     bx.grid(alpha=0.3)
-    bx.legend(loc="upper left", fontsize=8)
-    ax.legend(loc="upper left", fontsize=8)
-    title = fig.suptitle("")
+    keys = list(tracks)
+    leg = bx.legend([cross] + [odots[k] for k in keys], ["Reality"] + [PLAIN.get(k, k) for k in keys],
+                    loc="upper left", fontsize=VIDEO_FS, framealpha=0.9, handlelength=1.2)
+    clock = fig.text(0.03, 0.965, "", fontsize=VIDEO_FS, ha="left", va="top")
+
+    def fmt(e):
+        return f"{e:,.0f} km" if e >= 10 else f"{e:.1f} km"
 
     def upd(f):
         g = sm * f
@@ -567,15 +604,14 @@ def lageos_video(path, tt, truth, preds, days=3, colors=None, name="LAGEOS-1", t
             seg = o[max(0, g - 6 * per * sm):g + 1]
             olines[k].set_data(seg[:, 0], seg[:, 1])
             odots[k].set_data([o[g, 0]], [o[g, 1]])
-        err = {k: np.linalg.norm(tracks[k][g] - T[g]) * RE_E / 1e3 for k in tracks}
-        title.set_text(f"{name}, {fine_t[f]:.1f} h into the unseen future · distance from the real satellite:  " +
-                       "   ".join(f"{SHORT.get(k, k)} {e:,.0f} km" if e >= 10 else f"{SHORT.get(k, k)} {e:.1f} km"
-                                  for k, e in err.items()))
+        for i, k in enumerate(keys, 1):
+            e = np.linalg.norm(tracks[k][g] - T[g]) * RE_E / 1e3
+            leg.get_texts()[i].set_text(f"{PLAIN.get(k, k)}:  {fmt(e)}")
+        clock.set_text(f"Forecast hour {fine_t[f]:.0f}")
         ax.view_init(elev=20, azim=30 + 0.25 * f * 6 / per)
         return list(lines.values()) + list(dots.values())
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
     a = anim.FuncAnimation(fig, upd, frames=len(fine_t), interval=40)
-    a.save(path, writer=anim.FFMpegWriter(fps=25, bitrate=3000))
+    a.save(path, writer=anim.FFMpegWriter(fps=25, bitrate=3500))
     plt.close(fig)
 
 
@@ -725,11 +761,12 @@ def gs_video(path, t, rows, title, field=1, fps=6, labels=None):
     matplotlib.use("Agg")
     import matplotlib.animation as anim
     import matplotlib.pyplot as plt
+    _video_style(plt)
     labels = labels or {}
     show = [r for r in rows if not r[0].startswith("true PDE")]
     U = show[0][1]
     nc = len(show)
-    fig, axes = plt.subplots(2, nc, figsize=(3.3 * nc, 7.0))
+    fig, axes = plt.subplots(2, nc, figsize=(3.6 * nc, 8.0), facecolor="white")
     vmin, vmax = float(np.nanmin(U[..., field])), float(np.nanmax(U[..., field]))
     emax = 0.6 * (vmax - vmin)
     le = np.linspace(0, emax, 16)
@@ -737,14 +774,15 @@ def gs_video(path, t, rows, title, field=1, fps=6, labels=None):
     for c, (lab, Y) in enumerate(show):
         ax = axes[0, c]
         ims.append(ax.imshow(Y[0, ..., field].T, origin="lower", cmap="magma", vmin=vmin, vmax=vmax))
-        ax.set_title(labels.get(lab, lab), fontsize=9)
+        ax.set_title(labels.get(lab, lab), fontsize=VIDEO_FS, pad=10)
         ax.set_axis_off()
         axes[1, c].set_axis_off()
-    axes[1, 0].text(0.5, 0.5, "this row: where each\nforecast is wrong\n|forecast − truth|\n(dark = right)",
-                    ha="center", va="center", fontsize=10, transform=axes[1, 0].transAxes)
+    axes[1, 0].text(0.5, 0.5, "Errors\n\ndark = right\nbright = wrong", ha="center", va="center", fontsize=VIDEO_FS, transform=axes[1, 0].transAxes, linespacing=1.4)
     sm_ = plt.cm.ScalarMappable(cmap="inferno", norm=plt.Normalize(0, emax))
-    fig.colorbar(sm_, cax=fig.add_axes([0.915, 0.05, 0.012, 0.36]), label="|error|")
-    sup = fig.suptitle(f"{title}\nstep 0", fontsize=11)
+    cb = fig.colorbar(sm_, cax=fig.add_axes([0.915, 0.05, 0.012, 0.36]))
+    cb.set_label("error", fontsize=VIDEO_FS)
+    cb.ax.tick_params(labelsize=VIDEO_FS)
+    sup = fig.suptitle(title, fontsize=VIDEO_FS, x=0.02, ha="left")
 
     def upd(i):
         for im, (_, Y) in zip(ims, show):
@@ -756,8 +794,8 @@ def gs_video(path, t, rows, title, field=1, fps=6, labels=None):
             e = np.abs(np.nan_to_num(Y[i, ..., field], nan=vmax) - U[i, ..., field])
             ax.contourf(np.minimum(e, emax).T, levels=le, cmap="inferno", origin="lower")
             ax.set_aspect("equal")
-            ax.set_title(f"error: {labels.get(lab, lab)}", fontsize=8.5)
-        sup.set_text(f"{title}\nstep {i} (Δt = 10 per step) after the noisy first frame")
+            ax.set_title("")
+        sup.set_text(f"{title},  step {i}")
         return ims
     fig.subplots_adjust(left=0.02, right=0.9, top=0.86, bottom=0.03, wspace=0.12, hspace=0.18)
     a = anim.FuncAnimation(fig, upd, frames=len(t), interval=1000 / fps)

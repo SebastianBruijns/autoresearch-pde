@@ -346,31 +346,31 @@
   },
   "experiments": [
    {
-    "description": "new track further out (1.6\u00d7 radius), tilt 0\u00b0",
+    "description": "A wider orbit (1.6\u00d7 further out)",
     "score": 2.393150441038081,
     "informs_coefficients": [
      {
-      "coefficient": "agent's law vs the same law + inverse-square pull",
+      "coefficient": "which law is right (current, or with an added 1/r\u00b2 pull)",
       "info_gain_vs_existing": 2.393150441038081
      }
     ]
    },
    {
-    "description": "new track further out (1.6\u00d7 radius), tilt 45\u00b0",
+    "description": "A new track further out (1.6\u00d7 radius), tilt 45\u00b0",
     "score": 2.3615977780860717,
     "informs_coefficients": [
      {
-      "coefficient": "agent's law vs the same law + inverse-square pull",
+      "coefficient": "which law is right (current, or with an added 1/r\u00b2 pull)",
       "info_gain_vs_existing": 2.3615977780860717
      }
     ]
    },
    {
-    "description": "new track further out (1.6\u00d7 radius), tilt 90\u00b0",
+    "description": "A new track further out (1.6\u00d7 radius), tilt 90\u00b0",
     "score": 2.195635114559971,
     "informs_coefficients": [
      {
-      "coefficient": "agent's law vs the same law + inverse-square pull",
+      "coefficient": "which law is right (current, or with an added 1/r\u00b2 pull)",
       "info_gain_vs_existing": 2.195635114559971
      }
     ]

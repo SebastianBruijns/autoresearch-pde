@@ -81,18 +81,27 @@ res["verdict"], res["final_model"], res["assessment"]["experiments"]["ranked"][:
 
 ---
 
-## Demo app
-```bash
-pip install -e ".[demo]"
-streamlit run demo/app.py                 # Showcase gallery + "Run on your data" (upload a CSV)
-EQDISC_DEMO_FAKE=1 streamlit run demo/app.py   # rehearsal mode: live tab replays results, no API calls
-```
-The demo has three out-of-sample cases. In each, the agent gets **data only**: no system name, no description, neutral variable names and no domain guidance.
-- **LAGEOS-1** (real satellite, random units): the agent infers Kepler + J₂ from the numbers. 30-day forecast error 12 km, against 3,170 km for a neural net and 9,037 km for Kepler.
-- **Blinded chaotic KS**: the forecast is valid for 4.5 Lyapunov times, against 0.8 for an FNO; the true PDE gives 4.5.
-- **Gray–Scott** (The Well, 5% noise): VRMSE 0.07, against 0.45 for an FNO trained on the same data.
+## Demo app ("Equation Discovery AutoScientist")
+A web app with four worked examples and an upload page. Everything it needs is in the repo (`demo/showcase/`), so it
+runs straight after cloning; it needs no API key unless you run discovery on your own data.
 
-See `demo/README.md` for the talk track.
+```bash
+git clone https://github.com/danieldeh/autoresearch-pde && cd autoresearch-pde
+pip install -e ".[demo]"
+streamlit run demo/app.py
+```
+Then open http://localhost:8501. Tabs:
+- **Satellite** (real LAGEOS-1 data), **Big Bulge Orbit** (an honest failure the system flags itself),
+  **Blind Chaos (KS)**, **Reaction-Diffusion (Chemistry)**: each shows the forecast video, the verdict, the law found,
+  where to measure next, and (🔒) how it compared with the hidden truth.
+- **Your Data**: upload a CSV (or pick an example), optionally describe it, press *Discover*. This calls Claude with
+  your own key (`ANTHROPIC_API_KEY`, or `ant auth login`); a run takes a few minutes and about $0.5-3.
+
+No key, or rehearsing a talk? Start in rehearsal mode, where *Your Data* replays a saved run at no cost:
+```bash
+EQDISC_DEMO_FAKE=1 streamlit run demo/app.py
+```
+The page font loads from the web; offline it falls back to a standard serif. See `demo/README.md` for details.
 
 ## Static laws y = f(x) (symbolic regression mode)
 `eqdisc.sr.solve(task)` runs parallel Claude sessions with these tools:
