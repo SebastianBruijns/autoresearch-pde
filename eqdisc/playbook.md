@@ -39,6 +39,11 @@
    PySR on the residual (subtract_expr = the SINDy part).
 6. Use `fit_skeleton` whenever you have a structural hypothesis with unknown constants
    (rational terms, constants inside nonlinearities, shared parameters across equations).
+   COARSE SAMPLING (diagnose: mean_change_per_step_rel > 0.15, or stiff terms such as u_xxxx with a large dt):
+   derivative fits and the weak form both read the dynamics off the samples and give biased coefficients and
+   misleading deriv_nrmse. Use them only to find candidate terms, then fit with `fit_trajectories` (forward
+   simulation between frames) and compare models by its held-out one-step error (also reported by `validate`).
+   `fit_trajectories` is also the best final polish for coefficients of any structure you trust.
 7. Before submitting: check robustness with `ensemble_sindy` (terms with low inclusion are noise fits), and rank the
    competing candidates with `compare_models`. If the remaining error is AT the noise floor, stop adding terms. Use
    `plot_model` to look at the residual: structured residuals mean a missing term, white residuals mean you are done.

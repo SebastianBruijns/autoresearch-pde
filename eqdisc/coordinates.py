@@ -3,6 +3,7 @@
     find_invariants(meta, data, ...)   sparse search for H(state) with dH/dt ~ 0
                                        (ODE: functions of the state; PDE: spatial integrals)
     make_coords(meta, forward, inverse) define z = phi(x, t) with reconstruction x = psi(z, t)
+                                       (PDE: pointwise field transforms z = phi(u), see eqdisc.pde_coords)
     transform_data(meta, data, coords)  data + meta expressed in z
     map_back(rhs_z, coords)             z-dynamics g(z) -> x-dynamics  dx/dt = Dpsi(z) g(z) + dpsi/dt, z = phi(x)
 
@@ -224,8 +225,9 @@ def find_invariants(meta, data, poly_degree=2, include_log=False, custom_terms=(
 def make_coords(meta, forward, inverse=None, name="z"):
     """forward: {z: expr(x, t)}; inverse: {x: expr(z, t)} for EVERY original variable.
     If inverse is omitted and dim(z) == dim(x), sympy tries to solve for it."""
-    if meta["kind"] != "ode":
-        raise ValueError("coordinate transforms are implemented for ODE data only")
+    if meta["kind"] != "ode":                   # PDE: pointwise field transforms (eqdisc.pde_coords)
+        from . import pde_coords
+        return pde_coords.make_coords(meta, forward, inverse, name)
     xs, zs = list(meta["variables"]), list(forward)
     if set(xs) & set(zs) and any(forward[z] != z for z in set(xs) & set(zs)):
         raise ValueError("new variable names that clash with old ones must map to themselves (e.g. {'S': 'S'})")
@@ -259,6 +261,9 @@ def _lam(names, exprs):
 
 
 def transform_data(meta, data, coords):
+    if coords.get("kind") == "pde":
+        from . import pde_coords
+        return pde_coords.transform_data(meta, data, coords)
     xs, zs = coords["x"], coords["z"]
     U, t = data["U"], data["t"]
     T = np.broadcast_to(t, U.shape[:-1])
@@ -301,6 +306,9 @@ def _tidy(e):
 
 def map_back(rhs_z, coords):
     """dx/dt = sum_j dpsi/dz_j * g_j(z) + dpsi/dt, then z -> phi(x)."""
+    if coords.get("kind") == "pde":
+        from . import pde_coords
+        return pde_coords.map_back(rhs_z, coords)
     xs, zs = coords["x"], coords["z"]
     zn = zs + ["t"]
     g = {z: parse(rhs_z.get(z, "0"), zn) for z in zs}

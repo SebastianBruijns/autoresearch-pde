@@ -6,9 +6,11 @@ The agent's code runs in a fresh subprocess with a timeout. Pre-loaded names:
     tb, co            eqdisc.toolbox, eqdisc.coordinates
     WORK              pathlib.Path of the session workspace (save files / figures here)
 Figures saved as PNG in WORK during the call are returned to the agent as images.
-Only the public arrays are passed in. After the prelude, an audit hook denies the agent's code any file access inside
-the repository (datasets, hidden truth, run outputs, other sessions) except its own workspace and the eqdisc package
-source, and denies spawning processes; the script runs from a temporary directory.
+Two layers keep the hidden test set out of reach. (1) Where bubblewrap is installed (Linux), the code runs in a
+sandbox (eqdisc.sandbox) with no network, in which only the eqdisc package, the inputs and the workspace exist.
+(2) Always, after the prelude, an audit hook denies any file access inside the repository (datasets, hidden truth,
+run outputs, other sessions) except the workspace and the eqdisc package source, and denies spawning processes; the
+script runs from a temporary directory.
 """
 import json
 import pickle
@@ -17,6 +19,8 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+
+from . import sandbox
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -56,7 +60,7 @@ del _guard
 """
 
 
-def run_code(code, meta, data, workdir, timeout=60, max_output=6000):
+def run_code(code, meta, data, workdir, timeout=150, max_output=6000):
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
     before = {p: p.stat().st_mtime for p in workdir.glob("*")}
@@ -66,9 +70,14 @@ def run_code(code, meta, data, workdir, timeout=60, max_output=6000):
         (tmp / "in.pkl").write_bytes(pickle.dumps((meta, data)))
         (tmp / "script.py").write_text(PRELUDE % (str(ROOT), str(ROOT), str(ROOT / "eqdisc")) + "\n" + code)
         t0 = time.time()
+        if sandbox.available():      # only the eqdisc package, the inputs and the workspace are visible
+            argv, env = sandbox.wrap([sys.executable, "/in/script.py", "/in/in.pkl", sandbox.WORK], workdir,
+                                     ro=[ROOT / "eqdisc"], binds={"/in": tmp})
+        else:
+            argv, env = sandbox.wrap([sys.executable, str(tmp / "script.py"), str(tmp / "in.pkl"), str(workdir)], workdir)
         try:
-            p = subprocess.run([sys.executable, str(tmp / "script.py"), str(tmp / "in.pkl"), str(workdir)],
-                               cwd=tmp, capture_output=True, text=True, timeout=timeout)
+            p = subprocess.run(argv, cwd=workdir if sandbox.available() else tmp, env=env, capture_output=True,
+                               text=True, timeout=timeout)
             out, err, rc = p.stdout, p.stderr, p.returncode
         except subprocess.TimeoutExpired as e:
             out, err, rc = (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or ""), \

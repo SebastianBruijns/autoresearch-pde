@@ -90,6 +90,16 @@ TOOLS = [
                              "description": "'rollout' re-scores the whole Pareto front by validation (recommended)"},
          "parsimony": {**_bool, "description": "default true: forbid singular junk like exp(x)/cos(x)"}},
          ["target"])},
+    {"name": "fit_trajectories", "description": "Fit parameters p0, p1, ... of a structure by FORWARD SIMULATION: "
+     "simulate the model from many data frames for `horizon` sampling steps and match the next frames (no derivative "
+     "estimates). Use it whenever the sampling is coarse (diagnose: mean_change_per_step_rel > 0.15) or stiff terms "
+     "(u_xxxx) make derivative fits unreliable, and to polish coefficients of any structure you trust. Periodic PDEs "
+     "(exact exponential treatment of the stiff linear part; only modes above the noise floor are compared) and ODEs. "
+     "Same rhs_with_params format as fit_skeleton; init defaults to fit_skeleton's estimate. Reports the held-out "
+     "one-step error relative to 'no change' (0 perfect, 1 useless) and an integrator check.",
+     "input_schema": _obj({"rhs_with_params": _rhs, "init": {"type": "array", "items": _num},
+                           "horizon": {**_int, "description": "sampling steps per simulation (default: 1 for PDEs, auto for ODEs)"}},
+                          ["rhs_with_params"])},
     {"name": "fit_skeleton", "description": "Fit numeric parameters p0, p1, ... in a proposed structure by "
      "least squares on smoothed derivatives (multi-start). Parameters can be shared across equations. "
      "Example: {'s': 'p0 - p1*s/(p2 + s)'}. Give every variable an equation.",
@@ -101,13 +111,15 @@ TOOLS = [
      "as identities, and a PCA dimension estimate. include_log adds log of positive variables; custom_terms "
      "adds e.g. 'cos(theta)'.",
      "input_schema": _obj({"poly_degree": _int, "include_log": _bool, "custom_terms": _strs, "tol": _num})},
-    {"name": "transform", "description": "ODE only. Define new coordinates z = phi(x, t) and make them ACTIVE: all "
+    {"name": "transform", "description": "Define new coordinates z = phi(x, t) and make them ACTIVE: all "
      "fitting tools then work in z, and results include rhs_original/validation_original (mapped back exactly "
      "by the chain rule). inverse must give EVERY original variable in terms of z (and t); this allows dimension "
      "reduction, e.g. forward {S:'S', I:'I'}, inverse {S:'S', I:'I', R:'1 - S - I'}. If dim(z)==dim(x) the inverse "
      "can be omitted and is solved symbolically. Examples: polar {r:'sqrt(x**2+y**2)', theta:'atan2(y,x)'}; "
      "log coordinates for positive multiplicative dynamics; energy-angle; rescaling/nondimensionalising; "
-     "rotating frames. Angles are unwrapped in time.",
+     "rotating frames. Angles are unwrapped in time. PDE data: pointwise field transforms z = phi(u) of the field "
+     "values only (same number of fields; spatial derivatives follow by the chain rule), e.g. {s:'log(u)', v:'v'} for "
+     "a positive field observed through exp or with multiplicative noise; derivatives are then s_x, s_xx, ...",
      "input_schema": _obj({"name": _str, "forward": _rhs, "inverse": _rhs}, ["name", "forward"])},
     {"name": "set_coordinates", "description": "Switch the active coordinate system ('original' or a name "
      "defined with transform).", "input_schema": _obj({"name": _str}, ["name"])},
@@ -121,7 +133,7 @@ TOOLS = [
     {"name": "run_python", "description": "Run your own Python analysis code (exploratory analysis, custom "
      "plots, quick checks). Preloaded: meta, data (public data in the ACTIVE coordinates), np, sp, plt, tb (toolbox), "
      "co (coordinates), WORK (folder for files). print() what you need. PNG files you save in WORK are shown to you. "
-     "60 s limit. Use the dedicated tools for actual model fitting.",
+     "600 s limit. Use the dedicated tools for actual model fitting.",
      "input_schema": _obj({"code": _str}, ["code"])},
     {"name": "plot_data", "description": "Overview figure of the data in the active coordinates (time series and phase "
      "portrait / space-time plot and spectrum). Returned as an image.", "input_schema": _obj({})},
@@ -264,12 +276,22 @@ class Session:
         self.data["t"] = self.data["t"][:nt]
         return {"ok": True, "n_traj_now": int(self.data["U"].shape[0]), "nt": int(nt)}
 
+    def validate_original(self, rhs_original, rhs_active=None):
+        """Validation of a model that was mapped back from the active coordinates. For a PDE field transform the
+        map is a pointwise bijection, so the dynamics are the same; validating in the transformed fields avoids
+        derivatives of e.g. exp-observed noisy fields, which make the original-field check meaningless."""
+        m, d, c = self.view()
+        if c is not None and c.get("kind") == "pde" and rhs_active is not None:
+            return {**tb.validate(m, d, rhs_active),
+                    "basis": f"transformed fields ({self.active}); equivalent dynamics by a pointwise bijection"}
+        return tb.validate(self.meta, self.data, rhs_original)
+
     def _augment(self, out):
         _, _, c = self.view()
         if c is not None and isinstance(out, dict) and "rhs" in out:
             out["coordinates"] = self.active
             out["rhs_original"] = co.map_back(out["rhs"], c)
-            out["validation_original"] = tb.validate(self.meta, self.data, out["rhs_original"])
+            out["validation_original"] = self.validate_original(out["rhs_original"], out["rhs"])
         return out
 
     # -- the lab: only used to *generate new observations*, never exposed directly
@@ -389,12 +411,25 @@ class Session:
             return self._augment(repair.local_search(m, d, args["rhs"], args.get("pool")))
         if name == "fit_skeleton":
             return self._augment(tb.fit_skeleton(m, d, **args))
+        if name == "fit_trajectories":
+            from .trajfit import fit_trajectories
+            return self._augment(fit_trajectories(m, d, **args))
         if name == "validate":
             rhs, mapped = self.to_original(args["rhs"])
             if mapped:
-                return {"active_coordinates": tb.validate(m, d, args["rhs"]), "rhs_original": rhs,
-                        "validation_original": tb.validate(self.meta, self.data, rhs)}
-            return tb.validate(self.meta, self.data, rhs)
+                out = {"active_coordinates": tb.validate(m, d, args["rhs"]), "rhs_original": rhs,
+                       "validation_original": self.validate_original(rhs, args["rhs"])}
+            else:
+                out = tb.validate(self.meta, self.data, rhs)
+            from . import trajfit
+            if trajfit.coarse_sampling(m, d):     # derivative errors mislead on coarse data: add the simulation check
+                try:
+                    out["one_step_rel_err_heldout"] = round(trajfit.one_step_error(m, d, args["rhs"]), 4)
+                    out["note"] = ("coarse sampling: judge by one_step_rel_err_heldout (simulated next frame vs data; "
+                                   "0 perfect, 1 = no better than 'no change'), not deriv_nrmse")
+                except Exception as e:  # noqa: BLE001
+                    out["one_step_error_failed"] = str(e)[:200]
+            return out
         if name == "request_experiment":
             return self.request_experiment(**args)
         if name == "submit":
@@ -567,8 +602,6 @@ def run_agent(dataset, playbook=None, model="claude-opus-5-5", effort="high", ma
     tools = TOOLS if (experiments > 0 and sess.truth is not None) else [t for t in TOOLS if t["name"] != "request_experiment"]
     if human is None:
         tools = [t for t in tools if t["name"] != "ask_human"]
-    if sess.meta["kind"] != "ode":
-        tools = [t for t in tools if t["name"] not in ("transform", "set_coordinates")]
     # the dataset name can reveal the system (e.g. blind_strogatz_glider_...), which would defeat blinding
     meta_public = {k: v for k, v in sess.meta.items() if k not in ("system", "name")}
     intro = f"Dataset metadata:\n{json.dumps(meta_public, indent=2)}\n"

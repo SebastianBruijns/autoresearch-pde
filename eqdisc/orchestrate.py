@@ -22,6 +22,7 @@ from .assess import assess, brief_markdown
 from .evaluate import evaluate, load
 from .insights import extract_insights, narrate, verdict
 from .intuition import intuit
+from .solvers import parse as parse_expr
 
 STRATEGIES = {
     "structure-first": ("Strategy for this branch: STRUCTURE FIRST. Before any wide regression, establish structure: "
@@ -74,10 +75,40 @@ def tournament(meta, data, candidates):
     if len(cands) < 2:
         k = next(iter(cands), None)
         return {"winner": k, "verdict": "single candidate", "ranking": [k] if k else []}
+    from . import trajfit
+    if trajfit.coarse_sampling(meta, data):
+        return _tournament_by_simulation(meta, data, cands)
     cmp = uq.compare_models(meta, data, cands)
     return {"winner": cmp["preferred"], "verdict": cmp["verdict"], "ranking": cmp["ranking"],
             "details": {k: {kk: cmp["candidates"][k].get(kk) for kk in ("n_terms", "cv_deriv_nrmse", "rollout_valid_frac_mean",
                                                                        "dbic", "z_vs_best")} for k in cmp["candidates"]}}
+
+
+def _tournament_by_simulation(meta, data, cands, rel_tol=0.05):
+    """Coarse sampling: derivative-based CV errors mislead, so rank by held-out one-step simulation error; among
+    models within rel_tol of the best, prefer the fewest terms."""
+    from . import repair, toolbox as tb, trajfit
+    names = tb.symbols(meta)
+    errs, nterms = {}, {}
+    for k, rhs in cands.items():
+        try:
+            errs[k] = trajfit.one_step_error(meta, data, rhs)
+            nterms[k] = sum(len(repair._terms(parse_expr(e, names))) for e in rhs.values())
+        except Exception:  # noqa: BLE001
+            errs[k], nterms[k] = float("inf"), 0
+    if not any(e < float("inf") for e in errs.values()):     # nothing could be simulated: use the standard comparison
+        cmp = uq.compare_models(meta, data, cands)
+        return {"winner": cmp["preferred"], "verdict": "Coarse sampling, but no candidate could be simulated one step; "
+                "fell back to the standard comparison. " + cmp["verdict"], "ranking": cmp["ranking"]}
+    ranking = sorted(errs, key=errs.get)
+    best = errs[ranking[0]]
+    close = [k for k in ranking if errs[k] <= best * (1 + rel_tol) + 1e-3]
+    winner = min(close, key=lambda k: (nterms[k], errs[k]))
+    verdict = (f"Coarse sampling: ranked by held-out one-step simulation error (1 = no better than 'no change'). "
+               f"Best: {ranking[0]} ({best:.3f}). " + (f"Within {rel_tol:.0%}: {close}; fewest terms: {winner}."
+                                                       if len(close) > 1 else f"Winner: {winner}."))
+    return {"winner": winner, "verdict": verdict, "ranking": ranking,
+            "details": {k: {"n_terms": nterms[k], "one_step_rel_err_heldout": round(errs[k], 4)} for k in ranking}}
 
 
 def discover(path, n_branches=3, adversary=True, human=None, context=None, model="claude-opus-5-5", effort="high",

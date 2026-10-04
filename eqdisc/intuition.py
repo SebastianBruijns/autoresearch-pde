@@ -234,8 +234,29 @@ def _ode(meta, data, out):
 
 
 # ============================================================================ PDE
+def _pde_positivity(meta, data, out):
+    """A positive field spanning decades is often observed through exp (or has multiplicative noise): suggest a
+    pointwise log transform, which keeps the other fields as they are."""
+    U, names = data["U"], meta["variables"]
+    for i, v in enumerate(names):
+        f = U[..., i]
+        lo, hi, med = float(f.min()), float(f.max()), float(np.median(f))
+        if lo <= 0:
+            continue
+        dec = np.log10(hi / max(lo, 1e-12))
+        out["facts"][f"{v}_positive_decades"] = _r(dec)
+        if dec > 1.5 or hi / max(med, 1e-12) > 5:
+            fwd = {(f"l{v}" if w == v else w): (f"log({v})" if w == v else w) for w in names}
+            out["hypotheses"].append({
+                "hypothesis": f"field {v} is positive and spans {dec:.1f} decades (max/median {hi / med:.1f}): it may be "
+                              f"observed through exp or have multiplicative noise; try log({v}) coordinates, where the law "
+                              "can be polynomial even if it is not in the observed field",
+                "confidence": "medium", "try": {"tool": "transform", "args": {"name": f"log_{v}", "forward": fwd}}})
+
+
 def _pde(meta, data, out):
     U, t, dt = data["U"], data["t"], meta["dt"]
+    _pde_positivity(meta, data, out)
     if U.ndim != 4 or meta.get("boundary", "periodic") != "periodic":
         out["facts"]["note"] = "dispersion analysis implemented for 1-D periodic data"
         return
