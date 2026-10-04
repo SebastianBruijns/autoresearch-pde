@@ -4,6 +4,7 @@
 """
 import base64
 import html
+import os
 import json
 import sys
 from pathlib import Path
@@ -283,7 +284,7 @@ def build_discovery_report(out_dir, res, meta, data):
     rows = ""
     for k, b in res["branches"].items():
         sv = b.get("self_validation") or {}
-        link = f"<a href='{html.escape(str(Path(b['report']).relative_to(out_dir)))}'>report</a>" if b.get("report") else ""
+        link = f"<a href='{html.escape(os.path.relpath(b['report'], out_dir))}'>report</a>" if b.get("report") else ""
         rows += (f"<tr><td>{html.escape(k)}{' 🏆' if k == res['winner_branch'] else ''}</td><td><code>{html.escape(json.dumps(b.get('model'))[:260])}</code></td>"
                  f"<td>{_fmt(sv.get('rollout_valid_time', ''))}</td><td>{_fmt(b.get('cost_usd'))}</td><td>{link}</td></tr>")
     P.append("<h2>Parallel branches</h2><table><tr><th>strategy</th><th>model</th><th>valid time</th><th>$</th><th></th></tr>" + rows + "</table>")
