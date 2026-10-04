@@ -27,6 +27,7 @@ st.set_page_config(page_title="Equation Discovery AutoScientist", page_icon=":ma
 import live  # noqa: E402
 import ui  # noqa: E402
 import viz  # noqa: E402
+import yourdata  # noqa: E402
 
 SHOW = DEMO / "showcase"
 ui.inject_css()
@@ -1090,13 +1091,25 @@ def _slim(a, verdict=None):
             "data_advice": a.get("data_advice"), "model_ambiguity": a.get("model_ambiguity")}
 
 
+def _meaning_expander(res):
+    m = res.get("meaning")
+    if m and m.get("bullets"):
+        with st.expander("🔭 What the equation means"):
+            st.markdown(yourdata.meaning_md(m))
+            st.caption(yourdata.meaning_note(m))
+
+
 def _yourdata_result(job):
     res = job.result
+    if getattr(job, "saved_at", None):
+        st.caption(f"Saved result from {job.saved_at} · {job.run_dir}")
     if getattr(job, "prompt", ""):
         st.caption(f"Prompt used: “{job.prompt}”")
     else:
         st.caption("Blind run: no prompt, data only.")
     uq = _slim(res.get("assessment"), res.get("verdict"))
+    fc = res.get("forecast") or {}
+    video = fc.get("video") if fc.get("video") and Path(fc["video"]).exists() else None
     if res["kind"] == "dynamics":
         kind, png = "ode", None
         if res.get("dataset_path") and res.get("final_model"):
@@ -1104,15 +1117,39 @@ def _yourdata_result(job):
                                       str(Path(job.run_dir) / "demo_figs" / "model.png"))
         left, right = st.columns([1.35, 1], gap="large")
         with left:
-            ui.fig_title("Model vs your data")
-            if png:
-                st.image(png, width="stretch")
+            if video:
+                ui.fig_title("Forecast vs reality", locked=True)
+                if yourdata.blew_up_early(fc):
+                    st.error("The law it found breaks down right at the start of the forecast: its values become "
+                             "infinite or invalid, so there is no forecast to show, only reality. Treat this law as "
+                             "unusable for prediction.")
+                st.video(video, loop=True, autoplay=True, muted=True)
+            else:
+                ui.fig_title("Model vs your data")
+                if png:
+                    st.image(png, width="stretch")
+                if fc.get("skipped") or fc.get("error"):
+                    st.caption(f"No forecast video: {fc.get('skipped') or fc.get('error')}")
         with right:
             ui.fig_title("The verdict")
             ui.verdict_box(uq)
             ui.fig_title("The law it found")
             ui.equations(ui.rhs_latex(res.get("final_model") or {}, pde=kind == "pde"), small=True)
             ui.next_box(uq)
+        if fc.get("npz"):
+            st.caption(yourdata.caption(fc))
+            c1, c2, c3 = st.columns(3, gap="large")
+            with c1:
+                ui.fig_title("What the agents saw")
+                show(_bigfont(yourdata.training_fig(fc["npz"]), 430), "yd_train")
+            with c2:
+                ui.fig_title("Forecast error", locked=True)
+                show(_bigfont(yourdata.error_fig(fc["npz"]), 430), "yd_err")
+            with c3:
+                ui.fig_title("How precisely known")
+                f = ui.precision_fig(uq)
+                if f:
+                    show(_bigfont(f), "yd_prec_row")
         story = res.get("story") or {}
         with st.expander("How it got there", icon=":material/psychology:"):
             tool_chips([e["name"] for e in job.events if e.get("type") == "tool"], title="tools it used")
@@ -1120,6 +1157,10 @@ def _yourdata_result(job):
                 st.markdown(story["headline"])
             for s_ in story.get("key_steps") or []:
                 st.markdown(f"- **{s_.get('observation', s_.get('decision', ''))}** → {s_.get('decision', s_.get('outcome', ''))}")
+        _meaning_expander(res)
+        if video and png:
+            with st.expander("🔍 Fit to the data the agents saw"):
+                st.image(png, width="stretch")
     else:
         from eqdisc.sr import evaluate_expr
         names, target, expr = res["names"], res["target"], res.get("expr")
@@ -1143,15 +1184,18 @@ def _yourdata_result(job):
             tool_chips([e["name"] for e in job.events if e.get("type") == "tool"], title="tools it used")
             if (res.get("verdict") or {}).get("recommendation"):
                 st.markdown(res["verdict"]["recommendation"])
+        _meaning_expander(res)
     with st.expander("The checks behind the verdict", icon=":material/fact_check:"):
         st.markdown(ui.checks_md(uq) or "No checks available.")
-        f = ui.precision_fig(uq)
+        f = None if fc.get("npz") else ui.precision_fig(uq)       # already shown in the figure row
         if f:
             show(_bigfont(f), "yd_prec")
     with st.expander("Downloads", icon=":material/download:"):
         rp = Path(res["report"]) if res.get("report") else None
         if rp and rp.exists():
             st.download_button("Full report (HTML)", rp.read_bytes(), rp.name, "text/html")
+        if video:
+            st.download_button("Forecast video (MP4)", Path(video).read_bytes(), "forecast.mp4", "video/mp4")
         st.download_button("Result (JSON)", json.dumps(res, default=str, indent=1), "result.json")
         if res.get("rehearsal_note"):
             st.caption(res["rehearsal_note"])
@@ -1165,13 +1209,34 @@ def v3_yourdata():
     c1, c2 = st.columns([1.35, 1], gap="large")
     with c1:
         ui.fig_title("Data")
-        src = st.radio("Data", ["Upload a CSV"] + list(EXAMPLES), horizontal=True, disabled=running, key="src",
-                       label_visibility="collapsed")
-        df, fname = None, None
-        if src == "Upload a CSV":
-            up = st.file_uploader("A time column plus one column per variable, or one row per measurement",
-                                  type=["csv", "tsv", "txt"], disabled=running)
-            if up is not None:
+        src = st.radio("Data", ["Upload a CSV"] + list(EXAMPLES) + ["Saved results"], horizontal=True,
+                       disabled=running, key="src", label_visibility="collapsed")
+        df, fname, npz = None, None, None
+        if src == "Saved results":
+            saved = yourdata.list_saved(live.RUNS)
+            if not saved:
+                st.info("No saved results yet. Every finished run is saved automatically and shows up here.")
+            else:
+                pick = st.selectbox("Saved results (newest first)", [lab for lab, _ in saved], disabled=running)
+                if st.button("Open", disabled=running):
+                    st.session_state.job = yourdata.SavedJob(dict(saved)[pick])
+                st.caption(f"Saved in {live.RUNS}: one folder per run, with the result, forecast video and report.")
+        elif src == "Upload a CSV":
+            up = st.file_uploader("CSV: a time column plus one column per variable, or one row per measurement. "
+                                  "Or .npz: time and variable/field arrays",
+                                  type=["csv", "tsv", "txt", "npz"], disabled=running)
+            if up is not None and up.name.lower().endswith(".npz"):
+                npz, fname = yourdata.read_npz(up.getvalue(), up.name, live.RUNS), Path(up.name).stem
+                if npz.get("error"):
+                    st.error(npz["error"])
+                    npz = None
+                else:
+                    df = npz["df"]
+                    if npz.get("warning"):
+                        st.warning(npz["warning"])
+                    st.caption(f".npz read as {'a time series' if npz['kind'] == 'ode' else 'a field over space'}: "
+                               f"{', '.join(npz['variables'])}, shape {tuple(npz['shape'])}. {npz['summary']}"[:400])
+            elif up is not None:
                 df, fname = pd.read_csv(up, sep=None, engine="python"), Path(up.name).stem
         else:
             path, _ = EXAMPLES[src]
@@ -1179,6 +1244,7 @@ def v3_yourdata():
                 df, fname = pd.read_csv(path), path.stem
         if df is not None:
             st.dataframe(df.head(6), hide_index=True, width="stretch")
+        field = npz is not None and df is None          # .npz field over space: goes to discovery as the file itself
         ui.fig_title("Tell it about your data")
         prompt = st.text_area(
             "Prompt", key=f"prompt_{src}", height=130, disabled=running, label_visibility="collapsed",
@@ -1192,28 +1258,45 @@ def v3_yourdata():
         mode = st.segmented_control("Kind of law", ["Auto", "Dynamics", "Static y = f(x)"], default="Auto",
                                     disabled=running, key="mode") or "Auto"
         resolved = mode
-        if df is not None and mode == "Auto":
+        if npz is not None:
+            resolved = "Dynamics"                        # .npz holds time + states/fields
+        elif df is not None and mode == "Auto":
             resolved = "Dynamics" if live.detect_mode(df) == "dynamics" else "Static y = f(x)"
         target = None
         if df is not None and resolved.startswith("Static"):
             num = list(df.select_dtypes("number").columns)
             target = st.selectbox("Predict which column", num, index=len(num) - 1, disabled=running)
         budget = st.segmented_control("Effort", ["Quick", "Full"], default="Quick", disabled=running, key="budget") or "Quick"
+        holdout = None
+        if df is None or resolved.startswith("Dyn"):
+            hold = st.segmented_control("Forecast check", ["Off", "10%", "20%", "30%"], default="20%",
+                                        disabled=running, key="holdout") or "Off"
+            holdout = None if hold == "Off" else int(hold[:-1]) / 100
+            st.caption(("Holds back the last snapshots. " if field else "Holds back the end of every run. ")
+                       + "The agents never see it; the video shows the found law forecasting it." if holdout
+                       else "Off: the agents see all the data; no forecast video.")
         fake = st.checkbox("Rehearsal (replays a saved run, no API cost)", value=env_fake, disabled=running, key="fake")
-        go_btn = st.button("Discover", type="primary", disabled=running or df is None, width="stretch")
+        ready = df is not None or field
+        go_btn = st.button("Discover", type="primary", disabled=running or not ready, width="stretch")
         if df is not None:
             st.caption(f"{df.shape[0]} rows × {df.shape[1]} columns · detected: {resolved}")
-    if go_btn and df is not None:
+    if go_btn and ready:
         run_dir = live.RUNS / time.strftime("%Y%m%d-%H%M%S")
         run_dir.mkdir(parents=True, exist_ok=True)
-        csv_path = run_dir / f"{live.ident(fname or 'data')}.csv"
-        df.to_csv(csv_path, index=False)
+        if field:
+            csv_path = run_dir / Path(npz["path"]).name           # the framework's ingester reads .npz directly
+            csv_path.write_bytes(Path(npz["path"]).read_bytes())
+        else:
+            csv_path = run_dir / f"{live.ident(fname or 'data')}.csv"
+            df.to_csv(csv_path, index=False)
         quick = budget == "Quick"
         if resolved.startswith("Dyn"):
-            job = live.Job(live.fake_dynamics if fake else live.run_dynamics, csv_path=str(csv_path),
-                           run_dir=str(run_dir), n_branches=2 if quick else 3, adversary=not quick, context=prompt.strip())
+            job = live.Job(yourdata.dynamics_job, backend=live.fake_dynamics if fake else live.run_dynamics,
+                           holdout=holdout, use_llm=not fake, csv_path=str(csv_path), run_dir=str(run_dir),
+                           n_branches=2 if quick else 3, adversary=not quick, context=prompt.strip())
         else:
-            job = live.Job(live.fake_static if fake else live.run_static, csv_path=str(csv_path), target=target,
+            job = live.Job(yourdata.static_job, backend=live.fake_static if fake else live.run_static,
+                           use_llm=not fake, run_dir=str(run_dir), csv_path=str(csv_path), target=target,
                            context=prompt.strip(), n_sessions=2 if quick else 3)
         job.run_dir = str(run_dir)
         job.prompt = prompt.strip()
